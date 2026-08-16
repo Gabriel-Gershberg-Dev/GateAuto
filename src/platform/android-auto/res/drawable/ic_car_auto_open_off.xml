@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outline pin: Auto-open is off. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2C8.13,2 5,5.13 5,9c0,5.25 7,13 7,13s7,-7.75 7,-13c0,-3.87 -3.13,-7 -7,-7zM12,16.5c-1.1,0 -4.5,-4.53 -4.5,-7.5 0,-2.49 2.01,-4.5 4.5,-4.5s4.5,2.01 4.5,4.5c0,2.97 -3.4,7.5 -4.5,7.5z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,6.5c-1.38,0 -2.5,1.12 -2.5,2.5s1.12,2.5 2.5,2.5 2.5,-1.12 2.5,-2.5 -1.12,-2.5 -2.5,-2.5z"/>
+</vector>
