@@ -1,0 +1,27 @@
+diff --git a/node_modules/expo-task-manager/android/src/main/java/expo/modules/taskManager/TaskBroadcastReceiver.java b/node_modules/expo-task-manager/android/src/main/java/expo/modules/taskManager/TaskBroadcastReceiver.java
+index 3df9120..57614d5 100644
+--- a/node_modules/expo-task-manager/android/src/main/java/expo/modules/taskManager/TaskBroadcastReceiver.java
++++ b/node_modules/expo-task-manager/android/src/main/java/expo/modules/taskManager/TaskBroadcastReceiver.java
+@@ -3,15 +3,22 @@ package expo.modules.taskManager;
+ import android.content.BroadcastReceiver;
+ import android.content.Context;
+ import android.content.Intent;
++import android.os.Handler;
++import android.os.Looper;
+ 
+ public class TaskBroadcastReceiver extends BroadcastReceiver {
+   public static String INTENT_ACTION = "expo.modules.taskManager.TaskBroadcastReceiver";
++  private static final long KEEP_ALIVE_MS = 25_000;
+ 
+   @Override
+   public void onReceive(Context context, Intent intent) {
++    final PendingResult pendingResult = goAsync();
+     Context appContext = context.getApplicationContext();
+     TaskService taskService = new TaskService(appContext);
+ 
+     taskService.handleIntent(intent);
++    // Geofence/location JS runs headless; keep the receiver process alive
++    // long enough for TaskService to load the runtime (Doze / locked screen).
++    new Handler(Looper.getMainLooper()).postDelayed(pendingResult::finish, KEEP_ALIVE_MS);
+   }
+ }

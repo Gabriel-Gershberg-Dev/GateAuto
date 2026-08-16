@@ -1,0 +1,146 @@
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
+index 0019485..60282fb 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
+@@ -10,6 +10,7 @@ import android.content.Context
+ import android.content.Intent
+ import android.content.pm.PackageManager
+ import android.graphics.Color
++import android.content.pm.ServiceInfo
+ import android.os.Binder
+ import android.os.Build
+ import android.os.Bundle
+@@ -32,13 +33,20 @@ class LocationTaskService : Service() {
+   }
+ 
+   @TargetApi(26)
+-  override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+-    val extras = intent.extras
++  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
++    if (!::mParentContext.isInitialized) {
++      mParentContext = applicationContext
++    }
++    val extras = intent?.extras
+     if (extras != null) {
+       mChannelId = extras.getString("appId") + ":" + extras.getString("taskName")
+       mKillService = extras.getBoolean("killService", false)
++      val serviceOptions = extras.getBundle("serviceOptions") ?: Bundle()
++      // Must promote in onStartCommand. Waiting for bindService ANRs / kills
++      // the FGS when started from background or while the phone is locked.
++      startForeground(serviceOptions)
+     }
+-    return START_REDELIVER_INTENT
++    return START_STICKY
+   }
+ 
+   fun setParentContext(context: Context) {
+@@ -61,7 +69,15 @@ class LocationTaskService : Service() {
+ 
+   fun startForeground(serviceOptions: Bundle) {
+     val notification = buildServiceNotification(serviceOptions)
+-    startForeground(mServiceId, notification)
++    if (Build.VERSION.SDK_INT >= 34) {
++      startForeground(
++        mServiceId,
++        notification,
++        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
++      )
++    } else {
++      startForeground(mServiceId, notification)
++    }
+   }
+ 
+   //region private
+@@ -105,9 +121,20 @@ class LocationTaskService : Service() {
+       getDefaultNotificationIcon()
+     }
+ 
+-    return builder.setCategory(Notification.CATEGORY_SERVICE)
++    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
++      builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
++    }
++
++    val notification = builder.setCategory(Notification.CATEGORY_SERVICE)
+       .setSmallIcon(iconsResId)
++      .setOngoing(true)
++      .setOnlyAlertOnce(true)
+       .build()
++    // PalGate-style: swipe must not dismiss the FGS notice or the service dies.
++    notification.flags = notification.flags or
++      Notification.FLAG_NO_CLEAR or
++      Notification.FLAG_ONGOING_EVENT
++    return notification
+   }
+ 
+   @TargetApi(26)
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/GeofencingTaskConsumer.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/GeofencingTaskConsumer.kt
+index cafc11b..b94f734 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/GeofencingTaskConsumer.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/GeofencingTaskConsumer.kt
+@@ -78,14 +78,16 @@ class GeofencingTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtil
+ 
+     for (geofence in triggeringGeofences) {
+       mRegions[geofence.requestId]?.let {
+-        val data = PersistableBundle()
+-
+         // Update region state in region bundle.
+         it.putInt("state", regionState.ordinal)
+-        data.putInt("eventType", eventType)
+-        data.putPersistableBundle("region", it)
+-        val context = context.applicationContext
+-        taskManagerUtils.scheduleJob(context, mTask, listOf(data))
++        val region = Bundle()
++        region.putAll(it)
++        val bundle = Bundle()
++        bundle.putInt("eventType", eventType)
++        bundle.putBundle("region", region)
++        // Execute JS immediately. scheduleJob (JobScheduler) is deferred for
++        // hours under Samsung Doze while the screen is locked.
++        mTask?.execute(bundle, null)
+       }
+     }
+   }
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
+index b4f6c06..572cdf0 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
+@@ -25,7 +25,6 @@ import expo.modules.interfaces.taskManager.TaskConsumerInterface
+ import expo.modules.interfaces.taskManager.TaskExecutionCallback
+ import expo.modules.interfaces.taskManager.TaskInterface
+ import expo.modules.interfaces.taskManager.TaskManagerUtilsInterface
+-import expo.modules.location.AppForegroundedSingleton
+ import expo.modules.location.LocationHelpers
+ import expo.modules.location.records.LocationOptions
+ import expo.modules.location.records.LocationResponse
+@@ -101,8 +100,10 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+   private fun handleLocationUpdate(locations: List<Location>) {
+     if (locations.isEmpty()) return
+ 
+-    // Foreground: report immediately for responsive UI (matches iOS behavior)
+-    if (!mIsHostPaused) {
++    val useFgs = mTask?.let { shouldUseForegroundService(it.options) } ?: false
++    // Foreground, or a keep-alive FGS: report immediately. JobScheduler delays
++    // deferred updates for hours while the phone is locked (Samsung Doze).
++    if (!mIsHostPaused || useFgs) {
+       reportLocationsImmediately(locations)
+       return
+     }
+@@ -178,10 +179,6 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+       return
+     }
+-    if (!AppForegroundedSingleton.isForegrounded) {
+-      Log.w(TAG, "Foreground location task cannot be started while the app is in the background!")
+-      return
+-    }
+     val task = mTask ?: run {
+       Log.w(TAG, "Location task is null")
+       return
+@@ -210,6 +207,7 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+       extras.putString("appId", task.appScopeKey)
+       extras.putString("taskName", task.name)
+       extras.putBoolean("killService", serviceOptions.getBoolean("killServiceOnDestroy", false))
++      extras.putBundle("serviceOptions", serviceOptions)
+       serviceIntent.putExtras(extras)
+       context.startForegroundService(serviceIntent)
+       context.bindService(
