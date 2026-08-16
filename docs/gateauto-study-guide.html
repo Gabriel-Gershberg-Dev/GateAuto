@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>GateAuto — Study Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --cabin: #0D3D42;
+      --pine: #2F7A62;
+      --mist: #F3F6F5;
+      --paper: #FAFCFB;
+      --ink: #14201E;
+      --muted: #4A5E5A;
+      --rule: #C5D4D0;
+      --code-bg: #E8F0EE;
+      --warn: #8A4B12;
+      --fail: #9F1239;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 10.5pt; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    @page {
+      size: A4;
+      margin: 16mm 14mm 18mm 16mm;
+    }
+    @media print {
+      html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .cover { break-after: page; }
+      h2 { break-before: page; }
+      h2.no-break { break-before: auto; }
+      .keep { break-inside: avoid; }
+      .toc a { color: var(--ink); text-decoration: none; }
+    }
+
+    .cover {
+      min-height: 250mm;
+      background: var(--cabin);
+      color: #E7F3F0;
+      padding: 28mm 18mm 20mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .cover .kicker {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10pt;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #8FBFB4;
+    }
+    .cover h1 {
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: 42pt;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 18pt 0 8pt;
+      line-height: 0.95;
+    }
+    .cover .sub {
+      font-size: 14pt;
+      max-width: 42em;
+      color: #C5E4DC;
+      line-height: 1.4;
+    }
+    .cover .meta {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 9pt;
+      color: #8FBFB4;
+      border-top: 1px solid #2A5A5C;
+      padding-top: 14pt;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8pt;
+    }
+    .spine {
+      position: relative;
+      padding-left: 14pt;
+    }
+    .spine::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4pt;
+      background: var(--pine);
+    }
+
+    main { padding: 8mm 4mm 10mm; max-width: 180mm; }
+    h2 {
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: 20pt;
+      font-weight: 700;
+      color: var(--cabin);
+      margin: 0 0 8pt;
+      padding-bottom: 6pt;
+      border-bottom: 2.5pt solid var(--cabin);
+    }
+    h3 {
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: 12.5pt;
+      font-weight: 600;
+      color: var(--cabin);
+      margin: 16pt 0 6pt;
+    }
+    p { margin: 0 0 8pt; }
+    .lead { font-size: 11.5pt; color: var(--muted); }
+    ul, ol { margin: 0 0 10pt; padding-left: 16pt; }
+    li { margin-bottom: 3pt; }
+    a { color: var(--pine); }
+
+    code, .path {
+      font-family: "IBM Plex Mono", Consolas, monospace;
+      font-size: 8.6pt;
+      background: var(--code-bg);
+      padding: 1pt 4pt;
+      border-radius: 2pt;
+    }
+    pre {
+      font-family: "IBM Plex Mono", Consolas, monospace;
+      font-size: 8pt;
+      line-height: 1.35;
+      background: var(--cabin);
+      color: #E7F3F0;
+      padding: 10pt 12pt;
+      border-radius: 4pt;
+      white-space: pre;
+      overflow: hidden;
+      margin: 0 0 12pt;
+    }
+    pre .dim { color: #8FBFB4; }
+    pre .hi { color: #9EE0C8; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.2pt;
+      margin: 0 0 12pt;
+    }
+    th {
+      text-align: left;
+      background: var(--cabin);
+      color: #E7F3F0;
+      font-weight: 600;
+      padding: 5pt 7pt;
+    }
+    td {
+      border-bottom: 1px solid var(--rule);
+      padding: 5pt 7pt;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: var(--mist); }
+
+    .callout {
+      border-left: 4pt solid var(--pine);
+      background: var(--mist);
+      padding: 8pt 10pt;
+      margin: 0 0 12pt;
+    }
+    .callout.warn { border-left-color: var(--warn); }
+    .callout.fail { border-left-color: var(--fail); }
+    .callout strong { display: block; margin-bottom: 2pt; }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8pt;
+      margin: 0 0 12pt;
+    }
+    .card {
+      border: 1px solid var(--rule);
+      padding: 8pt 10pt;
+      background: var(--mist);
+    }
+    .card h4 {
+      margin: 0 0 4pt;
+      font-size: 10pt;
+      color: var(--cabin);
+    }
+    .toc ol { padding-left: 18pt; }
+    .toc li { margin-bottom: 5pt; }
+    .toc .n {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 8.5pt;
+      color: var(--pine);
+      margin-right: 6pt;
+    }
+    .fn { font-family: "IBM Plex Mono", monospace; font-size: 8.4pt; color: var(--muted); }
+    .small { font-size: 9pt; color: var(--muted); }
+    .pipe {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin: 0 0 12pt;
+      font-size: 8.6pt;
+      font-family: "IBM Plex Mono", monospace;
+    }
+    .pipe span {
+      background: var(--cabin);
+      color: #E7F3F0;
+      padding: 5pt 8pt;
+      border-right: 2pt solid var(--pine);
+    }
+    .pipe span:last-child { border-right: none; }
+  </style>
+</head>
+<body>
+
+<section class="cover">
+  <div>
+    <div class="kicker">Internal briefing · not an official PalGate document</div>
+    <h1>GateAuto</h1>
+    <p class="sub">A study guide to how the app links as a PalGate Linked Device, arms OS geofences and car Bluetooth, then opens a neighborhood gate — only after every safety check passes.</p>
+  </div>
+  <div class="meta">
+    <div>Package<br><strong style="color:#fff">com.gateauto.app</strong></div>
+    <div>Codebase<br><strong style="color:#fff">C:\dev\GateAuto</strong></div>
+    <div>Stack<br><strong style="color:#fff">Expo 57 · React Native 0.86 · TypeScript</strong></div>
+    <div>Target<br><strong style="color:#fff">Android first (Galaxy S25 Ultra) · same TS for iOS</strong></div>
+  </div>
+</section>
+
+<main>
+
+<h2 class="no-break">Contents</h2>
+<div class="toc">
+  <ol>
+    <li><a href="#s1"><span class="n">01</span>What this app is, and what it is not</a></li>
+    <li><a href="#s2"><span class="n">02</span>The mental model — two switches, five triggers, one pipeline</a></li>
+    <li><a href="#s3"><span class="n">03</span>Architecture map and folder layout</a></li>
+    <li><a href="#s4"><span class="n">04</span>Boot sequence — how the process wakes</a></li>
+    <li><a href="#s5"><span class="n">05</span>Screens and navigation</a></li>
+    <li><a href="#s6"><span class="n">06</span>Linked Device auth</a></li>
+    <li><a href="#s7"><span class="n">07</span>PalGate API and the derived token</a></li>
+    <li><a href="#s8"><span class="n">08</span>Gate data model and storage</a></li>
+    <li><a href="#s9"><span class="n">09</span>The auto-open pipeline (read this twice)</a></li>
+    <li><a href="#s10"><span class="n">10</span>Proximity refine — fail closed</a></li>
+    <li><a href="#s11"><span class="n">11</span>Bluetooth, cooldown, safety lock</a></li>
+    <li><a href="#s12"><span class="n">12</span>Background survival</a></li>
+    <li><a href="#s13"><span class="n">13</span>UI layer</a></li>
+    <li><a href="#s14"><span class="n">14</span>Reading the log</a></li>
+    <li><a href="#s15"><span class="n">15</span>Tests, invariants, recommended study order</a></li>
+  </ol>
+</div>
+
+<h2 id="s1">1. What this app is, and what it is not</h2>
+<p class="lead">GateAuto is a custom Expo Development Client. It pretends to be another PalGate “Linked Device” on your account, then opens gates over HTTPS when you actually arrive — not when GPS merely thinks you might have.</p>
+<p>PalGate’s own AutoOpen is sometimes missing or imprecise. This app’s job is: <strong>link once, pin each gate, arm monitoring, then open only when several independent checks agree.</strong> There is no GateAuto cloud. Credentials never leave the phone except when you deliberately Export them. Opens go only to <code>https://api1.pal-es.com/v1/bt/</code>.</p>
+<div class="callout fail">
+  <strong>Not Expo Go</strong>
+  Classic Bluetooth and reliable Always-location / background geofencing need native modules. You build a custom client (<code>npx expo prebuild</code> / <code>expo run:android</code>) or an EAS APK. The <code>android/</code> and <code>ios/</code> folders are generated and gitignored.
+</div>
+<p>Primary phone: Galaxy S25 Ultra. Same TypeScript runs on iOS, but car Bluetooth matching there is best-effort by accessory name, not Android classic BT.</p>
+
+<h2 id="s2">2. The mental model</h2>
+<p>Almost every bug report and almost every “why didn’t it open?” log line collapses to this picture:</p>
+
+<div class="grid2 keep">
+  <div class="card">
+    <h4>Master switch — Settings → Auto-open</h4>
+    <p>Stored as <code>gateauto.monitoringEnabled</code>. When off, OS geofences, BT connect watch, and the quiet foreground service are all torn down. Per-gate Auto toggles are grayed out. Nothing auto-opens.</p>
+  </div>
+  <div class="card">
+    <h4>Per-gate switch — Auto on each row</h4>
+    <p><code>GateConfig.enabled</code>. A gate also needs a map pin and radius before it is “geofence-ready.” Manual <em>Open</em> always works regardless of both switches.</p>
+  </div>
+</div>
+
+<p>When both are on, any of <strong>five triggers</strong> can start the same open pipeline. Triggers are how the phone <em>wakes up</em>. The pipeline is how it <em>decides</em>.</p>
+
+<div class="pipe keep">
+  <span>1 ENTER</span>
+  <span>2 EXIT</span>
+  <span>3 BT connect</span>
+  <span>4 Eligible-now</span>
+  <span>5 ~30s poll</span>
+</div>
+
+<div class="callout">
+  <strong>Why five, not one</strong>
+  OS geofence ENTER only fires on a true boundary cross. If you live inside the circle (house inside the pin), ENTER never fires again until you leave and come back. That is why Bluetooth-connect, “eligible now” on app open, EXIT toward the street, and a quiet 30-second poll exist. Study <code>src/geo/geofencing.ts</code> header comments — they are the spec.
+</div>
+
+<h2 id="s3">3. Architecture map</h2>
+<pre>index.ts → App.tsx
+  ├─ import src/geo/task.ts     <span class="dim">// defineTask MUST run before JS is killed</span>
+  ├─ startMonitoringResyncLifecycle()
+  ├─ ThemeProvider + RootNavigator
+  └─ GlobalOpenResultHost         <span class="dim">// auto-open toast anywhere</span>
+
+UI  src/ui/screens + components
+    ↓ calls
+Bridge  src/integrations/optionalNative.ts   <span class="dim">// soft-require geo + BT</span>
+    ↓
+Geo     src/geo/geofencing.ts     <span class="hi">← heart of auto-open</span>
+        src/geo/refine.ts + proximity.ts
+        src/geo/monitoringKeepAlive.ts
+BT      src/bluetooth/*
+API     src/palgate/api.ts + token.ts + linking.ts
+Data    src/data/*  (AsyncStorage + SecureStore)</pre>
+
+<h3>Folder meaning</h3>
+<table class="keep">
+  <tr><th>Path</th><th>Job</th></tr>
+  <tr><td><code>src/palgate/</code></td><td>Talk to PalGate: QR link, derived <code>X-Bt-Token</code>, GET devices, GET open-gate.</td></tr>
+  <tr><td><code>src/data/</code></td><td>On-device state: credentials, gates, event log, safety lock, cooldown helpers.</td></tr>
+  <tr><td><code>src/geo/</code></td><td>OS geofences, GPS refine, keep-alive FGS, boot resync, TaskManager handlers.</td></tr>
+  <tr><td><code>src/bluetooth/</code></td><td>Car head-unit connect listener + OR matching of saved devices.</td></tr>
+  <tr><td><code>src/ui/</code></td><td>Screens, theme (teal from the app icon), sheets, gate row, map.</td></tr>
+  <tr><td><code>src/notifications/</code></td><td>Quiet “GateAuto auto-open” channel + open/fail alerts.</td></tr>
+  <tr><td><code>src/integrations/</code></td><td>UI must not crash if native geo/BT failed to load; this is the soft bridge.</td></tr>
+  <tr><td><code>src/platform/</code></td><td>Expo config plugins (boot receiver, battery links).</td></tr>
+  <tr><td><code>tests/</code></td><td>Pure logic: haversine, refine rules, cooldown, burst lock, token, reorder. No device needed.</td></tr>
+</table>
+
+<p>There is no Redux, no server, no GraphQL. State is AsyncStorage JSON plus SecureStore for the three credential fields. Headless Android tasks re-enter the same TypeScript modules.</p>
+
+<h2 id="s4">4. Boot sequence</h2>
+<p>Headless geofence callbacks can run when the UI is not mounted. Expo TaskManager requires <code>defineTask</code> to have already executed in that JS runtime. That is why <code>App.tsx</code> starts with a side-effect import:</p>
+<pre>import './src/geo/task';
+import { startMonitoringResyncLifecycle } from './src/geo/monitoringResync';
+startMonitoringResyncLifecycle();</pre>
+
+<p><code>src/geo/task.ts</code> registers:</p>
+<ul>
+  <li><code>GATEAUTO_GEOFENCE_TASK</code> — OS ENTER / EXIT → <code>handleGeofenceEnter</code> / <code>handleGeofenceExit</code></li>
+  <li><code>GATEAUTO_MONITORING_KEEPALIVE_TASK</code> — ~30s FGS wake → <code>runEligibilityPoll</code></li>
+  <li><code>GATEAUTO_LINKING_WATCH_TASK</code> — FGS only while waiting for QR scan (keeps long-poll alive)</li>
+  <li>Legacy location-watch task — handler kept so old APKs don’t crash; never started</li>
+  <li><code>GateAutoBootSync</code> — <code>AppRegistry</code> headless task after reboot → <code>syncGeofences()</code></li>
+</ul>
+<p><code>startMonitoringResyncLifecycle</code> also runs <code>resyncMonitoringIfArmed('app-start')</code> and on AppState foreground. If the monitoring flag is on, it re-registers geofences (Android forgets them more often than you want) and runs eligible-now. Safe to call repeatedly; <code>syncGeofences</code> is idempotent.</p>
+
+<h2 id="s5">5. Screens and navigation</h2>
+<p class="fn">src/navigation/RootNavigator.tsx</p>
+<p>On launch: <code>hasCredentials()</code> → <code>GatesList</code> if linked, else <code>LinkAccount</code>. Stack screens:</p>
+<table class="keep">
+  <tr><th>Route</th><th>Title in UI</th><th>What to study</th></tr>
+  <tr><td>LinkAccount</td><td>Link PalGate</td><td>QR + long-poll; Import JSON</td></tr>
+  <tr><td>ExportAccount</td><td>Export</td><td>QR of credentials for phone-to-phone copy</td></tr>
+  <tr><td>Permissions</td><td>Permissions</td><td>Always location, notifications, BT, Unrestricted battery</td></tr>
+  <tr><td>GatesList</td><td>Gates</td><td>Pull devices, drag reorder, Open, per-gate Auto</td></tr>
+  <tr><td>GateEditor</td><td>Gate</td><td>Pin, radius, BT list, cooldown, Test Open, autosave</td></tr>
+  <tr><td>Monitoring</td><td>Log</td><td>Event list + safety-lock banner (not the master switch)</td></tr>
+  <tr><td>Settings</td><td>Settings</td><td>Master Auto-open, appearance, permissions, export, unlink</td></tr>
+</table>
+<p>Heavy screens (editor, settings, export) use <code>getComponent={() => require(...)}</code> so the first paint of Gates does not load maps/native modules up front.</p>
+
+<h2 id="s6">6. Linked Device auth</h2>
+<p class="fn">src/palgate/linking.ts · src/ui/screens/LinkAccountScreen.tsx · src/data/credentials.ts</p>
+<ol>
+  <li><code>createLinkSession()</code> makes a UUID and QR payload exactly <code>{"id": "&lt;uuid&gt;"}</code> (space after the colon — PalGate’s scanner is picky; this matches pylgate / Homebridge).</li>
+  <li>Official PalGate app → Linked Devices → scan.</li>
+  <li>GateAuto long-polls <code>GET un/secondary/init/{uuid}</code>. PalGate holds the GET open until scan. The client reconnects about every 55s so a dead mobile connection does not sit forever.</li>
+  <li>On success, parse <code>user.id</code> (phone), <code>user.token</code> (hex session), <code>secondary</code> (token type, almost always SECONDARY = 2).</li>
+  <li>Save in SecureStore: sessionToken, phoneNumber, tokenType. Never in the event log.</li>
+</ol>
+<div class="callout warn">
+  <strong>Same-phone linking is fragile</strong>
+  Switching to PalGate to scan can kill the long-poll. The linking FGS + keep-awake + sticky “Keep GateAuto open” exist for that. Prefer split screen, or link on an emulator and Export → Import.
+</div>
+<p>Unlink clears SecureStore and stops monitoring. Export is a personal transfer of the Linked Device session — anyone with that JSON can open your gates.</p>
+
+<h2 id="s7">7. PalGate API and the derived token</h2>
+<p class="fn">src/palgate/api.ts · token.ts · aes.ts</p>
+<p>Every authenticated call sends header <code>X-Bt-Token</code>, a 23-byte hex string derived from the session token, phone number, token type, and current unix time. Ported from homebridge-palgate / pylgate. Study <code>generateToken</code> then the tests in <code>tests/configAndSafety.test.ts</code> — they lock the bytes.</p>
+<p>Important endpoints:</p>
+<ul>
+  <li><code>GET devices</code> — list PalGate devices; merged into local gates without scrambling user order.</li>
+  <li><code>GET device/{baseId}/open-gate?outputNum=N&amp;_={cacheBust}</code> — the actual open. It is a GET (PalGate’s design). OkHttp will happily reuse a cached 200, so the client sends <code>Cache-Control: no-store</code> and a unique <code>_</code> query. Without that, the log says success and the barrier never moves.</li>
+</ul>
+<p>Multi-output devices (one PalGate box, several barriers) become ids like <code>abc123:2</code>. <code>splitDeviceId</code> peels off the output number. Device list parsing lives in <code>gatesStore.parseDevicesResponse</code> (Homebridge-compatible <code>outputN</code> / <code>nameN</code> fields).</p>
+<p>User-Agent is spoofed as <code>okhttp/4.9.3</code> to look like the official Android app.</p>
+
+<h2 id="s8">8. Gate data model</h2>
+<p class="fn">src/data/gatesStore.ts</p>
+<p>Key <code>gateauto.gates</code> in AsyncStorage. One record per barrier:</p>
+<table class="keep">
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td><code>id</code> / <code>deviceId</code></td><td>Stable PalGate id, possibly <code>base:outputNum</code></td></tr>
+  <tr><td><code>name</code> / <code>nameOverride</code></td><td>PalGate name vs user rename</td></tr>
+  <tr><td><code>enabled</code></td><td>Per-gate Auto (ignored unless master monitoring is on)</td></tr>
+  <tr><td><code>lat</code>, <code>lng</code>, <code>radiusMeters</code></td><td>Pin. Default radius 50 m, slider 25–150 m</td></tr>
+  <tr><td><code>cooldownMs</code></td><td>Wait after a successful auto-open. Default 30 s. Values &lt; 1000 are treated as <em>seconds</em></td></tr>
+  <tr><td><code>bluetooth</code></td><td><code>{ required, devices[] }</code> — OR list; address preferred over name</td></tr>
+  <tr><td><code>lastOpenedAt</code> / <code>lastResult</code></td><td>Cooldown clock + last outcome string</td></tr>
+</table>
+<p>A gate is geofence-ready only when enabled + finite lat/lng + radius &gt; 0 (<code>isGeofenceReady</code>). Refreshing PalGate devices <code>mergeDevicesIntoGates</code> keeps existing pins and the user’s drag order (<code>src/data/gateOrder.ts</code>).</p>
+
+<h2 id="s9">9. The auto-open pipeline</h2>
+<p class="fn">src/geo/geofencing.ts — start here after you understand auth</p>
+<p>Every trigger funnels into the same guards, then <code>performOpen</code>. Manual Open on the list <strong>skips</strong> this pipeline (no refine, no BT, no safety lock, no cooldown).</p>
+
+<h3>Guard order (ENTER as the textbook path)</h3>
+<ol>
+  <li>Gate exists and <code>enabled</code></li>
+  <li>Pin/radius present</li>
+  <li><strong>ENTER-only:</strong> ignore if geofences were re-registered in the last 60 s (already-inside spam when the OS fires ENTER on sync)</li>
+  <li>Safety lock — this gate not burst-locked</li>
+  <li>Cooldown — <code>now - lastOpenedAt >= gate.cooldownMs</code></li>
+  <li>Proximity refine — fresh high-accuracy GPS, fail closed</li>
+  <li>Car Bluetooth if required — with a retry window on ENTER/EXIT (~3 s × ~45 s) because the head unit often connects after you are already in the circle</li>
+  <li><code>performOpen</code> — load credentials, <code>openGate</code>, record success/fail, notify, publish UI result</li>
+</ol>
+
+<h3>The five triggers</h3>
+<table>
+  <tr><th>Trigger</th><th>Function</th><th>When</th><th>Radius rule</th></tr>
+  <tr><td>ENTER</td><td><code>handleGeofenceEnter</code></td><td>True cross into the circle</td><td>≤ radius, cap 250 m</td></tr>
+  <tr><td>EXIT</td><td><code>handleGeofenceExit</code></td><td>Leave toward the street (home fences)</td><td>≤ radius × 1.1, still cap 250 m. No 60 s sync debounce</td></tr>
+  <tr><td>BT connect</td><td><code>handleBluetoothDeviceConnected</code></td><td>Car ACL/A2DP connects, monitoring on, device matches a gate’s OR list</td><td>Same as ENTER. If you are not inside → log <code>bt_connect_outside</code>, no open</td></tr>
+  <tr><td>Eligible-now</td><td><code>checkEligibleNowAndOpen</code></td><td>Arm monitoring, app foreground, resync. Already inside + BT already connected produces no ENTER/ACL</td><td>Same as ENTER. Light 5 s check throttle; opens still gated only by cooldown</td></tr>
+  <tr><td>Poll</td><td><code>runEligibilityPoll</code></td><td>~30 s keep-alive wake while armed, app in background</td><td>Same. Min gap 25 s. Far-away skip logs throttled to 5 min</td></tr>
+</table>
+
+<div class="callout">
+  <strong>performOpen is the only auto path that talks to PalGate</strong>
+  It also calls <code>recordSuccessfulOpen</code> (burst lock), sets <code>lastOpenedAt</code> (cooldown), appends a typed log event, <code>publishOpenResult</code> (in-app flash), and a notification. Failures go to <code>*_error</code> kinds and never increment the burst lock.
+</div>
+
+<h2 id="s10">10. Proximity refine — fail closed</h2>
+<p class="fn">src/geo/refine.ts · src/geo/proximity.ts · src/geo/haversine.ts</p>
+<p>A geofence ENTER from the OS is not trusted. Before any auto-open, <code>refineArrival</code> takes up to 4 high-accuracy fixes. Each fix must be:</p>
+<ul>
+  <li>Fresh — age ≤ 25 s (background wakes often return a slightly old sample; hours-old lastKnown is rejected)</li>
+  <li>Near the pin — haversine distance ≤ radius (ENTER/BT/poll) or radius × 1.1 (EXIT)</li>
+  <li>Never farther than <strong>250 m</strong>, even if someone set a huge radius</li>
+  <li>Accurate enough — worse than 60 m rejected; 50–60 m only if distance + accuracy still fits inside the fence</li>
+</ul>
+<p>These helpers are <strong>pure</strong> (except the GPS call). That is why they are unit-tested without a phone. If you change a number here, change the test and this mental model together.</p>
+<div class="callout fail">
+  <strong>False EXIT while kilometers away</strong>
+  Cheap phones sometimes fire EXIT with a wild coordinate. Refine is mandatory on EXIT too. Far GPS → <code>skipped_refine</code>, barrier stays closed.
+</div>
+
+<h2 id="s11">11. Bluetooth, cooldown, safety lock</h2>
+
+<h3>Bluetooth</h3>
+<p class="fn">src/bluetooth/match.ts · btConnectMonitor.ts · carBluetooth.ts · androidProfiles.ts</p>
+<p>If a gate’s <code>bluetooth.required</code> is true, auto-open needs at least one listed device connected (OR). Empty list while required fails closed. Address match (normalized colons) beats name. Android listens for classic BT connect; iOS is weaker.</p>
+<p>BT-connect is the <em>primary</em> home trigger: you start the car in the driveway (already inside the fence), the head unit connects, GateAuto opens. ENTER will not fire because you never left.</p>
+
+<h3>Cooldown</h3>
+<p class="fn">src/geo/cooldown.ts · src/data/cooldownNormalize.ts</p>
+<p>After a successful auto-open, that gate will not auto-open again until <code>gate.cooldownMs</code> elapses. Default 30 seconds. There is no extra hidden 90 s debounce on opens. The 60 s window after geofence <em>sync</em> only suppresses ENTER, not EXIT or BT.</p>
+<p><code>normalizeCooldownMs</code>: stored values ≥ 1000 are milliseconds; values in (0, 1000) are seconds. A stored <code>10</code> is 10 s, not 10 minutes. That bug existed; the tests exist so it does not come back.</p>
+
+<h3>Safety lock (auto only)</h3>
+<p class="fn">src/data/safetyBurst.ts · openSafetyLock.ts</p>
+<p><strong>4 successful auto-opens of the same gate within 2 minutes → that gate locks for 40 minutes.</strong> Manual Open still works. Purpose: a bad pin or GPS jitter must not hammer a neighbor’s barrier. State is per-gate in AsyncStorage. <code>applyBurstOpen</code> is pure and unit-tested.</p>
+
+<h2 id="s12">12. Background survival</h2>
+<p class="fn">src/geo/monitoringKeepAlive.ts · monitoringResync.ts · src/platform/withAndroidBootSync</p>
+<table class="keep">
+  <tr><th>Situation</th><th>Does auto-open still work?</th></tr>
+  <tr><td>App backgrounded or swiped away</td><td>Yes, if Unrestricted battery — quiet FGS + OS geofences + BT receiver</td></tr>
+  <tr><td>Phone reboot</td><td>Yes after boot re-registration, if monitoring was left ON</td></tr>
+  <tr><td>Force stop (App info)</td><td><strong>No.</strong> Android kills FGS, geofences, BT, boot, alarms. Opening the app restores if the flag is still ON</td></tr>
+  <tr><td>OEM “deep sleeping”</td><td>May die until next open — keep Unrestricted</td></tr>
+</table>
+<p>The keep-alive is <em>not</em> continuous high-accuracy GPS. It is a silent min-importance notification plus Balanced location updates with a 30 s time interval so Samsung/Doze actually wakes the JS to poll. Each wake takes one high-accuracy shot inside <code>runEligibilityPoll</code>.</p>
+<p>Phone setup that is part of the architecture: Location <strong>Always</strong>, notifications allowed, Bluetooth allowed, battery Unrestricted. “While using” location means geofences will not fire in the background. That is an OS rule, not an app bug.</p>
+
+<h2 id="s13">13. UI layer</h2>
+<p class="fn">src/ui/theme.ts · screens/* · components/*</p>
+<p>Visual identity is the app icon: light mist + deep teal <code>#1A4A47</code>, dark cabin <code>#071314</code> / pine <code>#3D9A78</code>. <code>ThemeProvider</code> maps that onto React Navigation.</p>
+<p>Worth knowing while you read screens:</p>
+<ul>
+  <li><code>GatesListScreen</code> — drag-reorder via a left notch (PanResponder). Pull-to-refresh is disabled while dragging. Per-gate Auto is locked when Settings Auto-open is off; tapping it points you at Settings.</li>
+  <li><code>GateEditorScreen</code> — autosave, no Save button. First pin is silent; changing an existing pin asks via <code>ConfirmSheet</code>. GPS uses Balanced + last-known, not High, so “Use current location” does not hang.</li>
+  <li><code>AutoOpenSettings</code> — master switch. Turns monitoring on without waiting for the GPS eligible-now pass (that runs in the background). Android Switches that are <code>disabled</code> while toggling often keep the old thumb — so this switch is not disabled during the call.</li>
+  <li><code>BarrierMark</code> — logo vs watching (radio arcs, arm down) vs opening (arm rises only for a real Open).</li>
+  <li><code>optionalNative.ts</code> — UI calls <code>tryStartGeofencing</code> / <code>tryStopGeofencing</code> so a missing native module degrades instead of crashing.</li>
+</ul>
+
+<h2 id="s14">14. Reading the log</h2>
+<p class="fn">src/data/eventLog.ts · eventFilters.ts · MonitoringScreen.tsx</p>
+<p>Last 100 events, newest first, AsyncStorage. The Log screen hides <code>test_*</code> kinds (Gate Editor “Test Open”). When something fails in the field, the <code>kind</code> is the diagnosis:</p>
+<table>
+  <tr><th>kind</th><th>Meaning</th></tr>
+  <tr><td><code>opened</code> / <code>exit_open</code> / <code>bt_connect_open</code> / <code>eligible_now_open</code> / <code>poll_open</code></td><td>API said ok, along that trigger</td></tr>
+  <tr><td><code>skipped_refine</code></td><td>GPS too far, too old, or too inaccurate — correct fail-closed</td></tr>
+  <tr><td><code>skipped_bt</code> / <code>exit_skipped_bt</code></td><td>Car not connected after the retry window</td></tr>
+  <tr><td><code>bt_connect_outside</code></td><td>Heard the car, but you were not at the pin</td></tr>
+  <tr><td><code>cooldown</code></td><td>Too soon after last successful auto-open</td></tr>
+  <tr><td><code>safety_lock</code></td><td>4 autos in 2 min; wait ~40 min; manual Open still works</td></tr>
+  <tr><td><code>monitoring_armed</code></td><td>Master switch turned on and geofences registered</td></tr>
+  <tr><td><code>error</code></td><td>Permissions, API, or arming failure — read the message</td></tr>
+</table>
+<p>Messages often include distance and accuracy in meters. Tune radius and cooldown from those numbers, not from guesswork.</p>
+
+<h2 id="s15">15. Tests, invariants, study order</h2>
+<p class="fn">npm test · npm run typecheck</p>
+<p><code>tests/autoOpenLogic.test.ts</code> — distance, EXIT factor, 250 m cap, accuracy ball, cooldown, BT OR matching, reorder.<br />
+<code>tests/configAndSafety.test.ts</code> — cooldown normalization, Bluetooth migration, display names, log filters, 4/2 min → 40 min lock, token bytes, deviceId split.</p>
+
+<div class="callout warn">
+  <strong>Invariants to memorize before changing auto-open</strong>
+  Far-away cap is 250 m. EXIT factor is 1.1. Cooldown is per-gate <code>cooldownMs</code> (sub-1000 = seconds). Safety lock is auto-only, 4 opens / 2 min → 40 min. Bluetooth is OR. open-gate GET must cache-bust. After Force Stop, user must open the app. Do not reintroduce continuous high-accuracy GPS as the keep-alive.
+</div>
+
+<h3>Recommended reading order</h3>
+<ol>
+  <li><code>README.md</code> — product contract and phone setup (Always + Unrestricted).</li>
+  <li><code>App.tsx</code> + <code>src/geo/task.ts</code> — process model.</li>
+  <li><code>src/palgate/linking.ts</code> then <code>token.ts</code> then <code>api.ts</code> — how a Linked Device becomes an open command.</li>
+  <li><code>src/data/gatesStore.ts</code> — the record the rest of the app orbits.</li>
+  <li><code>src/geo/geofencing.ts</code> from the file header through <code>handleGeofenceEnter</code>, <code>handleBluetoothDeviceConnected</code>, <code>performOpen</code>. This is the course.</li>
+  <li><code>src/geo/proximity.ts</code> + <code>refine.ts</code> — why it refuses to open.</li>
+  <li><code>src/data/safetyBurst.ts</code> + <code>cooldown.ts</code> — why it refuses to open <em>again</em>.</li>
+  <li><code>src/bluetooth/match.ts</code> + <code>btConnectMonitor.ts</code> — the driveway case.</li>
+  <li>UI last: <code>GatesListScreen</code>, <code>GateEditorScreen</code>, <code>AutoOpenSettings</code>. They are consumers of the modules above.</li>
+</ol>
+
+<p class="small">GateAuto is not an official PalGate product. This briefing describes the codebase as of the study-guide export. When code and this PDF disagree, trust the TypeScript and the tests.</p>
+
+</main>
+</body>
+</html>
