@@ -1,0 +1,99 @@
+{
+  "expo": {
+    "name": "GateAuto",
+    "slug": "GateAuto",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "gateauto",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gateauto.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["location"],
+        "NSLocationWhenInUseUsageDescription": "GateAuto uses your location to place gate pins and refine arrival before auto-opening.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "GateAuto needs Always location to detect geofence arrival and auto-open configured gates in the background.",
+        "NSLocationAlwaysUsageDescription": "GateAuto needs Always location to detect geofence arrival and auto-open configured gates in the background.",
+        "NSBluetoothAlwaysUsageDescription": "GateAuto uses Bluetooth to confirm your car is connected before auto-opening a gate.",
+        "NSBluetoothPeripheralUsageDescription": "GateAuto uses Bluetooth to confirm your car is connected before auto-opening a gate."
+      }
+    },
+    "android": {
+      "package": "com.gateauto.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D3D42",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCXR7YOMCgKPC-ITBRiSMvsclJqMdrpKCY"
+        }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "FOREGROUND_SERVICE_SHORT_SERVICE",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "GateAuto needs Always location to detect geofence arrival and auto-open configured gates in the background.",
+          "locationWhenInUsePermission": "GateAuto uses your location to place gate pins and refine arrival before auto-opening.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-task-manager",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0D3D42",
+          "defaultChannel": "gateauto"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "with-rn-bluetooth-classic",
+        {
+          "peripheralUsageDescription": "GateAuto uses Bluetooth to confirm your car is connected before auto-opening a gate.",
+          "alwaysUsageDescription": "GateAuto uses Bluetooth to confirm your car is connected before auto-opening a gate.",
+          "protocols": ["com.gateauto.app"]
+        }
+      ],
+      "./src/bluetooth/withAndroidBtProfiles",
+      "./src/platform/withAndroidBootSync",
+      "./src/platform/withAndroidKeepAlive",
+      "./src/platform/withAndroidAuto",
+      "./src/platform/withGoogleMaps"
+    ]
+  }
+}
