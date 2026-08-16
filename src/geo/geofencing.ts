@@ -1085,6 +1085,12 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
     for (const gate of gates) {
       const label = displayGateName(gate);
 
+      if (gate.bluetooth?.required) {
+        // Location poll is not a car-connect. BT-required gates open from
+        // ACL/A2DP/HEADSET of a listed car while inside the radius.
+        continue;
+      }
+
       const safety = await assertCanOpen(gate.id, label);
       if (!safety.ok) {
         const remainingMs = safety.remainingMs ?? 0;
@@ -1149,23 +1155,10 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
         continue;
       }
 
-      const btRequired = Boolean(gate.bluetooth?.required);
-      const bt = await checkCarBluetooth(gate);
-      if (bt === 'skipped_bt') {
-        await appendEvent({
-          kind: 'skipped_bt',
-          gateId: gate.id,
-          message: `${label}: poll skipped — required car Bluetooth not connected`,
-          ...geo,
-        });
-        await patchGate(gate.id, { lastResult: 'skipped_bt' });
-        continue;
-      }
-
       await performOpen(
         gate,
         label,
-        `poll — accuracy ${refine.accuracy.toFixed(1)}m, distance ${refine.distanceM.toFixed(1)}m, BT ${btRequired ? 'connected' : 'not required'}`,
+        `poll — accuracy ${refine.accuracy.toFixed(1)}m, distance ${refine.distanceM.toFixed(1)}m, BT not required`,
         'poll_open',
         geo,
       );

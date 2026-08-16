@@ -129,10 +129,32 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   @ReactMethod
   public void markOpened(String gateId, Promise promise) {
     try {
-      KeepAlivePrefs.markOpened(getReactApplicationContext(), gateId);
-      promise.resolve(true);
+      boolean lockEngaged =
+        KeepAlivePrefs.markOpened(getReactApplicationContext(), gateId);
+      promise.resolve(lockEngaged);
     } catch (Exception e) {
       promise.reject("keepalive_opened", e);
+    }
+  }
+
+  @ReactMethod
+  public void getSafetyLocksJson(Promise promise) {
+    try {
+      promise.resolve(
+        KeepAlivePrefs.safetyLocksJson(getReactApplicationContext())
+      );
+    } catch (Exception e) {
+      promise.reject("keepalive_locks", e);
+    }
+  }
+
+  @ReactMethod
+  public void clearSafetyLocks(Promise promise) {
+    try {
+      KeepAlivePrefs.clearSafetyLocks(getReactApplicationContext());
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_locks", e);
     }
   }
 

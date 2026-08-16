@@ -65,6 +65,14 @@ export function listedCarIsConnected(opts: {
   return false;
 }
 
+/**
+ * Location poll (alarm / GPS) must not open BT-required gates.
+ * Those open only on listed-car BT connect while inside the radius.
+ */
+export function pollAllowsAutoOpen(btRequired: boolean): boolean {
+  return !btRequired;
+}
+
 /** True when `device` matches any OR entry in the gate's bluetooth.devices list. */
 export function deviceMatchesGateBluetooth(
   device: CarBluetoothDevice,

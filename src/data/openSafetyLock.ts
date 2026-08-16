@@ -88,6 +88,36 @@ async function loadState(): Promise<OpenSafetyState> {
   }
 }
 
+async function nativeLockUntilByGateId(): Promise<Record<string, number>> {
+  try {
+    const { getNativeSafetyLocks } = await import('../platform/keepAliveAlarm');
+    return await getNativeSafetyLocks();
+  } catch {
+    return {};
+  }
+}
+
+/** Native auto-opens own the burst/lock; copy active native lockUntil into JS. */
+async function mergeNativeLocks(state: OpenSafetyState): Promise<OpenSafetyState> {
+  const native = await nativeLockUntilByGateId();
+  const now = Date.now();
+  let changed = false;
+  for (const [gateId, lockUntil] of Object.entries(native)) {
+    if (!gateId || !(lockUntil > now)) continue;
+    const cur = state.byGateId[gateId] ?? defaultGateState();
+    if ((cur.lockUntil ?? 0) < lockUntil) {
+      state.byGateId[gateId] = { ...cur, lockUntil };
+      changed = true;
+    }
+  }
+  if (changed) await saveState(state);
+  return state;
+}
+
+async function loadStateMerged(): Promise<OpenSafetyState> {
+  return mergeNativeLocks(await loadState());
+}
+
 async function saveState(state: OpenSafetyState): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -120,7 +150,7 @@ export async function getLockStatus(
   gateId: string,
   gateLabel?: string,
 ): Promise<GateLockStatus> {
-  const state = await loadState();
+  const state = await loadStateMerged();
   return statusForGate(gateId, state.byGateId[gateId], Date.now(), gateLabel);
 }
 
@@ -131,7 +161,7 @@ export async function getLockStatus(
 export async function getActiveLocks(
   labelsByGateId?: Record<string, string>,
 ): Promise<GateLockStatus[]> {
-  const state = await loadState();
+  const state = await loadStateMerged();
   const now = Date.now();
   const locked: GateLockStatus[] = [];
   for (const [gateId, gate] of Object.entries(state.byGateId)) {
@@ -207,11 +237,17 @@ export async function logBlockedOpen(
  */
 export async function clearAllSafetyLocks(): Promise<number> {
   return enqueueWrite(async () => {
-    const state = await loadState();
+    const state = await loadStateMerged();
     const now = Date.now();
     let cleared = 0;
     for (const gate of Object.values(state.byGateId)) {
       if ((gate.lockUntil ?? 0) > now) cleared += 1;
+    }
+    try {
+      const { clearNativeSafetyLocks } = await import('../platform/keepAliveAlarm');
+      await clearNativeSafetyLocks();
+    } catch {
+      // ignore
     }
     await saveState(defaultState());
     await appendEvent({

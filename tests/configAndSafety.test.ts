@@ -4,6 +4,7 @@ import {
   deviceMatchesGateBluetooth,
   listedCarIsConnected,
   matchesCarBluetooth,
+  pollAllowsAutoOpen,
 } from '../src/bluetooth/match';
 import { displayGateName } from '../src/data/gateDisplay';
 import { nativeRegionFromGate } from '../src/platform/nativeRegion';
@@ -127,6 +128,13 @@ describe('listedCarIsConnected (native poll BT contract)', () => {
   });
 });
 
+describe('pollAllowsAutoOpen', () => {
+  it('never opens BT-required gates from a location poll', () => {
+    assert.equal(pollAllowsAutoOpen(true), false);
+    assert.equal(pollAllowsAutoOpen(false), true);
+  });
+});
+
 describe('moveById', () => {
   const gates = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
 
@@ -220,6 +228,29 @@ describe('nativeRegionFromGate', () => {
     assert.equal(region.displayName, 'אלוזורוב');
     assert.equal(region.name, 'אלוזורוב');
     assert.notEqual(region.name, 'ארלוזורוב 3');
+  });
+
+  it('marks BT-required so native poll can skip the gate', () => {
+    const region = nativeRegionFromGate({
+      id: '4G300102168',
+      deviceId: '4G300102168',
+      name: 'קהילת ציון 4',
+      nameOverride: null,
+      enabled: true,
+      lat: 32.08,
+      lng: 34.78,
+      radiusMeters: 50,
+      cooldownMs: 30_000,
+      bluetooth: {
+        required: true,
+        devices: [{ name: 'Car', address: 'AA:BB:CC:DD:EE:FF' }],
+      },
+      lastOpenedAt: null,
+      lastResult: null,
+    });
+    assert.equal(region.btRequired, true);
+    assert.deepEqual(region.btAddresses, ['AA:BB:CC:DD:EE:FF']);
+    assert.equal(pollAllowsAutoOpen(Boolean(region.btRequired)), false);
   });
 });
 

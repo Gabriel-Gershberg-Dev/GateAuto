@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { setMonitoringEnabled } from '../../data/gatesStore';
+import { displayGateName, loadGates, setMonitoringEnabled } from '../../data/gatesStore';
+import { getActiveLocksBanner } from '../../data/openSafetyLock';
 import {
   getMonitoringArmStatus,
   type MonitoringArmStatus,
@@ -11,6 +12,7 @@ import {
   tryStartGeofencing,
   tryStopGeofencing,
 } from '../../integrations/optionalNative';
+import { importNativeOpenEvents } from '../../platform/keepAliveAlarm';
 import { BarrierMark } from './BarrierMark';
 import { InfoSheet } from './ConfirmSheet';
 import { IconInfo } from '../icons';
@@ -23,6 +25,7 @@ export function AutoOpenSettings() {
   const [enabled, setEnabled] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [armStatus, setArmStatus] = useState<MonitoringArmStatus | null>(null);
+  const [lockBanner, setLockBanner] = useState<string | null>(null);
   const running = useRef(false);
   const pending = useRef<boolean | null>(null);
 
@@ -30,6 +33,13 @@ export function AutoOpenSettings() {
     const status = await getMonitoringArmStatus();
     setEnabled(status.flagOn);
     setArmStatus(status);
+    await importNativeOpenEvents();
+    const gates = await loadGates();
+    const labels: Record<string, string> = {};
+    for (const g of gates) {
+      labels[g.id] = displayGateName(g);
+    }
+    setLockBanner(await getActiveLocksBanner(labels));
   }, []);
 
   useFocusEffect(
@@ -115,6 +125,9 @@ export function AutoOpenSettings() {
               : ''}
           </Text>
         ) : null}
+        {lockBanner ? (
+          <Text style={styles.lockBanner}>{lockBanner}</Text>
+        ) : null}
       </View>
       <InfoSheet
         visible={infoOpen}
@@ -173,6 +186,16 @@ function createStyles(c: ThemeColors) {
     },
     statusWarn: {
       color: c.warning,
+    },
+    lockBanner: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: c.warning,
+      backgroundColor: c.warningBg,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
+      borderRadius: radii.sm,
+      marginLeft: 40,
     },
   });
 }

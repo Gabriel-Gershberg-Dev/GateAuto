@@ -32,6 +32,7 @@ import {
   getActiveLocksBanner,
 } from '../../data/openSafetyLock';
 import { trySyncGeofences } from '../../integrations/optionalNative';
+import { importNativeOpenEvents } from '../../platform/keepAliveAlarm';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { getDevices, openGate, PalGateApiError } from '../../palgate/api';
 import { BarrierMark } from '../components/BarrierMark';
@@ -97,6 +98,7 @@ export function GatesListScreen({ navigation }: Props) {
   };
 
   const refreshSafetyLockBanner = useCallback(async () => {
+    await importNativeOpenEvents();
     const local = await loadGates();
     const labels: Record<string, string> = {};
     for (const g of local) {

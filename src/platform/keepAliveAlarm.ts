@@ -22,6 +22,8 @@ type GateAutoKeepAliveNative = {
   releaseClaim?(gateId: string): Promise<boolean>;
   getLastOpened?(gateId: string): Promise<number>;
   drainNativeEvents?(): Promise<string>;
+  getSafetyLocksJson?(): Promise<string>;
+  clearSafetyLocks?(): Promise<boolean>;
 };
 
 function getNative(): GateAutoKeepAliveNative | null {
@@ -164,6 +166,7 @@ export async function importNativeOpenEvents(): Promise<number> {
         | 'exit_open'
         | 'bt_connect_open'
         | 'poll_open'
+        | 'safety_lock'
         | 'info';
       await appendEvent({
         kind,
@@ -186,6 +189,39 @@ export async function importNativeOpenEvents(): Promise<number> {
   } catch (error) {
     console.warn('[GateAuto] importNativeOpenEvents failed', error);
     return 0;
+  }
+}
+
+/** Native per-gate auto safety lockUntil timestamps (epoch ms). */
+export async function getNativeSafetyLocks(): Promise<Record<string, number>> {
+  const native = getNative();
+  if (!native?.getSafetyLocksJson) return {};
+  try {
+    const raw = await native.getSafetyLocksJson();
+    if (!raw || raw === '[]') return {};
+    const parsed = JSON.parse(raw) as Array<{ gateId?: string; lockUntil?: number }>;
+    if (!Array.isArray(parsed)) return {};
+    const out: Record<string, number> = {};
+    const now = Date.now();
+    for (const row of parsed) {
+      const id = typeof row?.gateId === 'string' ? row.gateId.trim() : '';
+      const until = typeof row?.lockUntil === 'number' ? row.lockUntil : 0;
+      if (id && until > now) out[id] = until;
+    }
+    return out;
+  } catch (error) {
+    console.warn('[GateAuto] getNativeSafetyLocks failed', error);
+    return {};
+  }
+}
+
+export async function clearNativeSafetyLocks(): Promise<void> {
+  const native = getNative();
+  if (!native?.clearSafetyLocks) return;
+  try {
+    await native.clearSafetyLocks();
+  } catch (error) {
+    console.warn('[GateAuto] clearNativeSafetyLocks failed', error);
   }
 }
 

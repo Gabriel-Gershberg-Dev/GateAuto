@@ -109,7 +109,11 @@ public final class PalGateNativeOpen {
     }
   }
 
-  /** After cooldown: open any auto-enabled armed gate we are still inside. */
+  /**
+   * After cooldown / alarm: open auto-enabled gates we are still inside.
+   * BT-required gates are skipped — a location poll is not a car-connect.
+   * Those open only from {@link #openFromBluetooth} (listed car + in radius).
+   */
   public static void pollNearby(Context context) {
     if (!KeepAlivePrefs.isArmed(context)) return;
     JSONArray arr = GeofenceRegistrar.regionsArray(context);
@@ -124,7 +128,13 @@ public final class PalGateNativeOpen {
       if (gate == null) continue;
       if (!GeofenceRegistrar.isAutoEnabled(gate)) continue;
       if (!withinFence(gate, last, 1.0)) continue;
-      if (gate.optBoolean("btRequired", false) && !bluetoothMatches(context, gate, null)) {
+      if (gate.optBoolean("btRequired", false)) {
+        Log.i(
+          TAG,
+          "native poll skip "
+            + gate.optString("id")
+            + " — BT-required (poll is not a car-connect)"
+        );
         continue;
       }
       openGateObject(context, gate, "poll");
@@ -153,18 +163,29 @@ public final class PalGateNativeOpen {
     }
     try {
       httpOpen(context, deviceId);
-      KeepAlivePrefs.markOpened(context, gateId);
+      boolean lockEngaged = KeepAlivePrefs.markOpened(context, gateId);
       KeepAliveScheduler.scheduleCooldownWake(context, Math.max(3_000L, cooldownMs + 1_500L));
       String label = GeofenceRegistrar.displayLabel(gate);
       notifyOpened(context, label);
+      long ts = System.currentTimeMillis();
       KeepAlivePrefs.appendNativeEvent(
         context,
         nativeOpenKind(reason),
         gateId,
         label + ": native " + reason + " open · deviceId " + deviceId,
         nativeOpenTrigger(reason),
-        System.currentTimeMillis()
+        ts
       );
+      if (lockEngaged) {
+        KeepAlivePrefs.appendNativeEvent(
+          context,
+          "safety_lock",
+          gateId,
+          label + ": Safety lock engaged for 40m (4 auto-opens in 2m)",
+          nativeOpenTrigger(reason),
+          ts
+        );
+      }
       Log.i(TAG, "native open OK " + gateId + " (" + reason + ") " + deviceId);
     } catch (Exception e) {
       KeepAlivePrefs.releaseClaim(gateId);

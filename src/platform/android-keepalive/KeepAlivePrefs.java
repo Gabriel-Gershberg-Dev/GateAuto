@@ -7,6 +7,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /** Native mirror of JS monitoring-enabled, credentials, and last-open times. */
@@ -124,12 +125,14 @@ public final class KeepAlivePrefs {
     return true;
   }
 
-  public static synchronized void markOpened(Context context, String gateId) {
-    if (gateId == null || gateId.isEmpty()) return;
+  /** @return true if this auto-open newly engaged the 40m safety lock */
+  public static synchronized boolean markOpened(Context context, String gateId) {
+    if (gateId == null || gateId.isEmpty()) return false;
     long now = System.currentTimeMillis();
     setLastOpenedAt(context, gateId, now);
-    applyBurst(context, gateId, now);
+    boolean engaged = applyBurst(context, gateId, now);
     IN_FLIGHT.remove(gateId);
+    return engaged;
   }
 
   public static synchronized void releaseClaim(String gateId) {
@@ -174,11 +177,48 @@ public final class KeepAlivePrefs {
     return raw == null || raw.trim().isEmpty() ? "[]" : raw;
   }
 
+  /** Active per-gate auto safety locks for the in-app banner/row. */
+  public static String safetyLocksJson(Context context) {
+    JSONArray arr = new JSONArray();
+    long now = System.currentTimeMillis();
+    try {
+      Map<String, ?> all = prefs(context).getAll();
+      for (Map.Entry<String, ?> e : all.entrySet()) {
+        String k = e.getKey();
+        if (k == null || !k.startsWith("lock:")) continue;
+        Object v = e.getValue();
+        long until = 0L;
+        if (v instanceof Long) until = (Long) v;
+        else if (v instanceof Integer) until = ((Integer) v).longValue();
+        if (until <= now) continue;
+        JSONObject o = new JSONObject();
+        o.put("gateId", k.substring("lock:".length()));
+        o.put("lockUntil", until);
+        arr.put(o);
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+    return arr.toString();
+  }
+
+  public static void clearSafetyLocks(Context context) {
+    SharedPreferences p = prefs(context);
+    SharedPreferences.Editor ed = p.edit();
+    for (String k : p.getAll().keySet()) {
+      if (k != null && (k.startsWith("lock:") || k.startsWith("burst:"))) {
+        ed.remove(k);
+      }
+    }
+    ed.apply();
+  }
+
   private static final int BURST_COUNT = 4;
   private static final long BURST_WINDOW_MS = 2 * 60 * 1000L;
   private static final long GATE_LOCK_MS = 40 * 60 * 1000L;
 
-  private static void applyBurst(Context context, String gateId, long now) {
+  /** @return true if this open newly engaged the 40m lock */
+  private static boolean applyBurst(Context context, String gateId, long now) {
     String csv = burstCsv(context, gateId);
     StringBuilder next = new StringBuilder();
     int count = 0;
@@ -204,8 +244,10 @@ public final class KeepAlivePrefs {
       long existing = lockUntil(context, gateId);
       if (existing <= now) {
         setLockUntil(context, gateId, now + GATE_LOCK_MS);
+        return true;
       }
     }
+    return false;
   }
 
   static SharedPreferences prefs(Context context) {
