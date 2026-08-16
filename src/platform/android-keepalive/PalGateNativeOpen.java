@@ -40,6 +40,13 @@ public final class PalGateNativeOpen {
   private static final String TAG = "GateAutoKeepAlive";
   private static final String BASE = "https://api1.pal-es.com/v1/bt/";
   private static final double ABSOLUTE_MAX_M = 250.0;
+  /** EXIT: small overshoot past the fence edge (JS EXIT_RADIUS_FACTOR). */
+  private static final double EXIT_RADIUS_FACTOR = 1.1;
+  /**
+   * Swallow Play Services ENTER/EXIT that arrive immediately after remove+add.
+   * Short so the 9-minute alarm re-register is not a long EXIT blind spot.
+   */
+  private static final long GEOFENCE_SYNC_SUPPRESS_MS = 12_000L;
   private static final String NOTIF_CHANNEL = "gateauto";
 
   private PalGateNativeOpen() {}
@@ -80,6 +87,44 @@ public final class PalGateNativeOpen {
       Log.i(TAG, "native open skip " + gateId + " — auto-open off (stale fence)");
       return;
     }
+    long synced = KeepAlivePrefs.lastGeofenceSyncAt(context);
+    long age = synced > 0 ? System.currentTimeMillis() - synced : Long.MAX_VALUE;
+    if (age >= 0 && age < GEOFENCE_SYNC_SUPPRESS_MS) {
+      Log.i(
+        TAG,
+        "native open skip "
+          + gateId
+          + " ("
+          + reason
+          + ") — within "
+          + GEOFENCE_SYNC_SUPPRESS_MS
+          + "ms of geofence sync (spurious "
+          + reason
+          + ")"
+      );
+      return;
+    }
+    Location last = lastLocation(context);
+    if (last == null) {
+      Log.i(TAG, "native open skip " + gateId + " (" + reason + ") — no last location");
+      return;
+    }
+    double factor = "exit".equals(reason) ? EXIT_RADIUS_FACTOR : 1.0;
+    if (!withinFence(gate, last, factor)) {
+      Log.i(
+        TAG,
+        "native open skip "
+          + gateId
+          + " ("
+          + reason
+          + ") — not near pin ("
+          + String.format(Locale.US, "%.1f", distanceMeters(gate, last))
+          + "m, factor "
+          + factor
+          + ")"
+      );
+      return;
+    }
     if (gate.optBoolean("btRequired", false) && !bluetoothMatches(context, gate, null)) {
       Log.i(TAG, "native open skip " + gateId + " — car BT not connected");
       return;
@@ -100,8 +145,24 @@ public final class PalGateNativeOpen {
       if (gate == null) continue;
       if (!GeofenceRegistrar.isAutoEnabled(gate)) continue;
       if (!gate.optBoolean("btRequired", false)) continue;
-      if (!deviceWanted(gate, address, name)) continue;
-      if (last != null && !withinFence(gate, last, 1.0)) {
+      if (!deviceWanted(gate, address, name)) {
+        Log.i(
+          TAG,
+          "native BT skip "
+            + gate.optString("id")
+            + " — "
+            + name
+            + " "
+            + address
+            + " is not a listed car"
+        );
+        continue;
+      }
+      if (last == null) {
+        Log.i(TAG, "native BT skip " + gate.optString("id") + " — no last location");
+        continue;
+      }
+      if (!withinFence(gate, last, 1.0)) {
         Log.i(TAG, "native BT skip " + gate.optString("id") + " — not near pin");
         continue;
       }
@@ -186,7 +247,19 @@ public final class PalGateNativeOpen {
           ts
         );
       }
-      Log.i(TAG, "native open OK " + gateId + " (" + reason + ") " + deviceId);
+      Log.i(
+        TAG,
+        "native open OK "
+          + gateId
+          + " ("
+          + reason
+          + ") "
+          + deviceId
+          + " "
+          + label
+          + " btRequired="
+          + gate.optBoolean("btRequired", false)
+      );
     } catch (Exception e) {
       KeepAlivePrefs.releaseClaim(gateId);
       Log.w(TAG, "native open failed " + gateId, e);
@@ -297,14 +370,22 @@ public final class PalGateNativeOpen {
   }
 
   private static boolean withinFence(JSONObject gate, Location loc, double factor) {
+    double meters = distanceMeters(gate, loc);
+    if (!Double.isFinite(meters)) return false;
+    double radius = gate.optDouble("radius", Double.NaN);
+    if (!(radius > 0)) return false;
+    double cap = Math.min(radius * factor, ABSOLUTE_MAX_M);
+    return meters <= cap;
+  }
+
+  private static double distanceMeters(JSONObject gate, Location loc) {
+    if (loc == null) return Double.NaN;
     double lat = gate.optDouble("lat", Double.NaN);
     double lng = gate.optDouble("lng", Double.NaN);
-    double radius = gate.optDouble("radius", Double.NaN);
-    if (!Double.isFinite(lat) || !Double.isFinite(lng) || !(radius > 0)) return false;
+    if (!Double.isFinite(lat) || !Double.isFinite(lng)) return Double.NaN;
     float[] out = new float[1];
     Location.distanceBetween(lat, lng, loc.getLatitude(), loc.getLongitude(), out);
-    double cap = Math.min(radius * factor, ABSOLUTE_MAX_M);
-    return out[0] <= cap;
+    return out[0];
   }
 
   private static Location lastLocation(Context context) {

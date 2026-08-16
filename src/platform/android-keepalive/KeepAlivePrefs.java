@@ -15,12 +15,14 @@ public final class KeepAlivePrefs {
   private static final String PREF = "gateauto_keepalive";
   private static final String KEY_ARMED = "armed";
   private static final String KEY_LAST_RUN_AT = "lastRunAt";
+  private static final String KEY_GEOFENCE_SYNC_AT = "geofenceSyncAt";
   private static final String KEY_SESSION = "sessionToken";
   private static final String KEY_PHONE = "phoneNumber";
   private static final String KEY_TOKEN_TYPE = "tokenType";
   private static final String KEY_EVENTS = "nativeEventsJson";
   private static final int MAX_NATIVE_EVENTS = 40;
   private static final Set<String> IN_FLIGHT = new HashSet<>();
+  private static volatile long geofenceSyncAtMem;
 
   private KeepAlivePrefs() {}
 
@@ -38,6 +40,16 @@ public final class KeepAlivePrefs {
 
   public static long lastRunAt(Context context) {
     return prefs(context).getLong(KEY_LAST_RUN_AT, 0L);
+  }
+
+  public static void markGeofenceSync(Context context) {
+    long now = System.currentTimeMillis();
+    geofenceSyncAtMem = now;
+    prefs(context).edit().putLong(KEY_GEOFENCE_SYNC_AT, now).commit();
+  }
+
+  public static long lastGeofenceSyncAt(Context context) {
+    return Math.max(geofenceSyncAtMem, prefs(context).getLong(KEY_GEOFENCE_SYNC_AT, 0L));
   }
 
   public static void setCredentials(

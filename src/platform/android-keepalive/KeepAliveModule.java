@@ -46,7 +46,8 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     KeepAlivePrefs.setArmed(ctx, armed);
     if (armed) {
       KeepAliveScheduler.start(ctx);
-      GeofenceRegistrar.register(ctx, true);
+      // Never INITIAL_TRIGGER — already-outside EXIT would open every other pin.
+      GeofenceRegistrar.register(ctx, false);
     } else {
       KeepAliveScheduler.stop(ctx);
       MonitoringService.stop(ctx);

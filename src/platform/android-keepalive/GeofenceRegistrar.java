@@ -79,6 +79,7 @@ public final class GeofenceRegistrar {
 
   public static void register(Context context, boolean initialTrigger) {
     Context app = context.getApplicationContext();
+    KeepAlivePrefs.markGeofenceSync(app);
     List<Geofence> geofences = parseGeofences(regionsJson(app));
     GeofencingClient client = LocationServices.getGeofencingClient(app);
     PendingIntent pi = pending(app);
@@ -91,13 +92,15 @@ public final class GeofenceRegistrar {
           Log.i(TAG, "native geofences cleared");
           return;
         }
-        int trigger =
-          initialTrigger
-            ? (GeofencingRequest.INITIAL_TRIGGER_ENTER | GeofencingRequest.INITIAL_TRIGGER_EXIT)
-            : 0;
+        // Always 0. INITIAL_TRIGGER_EXIT fires for every pin the user is already
+        // outside (Off→On / install / re-arm) — that is not "just left".
+        // INITIAL_TRIGGER_ENTER is already-inside spam (JS eligible-now / poll).
+        if (initialTrigger) {
+          Log.i(TAG, "native geofence register — ignoring requested initial trigger");
+        }
         GeofencingRequest request =
           new GeofencingRequest.Builder()
-            .setInitialTrigger(trigger)
+            .setInitialTrigger(0)
             .addGeofences(geofences)
             .build();
         try {
