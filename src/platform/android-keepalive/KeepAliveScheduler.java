@@ -22,7 +22,7 @@ public final class KeepAliveScheduler {
   private static final int REQ_COOLDOWN = 71002;
   /** First recovery quickly after arm / process start. */
   private static final long FIRST_DELAY_MS = 60 * 1000L;
-  /** Then every 15 min — enough to re-register geofences overnight. */
+  /** Then every 9 min — poll already-inside; do not tear down Play fences. */
   static final long INTERVAL_MS = 9 * 60 * 1000L;
   /** Don't spawn overlapping headless runs from SCREEN_ON. */
   static final long MIN_RUN_GAP_MS = 60 * 1000L;

@@ -221,11 +221,12 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   /**
    * In-process last-location poll. Does not start a location FGS (Samsung
    * rejects background location FGS). {@link PalGateNativeOpen#pollNearby}
-   * skips BT-required gates and fails closed when fused last location is null.
+   * skips BT-required unless a listed car is currently connected, and fails
+   * closed when fused last location is null.
    */
   private static void pollNearbySoon(Context context, String reason) {
     final Context app = context.getApplicationContext();
-    Log.i(TAG, "native poll after " + reason + " (already-inside, skips BT-required)");
+    Log.i(TAG, "native poll after " + reason + " (already-inside; BT-required needs listed car)");
     new Thread(() -> PalGateNativeOpen.pollNearby(app), "gateauto-" + reason).start();
     new Handler(Looper.getMainLooper())
       .postDelayed(

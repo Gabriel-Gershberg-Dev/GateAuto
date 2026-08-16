@@ -27,6 +27,7 @@ import android.os.Build;
 import android.util.Log;
 
 import com.facebook.react.HeadlessJsTaskService;
+import com.gateauto.app.keepalive.GeofenceRegistrar;
 import com.gateauto.app.keepalive.KeepAlivePrefs;
 import com.gateauto.app.keepalive.KeepAliveScheduler;
 
@@ -51,8 +52,13 @@ public class BootReceiver extends BroadcastReceiver {
     if (!relevant) return;
 
     Log.i(TAG, "Scheduling geofence boot sync for action=" + action);
+    if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+      // Play may drop fences on update; elapsedRealtime does not reset.
+      GeofenceRegistrar.invalidateRegisteredSig(context);
+    }
     if (KeepAlivePrefs.isArmed(context)) {
       KeepAliveScheduler.start(context);
+      GeofenceRegistrar.register(context, false);
     }
     Intent service = new Intent(context, BootSyncService.class);
     HeadlessJsTaskService.acquireWakeLockNow(context);
@@ -221,5 +227,5 @@ function withAndroidBootSync(config) {
 module.exports = createRunOncePlugin(
   withAndroidBootSync,
   'gateauto-android-boot-sync',
-  '1.0.1',
+  '1.0.2',
 );

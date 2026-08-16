@@ -8,9 +8,10 @@ import android.os.Looper;
 import android.util.Log;
 
 /**
- * Alarm / SCREEN_ON / cooldown: re-register native geofences and poll/open
- * in this process. Do not start a location FGS from here — Samsung strips
- * location access from a service started in the background.
+ * Alarm / SCREEN_ON / cooldown: poll/open in this process. Register Play
+ * fences only when the enabled region list changed (or after reboot).
+ * Do not start a location FGS from here — Samsung strips location access
+ * from a service started in the background.
  */
 public class KeepAliveReceiver extends BroadcastReceiver {
   private static final String TAG = "GateAutoKeepAlive";

@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.google.android.gms.location.Geofence;
@@ -16,7 +17,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Play Services geofences owned by GateAuto — not Expo TaskManager/JobScheduler.
@@ -26,6 +29,10 @@ public final class GeofenceRegistrar {
   private static final String TAG = "GateAutoKeepAlive";
   private static final String PREF = "gateauto_keepalive";
   private static final String KEY_REGIONS = "regionsJson";
+  /** Enabled fence geometry last given to Play (id|lat|lng|radius). */
+  private static final String KEY_FENCE_SIG = "registeredFenceSig";
+  /** elapsedRealtime when that signature was written — detects reboot. */
+  private static final String KEY_FENCE_ELAPSED = "registeredFenceElapsed";
   private static final int PI_REQ = 71011;
 
   private GeofenceRegistrar() {}
@@ -77,10 +84,24 @@ public final class GeofenceRegistrar {
     return prefs(context).getString(KEY_REGIONS, "[]");
   }
 
-  public static void register(Context context, boolean initialTrigger) {
+  /**
+   * Write Play fences only when enabled geometry changed or the device rebooted
+   * (Play drops fences across reboot). Alarm / SCREEN_ON / 8-min refresh must
+   * not remove+add — that emits native_exit / false opens. Never INITIAL_TRIGGER.
+   *
+   * @return true if Play was asked to rewrite
+   */
+  public static boolean register(Context context, boolean initialTrigger) {
     Context app = context.getApplicationContext();
+    String json = regionsJson(app);
+    String sig = fenceSignature(json);
+    if (fenceSigUnchanged(app, sig)) {
+      Log.i(TAG, "native geofences unchanged — skip unregister+register");
+      return false;
+    }
+    // 12s ENTER/EXIT ignore only after a real rewrite (not alarm/recover).
     KeepAlivePrefs.markGeofenceSync(app);
-    List<Geofence> geofences = parseGeofences(regionsJson(app));
+    List<Geofence> geofences = parseGeofences(json);
     GeofencingClient client = LocationServices.getGeofencingClient(app);
     PendingIntent pi = pending(app);
 
@@ -89,6 +110,7 @@ public final class GeofenceRegistrar {
     Runnable add =
       () -> {
         if (geofences.isEmpty()) {
+          saveFenceSig(app, sig);
           Log.i(TAG, "native geofences cleared");
           return;
         }
@@ -107,7 +129,10 @@ public final class GeofenceRegistrar {
           client
             .addGeofences(request, pi)
             .addOnSuccessListener(
-              unused -> Log.i(TAG, "native geofences registered: " + geofences.size()))
+              unused -> {
+                saveFenceSig(app, sig);
+                Log.i(TAG, "native geofences registered: " + geofences.size());
+              })
             .addOnFailureListener(e -> Log.w(TAG, "addGeofences failed", e));
         } catch (SecurityException e) {
           Log.w(TAG, "addGeofences denied", e);
@@ -130,10 +155,17 @@ public final class GeofenceRegistrar {
       Log.w(TAG, "removeGeofences before register error", e);
       add.run();
     }
+    return true;
+  }
+
+  /** Forget last Play write so the next {@link #register} actually remove+adds. */
+  public static void invalidateRegisteredSig(Context context) {
+    prefs(context).edit().remove(KEY_FENCE_SIG).remove(KEY_FENCE_ELAPSED).apply();
   }
 
   /** Drop Play Services fences but keep the gate list (Android Auto still needs it). */
   public static void unregister(Context context) {
+    invalidateRegisteredSig(context);
     try {
       LocationServices.getGeofencingClient(context.getApplicationContext())
         .removeGeofences(pending(context.getApplicationContext()));
@@ -191,6 +223,61 @@ public final class GeofenceRegistrar {
       Log.w(TAG, "parseGeofences failed", e);
     }
     return out;
+  }
+
+  /**
+   * Stable id|lat|lng|radius for enabled pins only. Rename / BT-check / display
+   * name do not change this — those must not tear down Play fences.
+   */
+  static String fenceSignature(String json) {
+    List<String> parts = new ArrayList<>();
+    if (json == null || json.trim().isEmpty()) return "";
+    try {
+      JSONArray arr = new JSONArray(json);
+      for (int i = 0; i < arr.length(); i++) {
+        JSONObject o = arr.optJSONObject(i);
+        if (o == null) continue;
+        String id = o.optString("id", "").trim();
+        double lat = o.optDouble("lat", Double.NaN);
+        double lng = o.optDouble("lng", Double.NaN);
+        double radius = o.optDouble("radius", Double.NaN);
+        if (id.isEmpty() || !Double.isFinite(lat) || !Double.isFinite(lng) || !(radius > 0)) {
+          continue;
+        }
+        if (!isAutoEnabled(o)) continue;
+        parts.add(String.format(Locale.US, "%s|%.7f|%.7f|%.2f", id, lat, lng, radius));
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "fenceSignature failed", e);
+    }
+    Collections.sort(parts);
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < parts.size(); i++) {
+      if (i > 0) sb.append(';');
+      sb.append(parts.get(i));
+    }
+    return sb.toString();
+  }
+
+  private static boolean fenceSigUnchanged(Context app, String sig) {
+    String prev = prefs(app).getString(KEY_FENCE_SIG, null);
+    if (prev == null || !sig.equals(prev)) return false;
+    long elapsedAt = prefs(app).getLong(KEY_FENCE_ELAPSED, -1L);
+    long nowElapsed = SystemClock.elapsedRealtime();
+    // elapsedRealtime resets on reboot; Play drops fences then.
+    if (elapsedAt >= 0L && nowElapsed + 5_000L < elapsedAt) {
+      Log.i(TAG, "native geofence sig match but uptime went backwards — reboot rewrite");
+      return false;
+    }
+    return true;
+  }
+
+  private static void saveFenceSig(Context app, String sig) {
+    prefs(app)
+      .edit()
+      .putString(KEY_FENCE_SIG, sig == null ? "" : sig)
+      .putLong(KEY_FENCE_ELAPSED, SystemClock.elapsedRealtime())
+      .apply();
   }
 
   private static SharedPreferences prefs(Context context) {

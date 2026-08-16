@@ -43,8 +43,8 @@ public final class PalGateNativeOpen {
   /** EXIT: small overshoot past the fence edge (JS EXIT_RADIUS_FACTOR). */
   private static final double EXIT_RADIUS_FACTOR = 1.1;
   /**
-   * Swallow Play Services ENTER/EXIT that arrive immediately after remove+add.
-   * Short so the 9-minute alarm re-register is not a long EXIT blind spot.
+   * Swallow Play Services ENTER/EXIT that arrive immediately after a real
+   * region rewrite (remove+add). Alarm/recover must not mark this window.
    */
   private static final long GEOFENCE_SYNC_SUPPRESS_MS = 12_000L;
   private static final String NOTIF_CHANNEL = "gateauto";
@@ -172,8 +172,9 @@ public final class PalGateNativeOpen {
 
   /**
    * After cooldown / alarm: open auto-enabled gates we are still inside.
-   * BT-required gates are skipped — a location poll is not a car-connect.
-   * Those open only from {@link #openFromBluetooth} (listed car + in radius).
+   * A location poll is not a car-connect ({@link #openFromBluetooth} is).
+   * BT-required opens only when a listed car is <em>currently</em> connected
+   * and inside the radius (cooldown re-open while still in the car).
    */
   public static void pollNearby(Context context) {
     if (!KeepAlivePrefs.isArmed(context)) return;
@@ -189,12 +190,13 @@ public final class PalGateNativeOpen {
       if (gate == null) continue;
       if (!GeofenceRegistrar.isAutoEnabled(gate)) continue;
       if (!withinFence(gate, last, 1.0)) continue;
-      if (gate.optBoolean("btRequired", false)) {
+      if (gate.optBoolean("btRequired", false)
+        && !bluetoothMatches(context, gate, null)) {
         Log.i(
           TAG,
           "native poll skip "
             + gate.optString("id")
-            + " — BT-required (poll is not a car-connect)"
+            + " — BT-required (listed car not connected; poll is not a car-connect)"
         );
         continue;
       }
