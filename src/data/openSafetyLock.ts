@@ -9,6 +9,7 @@ import {
   normalizeGateState,
   type GateSafetyState,
 } from './safetyBurst';
+import { hydrateUserScope, scopedAsyncKey } from './userScope';
 
 export {
   applyBurstOpen,
@@ -21,7 +22,9 @@ export {
   type GateSafetyState,
 } from './safetyBurst';
 
-const STORAGE_KEY = 'gateauto.openSafetyLock';
+function safetyKey(): string {
+  return scopedAsyncKey('openSafetyLock');
+}
 
 type OpenSafetyState = {
   /** Per-gate lock + burst state keyed by stable GateConfig.id. */
@@ -79,7 +82,8 @@ function normalizeState(raw: unknown): OpenSafetyState {
 }
 
 async function loadState(): Promise<OpenSafetyState> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  await hydrateUserScope();
+  const raw = await AsyncStorage.getItem(safetyKey());
   if (!raw) return defaultState();
   try {
     return normalizeState(JSON.parse(raw));
@@ -119,7 +123,8 @@ async function loadStateMerged(): Promise<OpenSafetyState> {
 }
 
 async function saveState(state: OpenSafetyState): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  await hydrateUserScope();
+  await AsyncStorage.setItem(safetyKey(), JSON.stringify(state));
 }
 
 function remainingForGate(gate: GateSafetyState, now: number): number {

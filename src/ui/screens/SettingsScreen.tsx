@@ -160,7 +160,7 @@ export function SettingsScreen({ navigation }: Props) {
     <ConfirmSheet
       visible={signOutOpen}
       title="Sign out?"
-      message="PalGate on this phone stays. You will need Google, email, or guest to open the app again."
+      message="Gates stay with this account on this phone. The next sign-in will not see them unless it is this same account."
       cancelLabel="Stay signed in"
       confirmLabel="Sign out"
       destructive

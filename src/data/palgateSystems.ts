@@ -3,13 +3,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TokenType, type PalGateCredentials } from '../palgate/types';
 import { writeNativeCredentials } from '../platform/keepAliveAlarm';
 import { loadGates, type GateConfig } from './gatesStore';
+import {
+  hydrateUserScope,
+  legacySecureKey,
+  scopedAsyncKey,
+  systemCredSecureKey,
+} from './userScope';
 
-const META_KEY = 'gateauto.systems.v1';
-const LEGACY = {
-  sessionToken: 'gateauto.sessionToken',
-  phoneNumber: 'gateauto.phoneNumber',
-  tokenType: 'gateauto.tokenType',
-} as const;
+function metaKey(): string {
+  return scopedAsyncKey('systems.v1');
+}
 
 const STORE_OPTS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
@@ -29,7 +32,8 @@ export type PalGateSystem = PalGateSystemMeta & {
 };
 
 function credKey(id: string, field: 'session' | 'phone' | 'type'): string {
-  return `gateauto.sys.${id}.${field}`;
+  const short = field === 'session' ? 's' : field === 'phone' ? 'p' : 't';
+  return systemCredSecureKey(id, short);
 }
 
 function newSystemId(): string {
@@ -52,7 +56,8 @@ export function labelForCredentials(
 }
 
 async function readMeta(): Promise<PalGateSystemMeta[]> {
-  const raw = await AsyncStorage.getItem(META_KEY);
+  await hydrateUserScope();
+  const raw = await AsyncStorage.getItem(metaKey());
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as PalGateSystemMeta[];
@@ -63,7 +68,8 @@ async function readMeta(): Promise<PalGateSystemMeta[]> {
 }
 
 async function writeMeta(meta: PalGateSystemMeta[]): Promise<void> {
-  await AsyncStorage.setItem(META_KEY, JSON.stringify(meta));
+  await hydrateUserScope();
+  await AsyncStorage.setItem(metaKey(), JSON.stringify(meta));
 }
 
 async function readSystemCreds(id: string): Promise<PalGateCredentials | null> {
@@ -116,10 +122,11 @@ async function deleteSystemCreds(id: string): Promise<void> {
 }
 
 async function readLegacy(): Promise<PalGateCredentials | null> {
+  await hydrateUserScope();
   const [sessionToken, phoneRaw, typeRaw] = await Promise.all([
-    SecureStore.getItemAsync(LEGACY.sessionToken, STORE_OPTS),
-    SecureStore.getItemAsync(LEGACY.phoneNumber, STORE_OPTS),
-    SecureStore.getItemAsync(LEGACY.tokenType, STORE_OPTS),
+    SecureStore.getItemAsync(legacySecureKey('s'), STORE_OPTS),
+    SecureStore.getItemAsync(legacySecureKey('p'), STORE_OPTS),
+    SecureStore.getItemAsync(legacySecureKey('t'), STORE_OPTS),
   ]);
   if (!sessionToken || !phoneRaw || typeRaw === null) return null;
   const phoneNumber = Number(phoneRaw);
@@ -136,26 +143,27 @@ async function readLegacy(): Promise<PalGateCredentials | null> {
 }
 
 async function writeLegacy(credentials: PalGateCredentials | null): Promise<void> {
+  await hydrateUserScope();
   if (!credentials) {
     await Promise.all([
-      SecureStore.deleteItemAsync(LEGACY.sessionToken, STORE_OPTS),
-      SecureStore.deleteItemAsync(LEGACY.phoneNumber, STORE_OPTS),
-      SecureStore.deleteItemAsync(LEGACY.tokenType, STORE_OPTS),
+      SecureStore.deleteItemAsync(legacySecureKey('s'), STORE_OPTS),
+      SecureStore.deleteItemAsync(legacySecureKey('p'), STORE_OPTS),
+      SecureStore.deleteItemAsync(legacySecureKey('t'), STORE_OPTS),
     ]);
     return;
   }
   await SecureStore.setItemAsync(
-    LEGACY.sessionToken,
+    legacySecureKey('s'),
     credentials.sessionToken,
     STORE_OPTS,
   );
   await SecureStore.setItemAsync(
-    LEGACY.phoneNumber,
+    legacySecureKey('p'),
     String(credentials.phoneNumber),
     STORE_OPTS,
   );
   await SecureStore.setItemAsync(
-    LEGACY.tokenType,
+    legacySecureKey('t'),
     String(credentials.tokenType),
     STORE_OPTS,
   );

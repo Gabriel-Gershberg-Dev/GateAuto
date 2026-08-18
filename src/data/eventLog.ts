@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { hydrateUserScope, scopedAsyncKey } from './userScope';
 
-const LOG_KEY = 'gateauto.eventLog';
+function logKey(): string {
+  return scopedAsyncKey('eventLog');
+}
 const MAX_EVENTS = 100;
 
 export type EventKind =
@@ -52,7 +55,8 @@ export type LogEvent = {
 export { isMainMonitoringEvent, isTestEvent } from './eventFilters';
 
 export async function loadEvents(): Promise<LogEvent[]> {
-  const raw = await AsyncStorage.getItem(LOG_KEY);
+  await hydrateUserScope();
+  const raw = await AsyncStorage.getItem(logKey());
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as LogEvent[];
@@ -78,10 +82,11 @@ export async function appendEvent(
     trigger: partial.trigger,
   };
   const merged = [next, ...events].slice(0, MAX_EVENTS);
-  await AsyncStorage.setItem(LOG_KEY, JSON.stringify(merged));
+  await AsyncStorage.setItem(logKey(), JSON.stringify(merged));
   return merged;
 }
 
 export async function clearEvents(): Promise<void> {
-  await AsyncStorage.removeItem(LOG_KEY);
+  await hydrateUserScope();
+  await AsyncStorage.removeItem(logKey());
 }

@@ -30,21 +30,20 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export function RootNavigator() {
   const { colors, navigationTheme } = useTheme();
   const { user, ready } = useAuth();
-  const [initialRoute, setInitialRoute] = useState<
-    keyof RootStackParamList | null
-  >(null);
+  const [hubRoute, setHubRoute] = useState<'GateSystems' | 'GatesList' | null>(
+    null,
+  );
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !user) {
+      setHubRoute(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
-      if (!user) {
-        if (!cancelled) setInitialRoute('SignIn');
-        return;
-      }
       const linked = await hasAnySystem();
       if (!cancelled) {
-        setInitialRoute(linked ? 'GatesList' : 'GateSystems');
+        setHubRoute(linked ? 'GatesList' : 'GateSystems');
       }
     })();
     return () => {
@@ -52,7 +51,27 @@ export function RootNavigator() {
     };
   }, [ready, user]);
 
-  if (!ready || !initialRoute) {
+  if (!ready) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: colors.background,
+        }}
+      >
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  const signedOut = !user;
+  const initialRoute: keyof RootStackParamList | null = signedOut
+    ? 'SignIn'
+    : hubRoute;
+
+  if (!initialRoute) {
     return (
       <View
         style={{

@@ -9,6 +9,7 @@ import {
   normalizeBluetooth,
   type GateBluetoothConfig,
 } from './gateBluetooth';
+import { hydrateUserScope, scopedAsyncKey } from './userScope';
 
 export {
   DEFAULT_COOLDOWN_MS,
@@ -22,8 +23,13 @@ export {
   type GateBluetoothDevice,
 } from './gateBluetooth';
 
-const GATES_KEY = 'gateauto.gates';
-const MONITORING_KEY = 'gateauto.monitoringEnabled';
+function gatesKey(): string {
+  return scopedAsyncKey('gates');
+}
+
+function monitoringKey(): string {
+  return scopedAsyncKey('monitoringEnabled');
+}
 
 export const DEFAULT_RADIUS_METERS = 50;
 export const MIN_RADIUS_METERS = 25;
@@ -173,7 +179,8 @@ export function parseDevicesResponse(raw: unknown): DeviceSummary[] {
 }
 
 export async function loadGates(): Promise<GateConfig[]> {
-  const raw = await AsyncStorage.getItem(GATES_KEY);
+  await hydrateUserScope();
+  const raw = await AsyncStorage.getItem(gatesKey());
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as GateConfig[];
@@ -185,7 +192,8 @@ export async function loadGates(): Promise<GateConfig[]> {
 }
 
 export async function saveGates(gates: GateConfig[]): Promise<void> {
-  await AsyncStorage.setItem(GATES_KEY, JSON.stringify(gates.map(normalizeGate)));
+  await hydrateUserScope();
+  await AsyncStorage.setItem(gatesKey(), JSON.stringify(gates.map(normalizeGate)));
 }
 
 export async function upsertGate(gate: GateConfig): Promise<GateConfig[]> {
@@ -306,12 +314,14 @@ export async function removeGate(gateId: string): Promise<GateConfig[]> {
 }
 
 export async function isMonitoringEnabled(): Promise<boolean> {
-  const raw = await AsyncStorage.getItem(MONITORING_KEY);
+  await hydrateUserScope();
+  const raw = await AsyncStorage.getItem(monitoringKey());
   return raw === '1' || raw === 'true';
 }
 
 export async function setMonitoringEnabled(enabled: boolean): Promise<void> {
-  await AsyncStorage.setItem(MONITORING_KEY, enabled ? '1' : '0');
+  await hydrateUserScope();
+  await AsyncStorage.setItem(monitoringKey(), enabled ? '1' : '0');
 }
 
 function normalizeGate(gate: Partial<GateConfig> & { deviceId?: string }): GateConfig {

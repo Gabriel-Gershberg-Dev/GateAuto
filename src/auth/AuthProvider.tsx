@@ -22,8 +22,14 @@ import {
 } from 'react';
 import { auth, db } from '../firebase/app';
 import { googleWebClientId } from '../firebase/config';
-import { configureGoogleSignIn } from './googleNative';
+import { configureGoogleSignIn, signOutGoogleQuietly } from './googleNative';
 import { isRealFirebaseAccount } from '../share/inviteLogic';
+import {
+  activateAccountVault,
+  leaveAccountVault,
+  maybeAdoptUnscopedVault,
+} from '../data/accountVault';
+import { syncNativeFromSystems } from '../data/palgateSystems';
 
 export type AuthUserView = {
   uid: string;
@@ -59,6 +65,9 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** Bumps on every auth transition so an in-flight persistProfile cannot restore a signed-out user. */
+let authEpoch = 0;
 
 function providersOf(user: User): string[] {
   return user.providerData.map((p) => p.providerId);
@@ -196,19 +205,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     configureGoogleSignIn();
     const unsub = onAuthStateChanged(auth, (next) => {
+      const epoch = ++authEpoch;
       if (!next) {
+        leaveAccountVault();
         setFirebaseUser(null);
         setReady(true);
         return;
       }
       void (async () => {
         try {
+          await activateAccountVault(next.uid);
+          await Promise.race([
+            maybeAdoptUnscopedVault({ isRealAccount: isRealUser(next) }),
+            new Promise<boolean>((resolve) => {
+              setTimeout(() => resolve(false), 2000);
+            }),
+          ]);
+          if (epoch !== authEpoch) return;
           const settled = await persistProfile(next);
+          if (epoch !== authEpoch) return;
+          if (!auth.currentUser || auth.currentUser.uid !== next.uid) return;
           setFirebaseUser(auth.currentUser ?? settled);
+          void syncNativeFromSystems().then(() =>
+            import('../geo/monitoringResync')
+              .then((m) => m.resyncMonitoringIfArmed('account-switch'))
+              .catch(() => undefined),
+          );
         } catch {
-          setFirebaseUser(auth.currentUser ?? next);
+          if (epoch !== authEpoch) return;
+          if (auth.currentUser?.uid === next.uid) {
+            setFirebaseUser(auth.currentUser ?? next);
+            void syncNativeFromSystems();
+          }
         } finally {
-          setReady(true);
+          if (epoch === authEpoch) setReady(true);
         }
       })();
     });
@@ -321,7 +351,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOut: async () => {
         setError(null);
-        await firebaseSignOut(auth);
+        authEpoch += 1;
+        leaveAccountVault();
+        setFirebaseUser(null);
+        setReady(true);
+        signOutGoogleQuietly();
+        try {
+          await firebaseSignOut(auth);
+        } catch {
+          // UI already left this account; native/Google cleanup is best-effort.
+        }
       },
     }),
     [error, firebaseUser, googleClientConfigured, ready],

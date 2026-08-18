@@ -64,3 +64,13 @@ export async function promptGoogleIdToken(): Promise<string | null> {
     throw new Error(message || 'Google sign-in failed.');
   }
 }
+
+/** Native Google session — never await this from sign-out. */
+export function signOutGoogleQuietly(): void {
+  void Promise.race([
+    GoogleSignin.signOut().then(() => undefined),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, 800);
+    }),
+  ]).catch(() => undefined);
+}

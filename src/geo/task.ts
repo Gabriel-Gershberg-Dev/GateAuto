@@ -11,6 +11,7 @@ import {
   ensureMonitoringHelpers,
 } from './geofencing';
 import { resyncMonitoringIfArmed } from './monitoringResync';
+import { hydrateUserScope } from '../data/userScope';
 import { LINKING_WATCH_TASK_NAME } from './linkingKeepAlive';
 import { MONITORING_KEEPALIVE_TASK_NAME } from './monitoringKeepAlive';
 
@@ -99,6 +100,7 @@ TaskManager.defineTask(MONITORING_KEEPALIVE_TASK_NAME, async ({ error }) => {
 
 async function runBootSync(): Promise<void> {
   try {
+    await hydrateUserScope();
     console.log(
       '[GateAuto] boot sync — re-registering geofences + BT/FGS if armed',
     );

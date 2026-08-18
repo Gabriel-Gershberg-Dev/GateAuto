@@ -47,6 +47,7 @@ import {
   type GateConfig,
 } from '../data/gatesStore';
 import { appendEvent, type EventKind } from '../data/eventLog';
+import { hydrateUserScope, scopedAsyncKey } from '../data/userScope';
 import {
   assertCanOpen,
   logBlockedOpen,
@@ -104,8 +105,13 @@ export const LOCATION_WATCH_TASK_NAME = 'GATEAUTO_LOCATION_WATCH_TASK';
 
 export type { GateConfig };
 
-const SYNC_AT_KEY = 'gateauto.lastGeofenceSyncAt';
-const ARMED_AT_KEY = 'gateauto.lastMonitoringArmedAt';
+function geofenceSyncAtKey(): string {
+  return scopedAsyncKey('lastGeofenceSyncAt');
+}
+
+function monitoringArmedAtKey(): string {
+  return scopedAsyncKey('lastMonitoringArmedAt');
+}
 /** Ignore ENTER only shortly after re-register (already-inside spam). Never blocks EXIT or BT-connect. */
 const ENTER_DEBOUNCE_AFTER_SYNC_MS = 60_000;
 /** Retry car BT on ENTER/EXIT while head unit finishes connecting. */
@@ -149,6 +155,14 @@ let lastPollAt = 0;
 let pollRunning: Promise<void> | null = null;
 const lastPollFarLogByGate = new Map<string, number>();
 
+/** Drop in-memory geofence debounce so a new uid does not inherit the last user’s sync time. */
+export function resetGeofenceSessionMemory(): void {
+  lastGeofenceSyncAt = 0;
+  lastEligibleNowCheckByGate.clear();
+  lastPollAt = 0;
+  lastPollFarLogByGate.clear();
+}
+
 function loadCarBluetoothModule(): CarBluetoothModule | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -191,7 +205,8 @@ async function patchGate(
 async function markGeofenceSynced(): Promise<void> {
   lastGeofenceSyncAt = Date.now();
   try {
-    await AsyncStorage.setItem(SYNC_AT_KEY, String(lastGeofenceSyncAt));
+    await hydrateUserScope();
+    await AsyncStorage.setItem(geofenceSyncAtKey(), String(lastGeofenceSyncAt));
   } catch {
     // ignore
   }
@@ -200,7 +215,8 @@ async function markGeofenceSynced(): Promise<void> {
 async function getLastGeofenceSyncAt(): Promise<number> {
   if (lastGeofenceSyncAt > 0) return lastGeofenceSyncAt;
   try {
-    const raw = await AsyncStorage.getItem(SYNC_AT_KEY);
+    await hydrateUserScope();
+    const raw = await AsyncStorage.getItem(geofenceSyncAtKey());
     const n = raw ? Number(raw) : 0;
     if (Number.isFinite(n) && n > 0) {
       lastGeofenceSyncAt = n;
@@ -350,7 +366,8 @@ async function stopBackgroundHelpers(): Promise<void> {
 
 async function persistArmedAt(ts: number = Date.now()): Promise<void> {
   try {
-    await AsyncStorage.setItem(ARMED_AT_KEY, String(ts));
+    await hydrateUserScope();
+    await AsyncStorage.setItem(monitoringArmedAtKey(), String(ts));
   } catch {
     // ignore
   }
@@ -358,7 +375,7 @@ async function persistArmedAt(ts: number = Date.now()): Promise<void> {
 
 async function readArmedAt(): Promise<number | null> {
   try {
-    const raw = await AsyncStorage.getItem(ARMED_AT_KEY);
+    const raw = await AsyncStorage.getItem(monitoringArmedAtKey());
     const n = raw ? Number(raw) : NaN;
     return Number.isFinite(n) && n > 0 ? n : null;
   } catch {
