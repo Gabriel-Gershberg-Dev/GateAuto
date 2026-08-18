@@ -57,7 +57,8 @@ function errorMessage(e: unknown): string {
 export function GatesListScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
   const [gates, setGates] = useState<GateConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,6 +77,7 @@ export function GatesListScreen({ navigation }: Props) {
   const [shareMode, setShareMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
@@ -498,6 +500,14 @@ export function GatesListScreen({ navigation }: Props) {
             <Text style={styles.empty}>
               No gates yet. Scan PalGate from Gate systems, or pull to refresh.
             </Text>
+            <Pressable
+              onPress={() => setSignOutOpen(true)}
+              hitSlop={10}
+              accessibilityLabel="Log out"
+              style={({ pressed }) => [styles.emptyLogout, pressed && { opacity: 0.88 }]}
+            >
+              <Text style={styles.headerActionText}>Log out</Text>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.stack}>
@@ -577,6 +587,19 @@ export function GatesListScreen({ navigation }: Props) {
           </Text>
         </Pressable>
       ) : null}
+      <ConfirmSheet
+        visible={signOutOpen}
+        title="Log out?"
+        message="Gates stay with this account on this phone. The next sign-in will not see them unless it is this same account."
+        cancelLabel="Stay signed in"
+        confirmLabel="Log out"
+        destructive
+        onCancel={() => setSignOutOpen(false)}
+        onConfirm={() => {
+          setSignOutOpen(false);
+          void auth.signOut();
+        }}
+      />
       <ConfirmSheet
         visible={upgradeOpen}
         title="Sharing needs an account"
@@ -668,6 +691,9 @@ function createStyles(c: ThemeColors) {
       gap: 14,
       marginTop: spacing.lg,
       paddingHorizontal: spacing.md,
+    },
+    emptyLogout: {
+      paddingVertical: 10,
     },
     error: {
       color: c.danger,

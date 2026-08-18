@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Pressable,
@@ -24,7 +24,7 @@ import { BarrierMark } from '../components/BarrierMark';
 import { BusySheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { FormSheet } from '../components/FormSheet';
 import { Group, Hairline } from '../components/Group';
-import { IconChevronRight, IconQr, IconShare } from '../icons';
+import { IconChevronRight, IconQr, IconSettings, IconShare } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 
@@ -33,7 +33,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'GateSystems'>;
 export function GateSystemsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
+  const [signOutOpen, setSignOutOpen] = useState(false);
   const [systems, setSystems] = useState<PalGateSystem[]>([]);
   const [incoming, setIncoming] = useState<Array<InviteDoc & { code: string }>>(
     [],
@@ -66,6 +68,32 @@ export function GateSystemsScreen({ navigation }: Props) {
   );
 
   const empty = systems.length === 0;
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => navigation.navigate('Settings')}
+            hitSlop={10}
+            accessibilityLabel="Settings"
+            style={styles.headerIcon}
+          >
+            <IconSettings color={colors.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => setSignOutOpen(true)}
+            hitSlop={10}
+            accessibilityLabel="Log out"
+            style={styles.headerLogout}
+          >
+            <Text style={styles.headerActionText}>Log out</Text>
+          </Pressable>
+        </View>
+      ),
+    });
+  }, [colors.primary, navigation, styles]);
+
   const goScan = (purpose: 'primary' | 'additional') => {
     navigation.navigate('LinkAccount', { purpose });
   };
@@ -206,7 +234,15 @@ export function GateSystemsScreen({ navigation }: Props) {
           >
             <Text style={styles.ghostText}>Go to gates</Text>
           </Pressable>
-        ) : null}
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed]}
+            onPress={() => setSignOutOpen(true)}
+            accessibilityLabel="Log out"
+          >
+            <Text style={styles.headerActionText}>Log out</Text>
+          </Pressable>
+        )}
 
         <Text style={styles.footnote}>
           {user?.isRealAccount
@@ -235,6 +271,19 @@ export function GateSystemsScreen({ navigation }: Props) {
         busy={busy}
         onCancel={() => setCodeOpen(false)}
         onConfirm={() => void submitCode()}
+      />
+      <ConfirmSheet
+        visible={signOutOpen}
+        title="Log out?"
+        message="Gates stay with this account on this phone. The next sign-in will not see them unless it is this same account."
+        cancelLabel="Stay signed in"
+        confirmLabel="Log out"
+        destructive
+        onCancel={() => setSignOutOpen(false)}
+        onConfirm={() => {
+          setSignOutOpen(false);
+          void auth.signOut();
+        }}
       />
       <ConfirmSheet
         visible={confirmIncoming != null}
@@ -391,6 +440,28 @@ function createStyles(c: ThemeColors) {
     },
     pressed: {
       opacity: 0.88,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    headerIcon: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerLogout: {
+      height: 36,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerActionText: {
+      color: c.primary,
+      fontWeight: '700',
+      fontSize: 15,
     },
   });
 }
