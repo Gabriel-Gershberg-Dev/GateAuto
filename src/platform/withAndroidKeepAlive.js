@@ -220,5 +220,5 @@ function withAndroidKeepAlive(config) {
 module.exports = createRunOncePlugin(
   withAndroidKeepAlive,
   'gateauto-android-keep-alive',
-  '1.5.0',
+  '1.6.0',
 );

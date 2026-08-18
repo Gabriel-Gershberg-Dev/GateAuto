@@ -3,8 +3,9 @@
  *
  * Triggers while monitoring is ON:
  *   Native (locked / swipe-away — JS often does not run):
- *     Play ENTER/EXIT + BT connect open PalGate in Java. Recover alarm
- *     refreshes Play fences with INITIAL_TRIGGER 0 (no poll-open).
+ *     Play ENTER/EXIT + BT connect open PalGate in Java. Recover alarm /
+ *     SCREEN_ON refreshes Play fences (INITIAL_TRIGGER 0) and pollNearby if
+ *     last loc is inside radius (Samsung often never delivers ENTER locked).
  *   JS (foreground / Expo keep-alive when the process is actually alive):
  *   1) OS geofence ENTER → refine (≤ radius) → BT (retry) → open
  *   2) OS geofence EXIT → refine (≤ radius×2, absolute ≤250m) → BT (retry) → open
@@ -428,7 +429,7 @@ async function logMonitoringArmed(reason: string): Promise<void> {
     : 'now';
   await appendEvent({
     kind: 'monitoring_armed',
-    message: `Auto-open armed (${reason}): ${status.geofenceCount} geofence(s), OS geofencing ${status.geofencingActive ? 'ON' : 'OFF'}, BT watch ${status.btWatchOn ? 'ON' : 'OFF'}, FGS ${status.keepAliveOn ? 'ON' : 'OFF'}. Last arm ${when}. Already inside? ENTER will not re-fire — eligible-now, car BT connect, or EXIT. Native recover refreshes Play fences (no INITIAL_TRIGGER).`,
+    message: `Auto-open armed (${reason}): ${status.geofenceCount} geofence(s), OS geofencing ${status.geofencingActive ? 'ON' : 'OFF'}, BT watch ${status.btWatchOn ? 'ON' : 'OFF'}, FGS ${status.keepAliveOn ? 'ON' : 'OFF'}. Last arm ${when}. Already inside? ENTER will not re-fire — eligible-now, car BT connect, EXIT, or native recover poll while inside. Native recover refreshes Play fences (no INITIAL_TRIGGER) then pollNearby.`,
   });
 }
 

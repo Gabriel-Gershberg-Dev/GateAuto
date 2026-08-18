@@ -1,6 +1,7 @@
 package com.gateauto.app.keepalive;
 
 import android.content.Context;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -44,6 +45,15 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   public static void applyArmed(Context context, boolean armed) {
     Context ctx = context.getApplicationContext();
     KeepAlivePrefs.setArmed(ctx, armed);
+    Log.i(
+      NAME,
+      "native armed="
+        + armed
+        + " regions="
+        + GeofenceRegistrar.regionsArray(ctx).length()
+        + " creds="
+        + KeepAlivePrefs.hasCredentials(ctx)
+    );
     if (armed) {
       KeepAliveScheduler.start(ctx);
       // Never INITIAL_TRIGGER — already-outside EXIT would open every other pin.

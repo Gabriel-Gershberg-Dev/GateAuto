@@ -38,7 +38,20 @@ public final class GeofenceRegistrar {
   private GeofenceRegistrar() {}
 
   public static void saveRegionsJson(Context context, String json) {
-    prefs(context).edit().putString(KEY_REGIONS, json == null ? "[]" : json).apply();
+    String value = json == null ? "[]" : json;
+    prefs(context).edit().putString(KEY_REGIONS, value).apply();
+    int n = 0;
+    int auto = 0;
+    try {
+      JSONArray arr = new JSONArray(value);
+      n = arr.length();
+      for (int i = 0; i < arr.length(); i++) {
+        if (isAutoEnabled(arr.optJSONObject(i))) auto++;
+      }
+    } catch (Exception ignored) {
+      // ignore
+    }
+    Log.i(TAG, "native regions saved: " + n + " gate(s), " + auto + " auto-open");
   }
 
   public static JSONArray regionsArray(Context context) {

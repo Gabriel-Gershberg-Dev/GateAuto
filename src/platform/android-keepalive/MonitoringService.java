@@ -51,6 +51,7 @@ public class MonitoringService extends Service {
           return;
         }
         GeofenceRegistrar.refresh(MonitoringService.this);
+        PalGateNativeOpen.pollNearby(MonitoringService.this);
         handler.postDelayed(this, REREGISTER_MS);
       }
     };

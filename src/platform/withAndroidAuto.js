@@ -1,6 +1,10 @@
 /**
- * Expo config plugin: Android Auto Car App Library UI (CATEGORY_IOT).
- * Copies native sources into android/ on prebuild. minCarApiLevel 6.
+ * Expo config plugin: Android Auto Car App Library UI.
+ * Copies native sources into android/ on prebuild.
+ *
+ * IOT is the Play-correct garage/gate category (Car API 6+). Many projected
+ * Android Auto hosts still filter IOT out of the launcher even with Unknown
+ * sources — also declare POI so a sideloaded APK is listed. Do not drop IOT.
  */
 const {
   AndroidConfig,
@@ -83,8 +87,10 @@ function withAndroidAutoManifest(config) {
     upsertMeta(app, 'com.google.android.gms.car.application', {
       'android:resource': '@xml/automotive_app_desc',
     });
+    // 3 so older projected hosts still list via POI. IOT itself needs API 6;
+    // requiring 6 hid the app on cars whose host is 3–5.
     upsertMeta(app, 'androidx.car.app.minCarApiLevel', {
-      'android:value': '6',
+      'android:value': '3',
     });
 
     upsertService(
@@ -94,11 +100,17 @@ function withAndroidAutoManifest(config) {
         'android:exported': 'true',
         'android:label': '@string/app_name',
         'android:icon': '@mipmap/ic_launcher',
+        'android:permission': 'androidx.car.app.BIND_CAR_APP',
       },
       [
         {
           action: [{ $: { 'android:name': 'androidx.car.app.CarAppService' } }],
           category: [{ $: { 'android:name': 'androidx.car.app.category.IOT' } }],
+        },
+        // Sideload listing: real AA often ignores IOT. Keep IOT for Play later.
+        {
+          action: [{ $: { 'android:name': 'androidx.car.app.CarAppService' } }],
+          category: [{ $: { 'android:name': 'androidx.car.app.category.POI' } }],
         },
       ],
     );
@@ -126,4 +138,4 @@ function withAndroidAuto(config) {
   return config;
 }
 
-module.exports = createRunOncePlugin(withAndroidAuto, 'gateauto-android-auto', '1.0.0');
+module.exports = createRunOncePlugin(withAndroidAuto, 'gateauto-android-auto', '1.1.0');

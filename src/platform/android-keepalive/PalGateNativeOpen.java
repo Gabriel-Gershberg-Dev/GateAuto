@@ -209,25 +209,49 @@ public final class PalGateNativeOpen {
   }
 
   /**
-   * Cooldown re-open while still inside. Not used on the 9-min recover alarm
-   * (that only refreshes Play fences — polling every 9 min false-opened).
-   * BT-required: listed car currently connected, not any HID.
+   * Recover / cooldown: open auto-enabled gates whose last loc is inside the
+   * pin radius (Samsung often never delivers ENTER while locked). Guards:
+   * armed, last loc present, within radius (250m cap), cooldown/safety lock,
+   * credentials. BT-required: listed car currently connected — not any HID.
    */
   public static void pollNearby(Context context) {
-    if (!KeepAlivePrefs.isArmed(context)) return;
+    if (!KeepAlivePrefs.isArmed(context)) {
+      Log.i(TAG, "native poll skip — not armed");
+      return;
+    }
     JSONArray arr = GeofenceRegistrar.regionsArray(context);
-    if (arr == null) return;
+    if (arr == null || arr.length() == 0) {
+      Log.w(TAG, "native poll — empty native regions (locked cannot open)");
+      return;
+    }
     Location last = lastLocation(context);
     if (last == null) {
       Log.w(TAG, "native poll — no last location");
       return;
     }
+    int auto = 0;
+    int inside = 0;
     for (int i = 0; i < arr.length(); i++) {
       JSONObject gate = arr.optJSONObject(i);
       if (gate == null) continue;
       if (!GeofenceRegistrar.isAutoEnabled(gate)) continue;
-      if (!withinFence(gate, last, 1.0)) continue;
+      auto++;
       String id = gate.optString("id", "").trim();
+      double meters = distanceMeters(gate, last);
+      if (!withinFence(gate, last, 1.0)) {
+        Log.i(
+          TAG,
+          "native poll skip "
+            + id
+            + " — not inside ("
+            + (Double.isFinite(meters)
+              ? String.format(Locale.US, "%.1fm", meters)
+              : "no pin")
+            + ")"
+        );
+        continue;
+      }
+      inside++;
       if (!id.isEmpty() && !KeepAlivePrefs.isInside(context, id)) {
         Log.i(TAG, "native mark inside " + id + " (poll, already inside — no Play ENTER)");
       }
@@ -237,13 +261,22 @@ public final class PalGateNativeOpen {
         Log.i(
           TAG,
           "native poll skip "
-            + gate.optString("id")
+            + id
             + " — BT-required (listed car not connected; poll is not a car-connect)"
         );
         continue;
       }
       openGateObject(context, gate, "poll");
     }
+    Log.i(
+      TAG,
+      "native poll done — regions="
+        + arr.length()
+        + " auto="
+        + auto
+        + " inside="
+        + inside
+    );
   }
 
   private static void openGateObject(Context context, JSONObject gate, String reason) {
