@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/app';
+import { FIRESTORE_DATABASE_ID } from '../firebase/config';
 import {
   displayGateName,
   loadGates,
@@ -61,18 +62,44 @@ async function requireSharingUser(): Promise<{ uid: string }> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sign in first.');
   await user.reload();
-  await user.getIdToken(true);
+  const token = await user.getIdTokenResult(true);
   const latest = auth.currentUser ?? user;
+  const providers = latest.providerData.map((p) => p.providerId);
+  const signInProvider = String(
+    token.signInProvider ||
+      (token.claims.firebase as { sign_in_provider?: string } | undefined)
+        ?.sign_in_provider ||
+      '',
+  );
+  console.warn(
+    `[GateAuto invite] auth db=${FIRESTORE_DATABASE_ID} uid=${latest.uid} isAnonymous=${latest.isAnonymous} providers=${providers.join(',') || '-'} signInProvider=${signInProvider || '-'}`,
+  );
   if (
     !isRealFirebaseAccount({
       isAnonymous: latest.isAnonymous,
-      providers: latest.providerData.map((p) => p.providerId),
-      email: latest.email,
+      providers,
     })
   ) {
     throw new Error('Sign in with Google or email to share a gate.');
   }
   return { uid: latest.uid };
+}
+
+function firestoreCode(error: unknown): string {
+  return error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: string }).code)
+    : '';
+}
+
+function inviteWriteMessage(error: unknown, step: string): string {
+  const code = firestoreCode(error);
+  console.warn(
+    `[GateAuto invite] ${step} PERMISSION path=invites|inviteCreds db=${FIRESTORE_DATABASE_ID} code=${code || 'none'} ${error instanceof Error ? error.message : ''}`,
+  );
+  if (code === 'permission-denied') {
+    return 'Cloud permissions blocked this invite. Sign in with Google or email and try again.';
+  }
+  return error instanceof Error ? error.message : 'Could not create invite.';
 }
 
 function requireUid(): string {
@@ -87,26 +114,8 @@ function displayNameOfUser(): string {
 }
 
 async function newInviteCode(): Promise<string> {
-  for (let i = 0; i < 8; i++) {
-    const bytes = await Crypto.getRandomBytesAsync(16);
-    const code = bytesToInviteCode(bytes);
-    try {
-      const snap = await getDoc(doc(db, 'invites', code));
-      if (!snap.exists()) return code;
-    } catch (error) {
-      const codeName =
-        error && typeof error === 'object' && 'code' in error
-          ? String((error as { code?: string }).code)
-          : '';
-      if (codeName === 'permission-denied') {
-        throw new Error(
-          'Cloud permissions blocked this invite. Sign in with Google or email and try again.',
-        );
-      }
-      throw error;
-    }
-  }
-  throw new Error('Could not allocate an invite code. Try again.');
+  const bytes = await Crypto.getRandomBytesAsync(16);
+  return bytesToInviteCode(bytes);
 }
 
 function gatePayload(gate: GateConfig, systemLabel: string): SharedGatePayload {
@@ -212,23 +221,15 @@ export async function createGateInvites(
     gates: payloads,
   });
   batch.set(doc(db, 'inviteCreds', code), { packs });
+  console.warn(
+    `[GateAuto invite] create db=${FIRESTORE_DATABASE_ID} path=invites/${code} gates=${payloads.length} packs=${packs.length}`,
+  );
   try {
     await batch.commit();
   } catch (error) {
-    throw new Error(inviteWriteMessage(error));
+    throw new Error(inviteWriteMessage(error, `create invites/${code}`));
   }
   return { code };
-}
-
-function inviteWriteMessage(error: unknown): string {
-  const code =
-    error && typeof error === 'object' && 'code' in error
-      ? String((error as { code?: string }).code)
-      : '';
-  if (code === 'permission-denied') {
-    return 'Cloud permissions blocked this invite. Sign in with Google or email and try again.';
-  }
-  return error instanceof Error ? error.message : 'Could not create invite.';
 }
 
 function parseInvite(id: string, data: Record<string, unknown>): InviteDoc & { code: string } {

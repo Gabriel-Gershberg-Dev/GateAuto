@@ -63,21 +63,15 @@ service cloud.firestore {
         request.resource.data.uid == resource.data.uid;
     }
 
-    // Sharing (create invite) needs a Google or email identity on the ID token.
-    // Guest tokens have sign_in_provider == 'anonymous' and no email.
-    // After linkWithCredential, email or identities['google.com'] can appear
-    // before sign_in_provider catches up — accept any of those.
+    // Sharing (create invite): any non-anonymous token. Do not require
+    // token.email — Google accounts can hide email. Guest is anonymous.
     function isSharingAccount() {
       return isAuthenticated() && (
-        (
-          request.auth.token.firebase.sign_in_provider != 'anonymous' &&
-          request.auth.token.firebase.identities.keys().hasAny(['google.com', 'password'])
-        ) ||
-        (
-          request.auth.token.email is string &&
-          request.auth.token.email.size() >= 3 &&
-          request.auth.token.email.size() <= 320
-        )
+        request.auth.token.firebase.sign_in_provider != 'anonymous' ||
+        ('google.com' in request.auth.token.firebase.identities &&
+          request.auth.token.firebase.identities['google.com'].size() > 0) ||
+        ('password' in request.auth.token.firebase.identities &&
+          request.auth.token.firebase.identities['password'].size() > 0)
       );
     }
 
@@ -242,18 +236,17 @@ service cloud.firestore {
     }
 
     match /invites/{code} {
-      // Missing docs must be gettable so the app can allocate a free code
-      // (getDoc on a new id) and so a wrong code returns not-found, not denied.
-      allow get: if isAuthenticated() && (
-        !exists(/databases/$(database)/documents/invites/$(code)) ||
-        resource == null ||
-        resource.data.fromUid == request.auth.uid ||
-        resource.data.acceptedByUid == request.auth.uid ||
-        (resource.data.toEmailLower is string &&
-          request.auth.token.email is string &&
-          resource.data.toEmailLower == request.auth.token.email.lower()) ||
-        resource.data.status == 'pending'
-      );
+      // Separate allow get statements: Firestore ORs them independently.
+      // One expression that reads resource.data on a missing doc fails the
+      // whole rule (no short-circuit), which blocked getDoc in code allocation.
+      allow get: if isAuthenticated() && resource == null;
+      allow get: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
+      allow get: if isAuthenticated() && resource.data.acceptedByUid == request.auth.uid;
+      allow get: if isAuthenticated() && resource.data.status == 'pending';
+      allow get: if isAuthenticated() &&
+        resource.data.toEmailLower is string &&
+        request.auth.token.email is string &&
+        resource.data.toEmailLower == request.auth.token.email.lower();
 
       allow list: if isAuthenticated() && (
         resource.data.fromUid == request.auth.uid ||

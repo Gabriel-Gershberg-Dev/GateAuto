@@ -9,11 +9,11 @@
       }
     }
   },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json",
-    "edition": "enterprise",
-    "database": "gateauto",
-    "location": "europe-west1"
-  }
+  "firestore": [
+    {
+      "database": "gateauto",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    }
+  ]
 }
