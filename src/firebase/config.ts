@@ -12,12 +12,13 @@ export const firebaseWebConfig = {
 export const FIRESTORE_DATABASE_ID = 'gateauto';
 
 /**
- * Web OAuth client for Google ID tokens (filled after Auth Google provider
- * deploy if empty — see googleWebClientId).
+ * Web OAuth client — required as `webClientId` for native Google Sign-In
+ * ID tokens (Firebase Auth). Do not pass the Android client ID here.
  */
 export const googleWebClientId =
   '312116795772-2ihc48g9hrln7jsr2jo2o96ghoistea5.apps.googleusercontent.com';
 
+/** Android OAuth client in google-services.json (package + SHA-1). */
 export const googleAndroidClientId =
   '312116795772-g1b39g4059kti2bnobd0vi4lh2302e8p.apps.googleusercontent.com';
 

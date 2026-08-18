@@ -1,7 +1,5 @@
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../auth/AuthProvider';
-import { googleAndroidClientId, googleWebClientId } from '../../firebase/config';
+import { promptGoogleIdToken } from '../../auth/googleNative';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { BarrierMark } from '../components/BarrierMark';
 import { BusySheet, InfoSheet } from '../components/ConfirmSheet';
@@ -22,8 +20,6 @@ import { Group } from '../components/Group';
 import { IconGoogleMark } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
-
-WebBrowser.maybeCompleteAuthSession();
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 
@@ -41,25 +37,6 @@ export function SignInScreen({}: Props) {
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
-
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: googleWebClientId,
-    androidClientId: googleAndroidClientId,
-  });
-
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const idToken = response.params.id_token;
-    if (!idToken) {
-      setFormError('Google sign-in did not return a token.');
-      return;
-    }
-    setBusy('google');
-    void auth
-      .signInGoogle(idToken)
-      .catch((e) => setFormError(e instanceof Error ? e.message : 'Google failed'))
-      .finally(() => setBusy(null));
-  }, [auth, response]);
 
   const submitEmail = async () => {
     setFormError(null);
@@ -93,7 +70,7 @@ export function SignInScreen({}: Props) {
     }
   };
 
-  const onGoogle = () => {
+  const onGoogle = async () => {
     setFormError(null);
     if (!auth.googleClientConfigured) {
       setInfo({
@@ -103,7 +80,16 @@ export function SignInScreen({}: Props) {
       });
       return;
     }
-    void promptAsync();
+    setBusy('google');
+    try {
+      const idToken = await promptGoogleIdToken();
+      if (!idToken) return;
+      await auth.signInGoogle(idToken);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Google failed');
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -200,10 +186,10 @@ export function SignInScreen({}: Props) {
           style={({ pressed }) => [
             styles.googleBtn,
             pressed && styles.pressed,
-            (!request || busy) && styles.disabled,
+            busy && styles.disabled,
           ]}
-          onPress={onGoogle}
-          disabled={!request || Boolean(busy)}
+          onPress={() => void onGoogle()}
+          disabled={Boolean(busy)}
         >
           <IconGoogleMark color={colors.primary} size={18} />
           <Text style={styles.googleText}>Continue with Google</Text>

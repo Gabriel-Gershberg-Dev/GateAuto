@@ -1,13 +1,11 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '../../auth/AuthProvider';
+import { promptGoogleIdToken } from '../../auth/googleNative';
 import { appendEvent } from '../../data/eventLog';
 import { clearCredentials } from '../../data/credentials';
-import { googleAndroidClientId, googleWebClientId } from '../../firebase/config';
 import { tryStopGeofencing } from '../../integrations/optionalNative';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { SHOW_EXPORT_UI } from '../flags';
@@ -28,8 +26,6 @@ import {
 import { useTheme } from '../ThemeProvider';
 import { spacing, type ThemeColors } from '../theme';
 
-WebBrowser.maybeCompleteAuthSession();
-
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export function SettingsScreen({ navigation }: Props) {
@@ -48,33 +44,6 @@ export function SettingsScreen({ navigation }: Props) {
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
-
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: googleWebClientId,
-    androidClientId: googleAndroidClientId,
-  });
-
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const idToken = response.params.id_token;
-    if (!idToken) return;
-    setBusy(true);
-    void auth
-      .upgradeWithGoogle(idToken)
-      .then(() =>
-        setInfo({
-          title: 'Account upgraded',
-          message: 'You can share gates now. Local PalGate stays.',
-        }),
-      )
-      .catch((e) =>
-        setInfo({
-          title: 'Google',
-          message: e instanceof Error ? e.message : 'Upgrade failed',
-        }),
-      )
-      .finally(() => setBusy(false));
-  }, [auth, response]);
 
   const runUnlink = () => {
     setUnlinkOpen(false);
@@ -233,7 +202,7 @@ export function SettingsScreen({ navigation }: Props) {
       extra={
         <Pressable
           onPress={() => {
-            if (!auth.googleClientConfigured || !request) {
+            if (!auth.googleClientConfigured) {
               setInfo({
                 title: 'Google',
                 message:
@@ -242,7 +211,24 @@ export function SettingsScreen({ navigation }: Props) {
               return;
             }
             setUpgradeOpen(false);
-            void promptAsync();
+            setBusy(true);
+            void promptGoogleIdToken()
+              .then((idToken) => {
+                if (!idToken) return;
+                return auth.upgradeWithGoogle(idToken).then(() =>
+                  setInfo({
+                    title: 'Account upgraded',
+                    message: 'You can share gates now. Local PalGate stays.',
+                  }),
+                );
+              })
+              .catch((e) =>
+                setInfo({
+                  title: 'Google',
+                  message: e instanceof Error ? e.message : 'Upgrade failed',
+                }),
+              )
+              .finally(() => setBusy(false));
           }}
           style={{ paddingVertical: 8 }}
         >

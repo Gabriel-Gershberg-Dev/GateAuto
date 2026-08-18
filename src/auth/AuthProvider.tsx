@@ -22,6 +22,7 @@ import {
 } from 'react';
 import { auth, db } from '../firebase/app';
 import { googleWebClientId } from '../firebase/config';
+import { configureGoogleSignIn } from './googleNative';
 import { isRealFirebaseAccount } from '../share/inviteLogic';
 
 export type AuthUserView = {
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    configureGoogleSignIn();
     const unsub = onAuthStateChanged(auth, (next) => {
       setFirebaseUser(next);
       setReady(true);
