@@ -212,6 +212,10 @@ describe('nativeRegionFromGate', () => {
     const region = nativeRegionFromGate({
       id: '4G300102168',
       deviceId: '4G300102168',
+      systemId: null,
+      origin: 'linked',
+      sharedInviteCode: null,
+      sharedFromName: null,
       name: 'ארלוזורוב 3',
       nameOverride: 'אלוזורוב',
       enabled: false,
@@ -234,6 +238,10 @@ describe('nativeRegionFromGate', () => {
     const region = nativeRegionFromGate({
       id: '4G300102168',
       deviceId: '4G300102168',
+      systemId: null,
+      origin: 'linked',
+      sharedInviteCode: null,
+      sharedFromName: null,
       name: 'קהילת ציון 4',
       nameOverride: null,
       enabled: true,

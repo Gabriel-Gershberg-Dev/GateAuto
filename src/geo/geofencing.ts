@@ -36,7 +36,7 @@ import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { openGate, PalGateApiError } from '../palgate/api';
-import { loadCredentials } from '../data/credentials';
+import { loadCredentials, loadCredentialsForGate } from '../data/credentials';
 import {
   displayGateName,
   getGate,
@@ -428,6 +428,12 @@ export async function syncGeofences(): Promise<void> {
     .filter((g) => String(g.deviceId ?? '').trim())
     .map((g) => nativeRegionFromGate(g));
   await writeNativeCredentials(await loadCredentials());
+  try {
+    const { syncNativeFromSystems } = await import('../data/palgateSystems');
+    await syncNativeFromSystems();
+  } catch {
+    // Native per-gate map is best-effort.
+  }
   await syncNativeMonitoring(monitoring, nativeRegions);
 
   if (!monitoring) {
@@ -656,7 +662,7 @@ async function performOpen(
   }
   try {
   const deviceId = String(gate.deviceId ?? '').trim();
-  const credentials = await loadCredentials();
+  const credentials = await loadCredentialsForGate(gate);
   if (!credentials) {
     const failKind = openErrorKind(resultKind);
     const message = `${label}: missing PalGate credentials (deviceId ${deviceId || '?'})`;
@@ -1244,7 +1250,7 @@ export async function testAutoOpenConditions(): Promise<void> {
     }
 
     // Same as Manual Open — bypass auto safety lock / cooldown so testing works.
-    const credentials = await loadCredentials();
+    const credentials = await loadCredentialsForGate(gate);
     if (!credentials) {
       await appendEvent({
         kind: 'test_error',

@@ -2,19 +2,25 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { hasCredentials } from '../data/credentials';
+import { useAuth } from '../auth/AuthProvider';
+import { hasAnySystem } from '../data/palgateSystems';
 import { useTheme } from '../ui/ThemeProvider';
+import { GateSystemsScreen } from '../ui/screens/GateSystemsScreen';
 import { GatesListScreen } from '../ui/screens/GatesListScreen';
 import { LinkAccountScreen } from '../ui/screens/LinkAccountScreen';
 import { MonitoringScreen } from '../ui/screens/MonitoringScreen';
 import { PermissionsScreen } from '../ui/screens/PermissionsScreen';
+import { SignInScreen } from '../ui/screens/SignInScreen';
 
 export type RootStackParamList = {
-  LinkAccount: undefined;
+  SignIn: undefined;
+  GateSystems: undefined;
+  LinkAccount: { purpose?: 'primary' | 'additional' } | undefined;
   ExportAccount: { continueTo?: 'Permissions' } | undefined;
   Permissions: undefined;
   GatesList: undefined;
   GateEditor: { gateId: string };
+  ShareGate: { gateId: string };
   Monitoring: undefined;
   Settings: undefined;
 };
@@ -23,24 +29,30 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   const { colors, navigationTheme } = useTheme();
+  const { user, ready } = useAuth();
   const [initialRoute, setInitialRoute] = useState<
     keyof RootStackParamList | null
   >(null);
 
   useEffect(() => {
+    if (!ready) return;
     let cancelled = false;
     (async () => {
-      const linked = await hasCredentials();
+      if (!user) {
+        if (!cancelled) setInitialRoute('SignIn');
+        return;
+      }
+      const linked = await hasAnySystem();
       if (!cancelled) {
-        setInitialRoute(linked ? 'GatesList' : 'LinkAccount');
+        setInitialRoute(linked ? 'GatesList' : 'GateSystems');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ready, user]);
 
-  if (!initialRoute) {
+  if (!ready || !initialRoute) {
     return (
       <View
         style={{
@@ -56,7 +68,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer key={user?.uid ?? 'signed-out'} theme={navigationTheme}>
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{
@@ -70,6 +82,16 @@ export function RootNavigator() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
+        <Stack.Screen
+          name="SignIn"
+          component={SignInScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="GateSystems"
+          component={GateSystemsScreen}
+          options={{ title: 'Gate systems' }}
+        />
         <Stack.Screen
           name="LinkAccount"
           component={LinkAccountScreen}
@@ -98,6 +120,13 @@ export function RootNavigator() {
             require('../ui/screens/GateEditorScreen').GateEditorScreen
           }
           options={{ title: 'Gate' }}
+        />
+        <Stack.Screen
+          name="ShareGate"
+          getComponent={() =>
+            require('../ui/screens/ShareGateScreen').ShareGateScreen
+          }
+          options={{ title: 'Share gate' }}
         />
         <Stack.Screen
           name="Monitoring"

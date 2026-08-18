@@ -29,10 +29,18 @@ export const DEFAULT_RADIUS_METERS = 50;
 export const MIN_RADIUS_METERS = 25;
 export const MAX_RADIUS_METERS = 150;
 
+export type GateOrigin = 'linked' | 'shared';
+
 export type GateConfig = {
   /** Stable id — usually the PalGate deviceId (may include `:outputNum`). */
   id: string;
   deviceId: string;
+  /** PalGate system this gate opens with. */
+  systemId: string | null;
+  origin: GateOrigin;
+  /** Invite code if this row was accepted from a share. */
+  sharedInviteCode: string | null;
+  sharedFromName: string | null;
   /** Latest human-readable name from PalGate (refreshed on sync). */
   name: string;
   /** Optional user rename; when set, UI prefers this over `name`. */
@@ -53,10 +61,17 @@ export type DeviceSummary = {
   name: string;
 };
 
-export function createDefaultGate(device: DeviceSummary): GateConfig {
+export function createDefaultGate(
+  device: DeviceSummary,
+  systemId?: string | null,
+): GateConfig {
   return {
     id: device.deviceId,
     deviceId: device.deviceId,
+    systemId: systemId?.trim() || null,
+    origin: 'linked',
+    sharedInviteCode: null,
+    sharedFromName: null,
     name: device.name || device.deviceId,
     nameOverride: null,
     enabled: false,
@@ -217,19 +232,35 @@ function migrateNameOverride(
 
 export async function mergeDevicesIntoGates(
   devices: DeviceSummary[],
+  systemId?: string | null,
 ): Promise<GateConfig[]> {
   const existing = await loadGates();
   const incoming = new Map(devices.map((d) => [d.deviceId, d]));
   const merged: GateConfig[] = [];
   const seen = new Set<string>();
+  const sid = systemId?.trim() || null;
 
   // Keep the user's list order. Refresh must not reshuffle gates.
   for (const prev of existing) {
-    const device = incoming.get(prev.id) ?? incoming.get(prev.deviceId);
+    const sameSystem =
+      !sid ||
+      prev.origin === 'shared' ||
+      !prev.systemId ||
+      prev.systemId === sid;
+    if (prev.origin === 'shared' || (sid && prev.systemId && prev.systemId !== sid)) {
+      merged.push(prev);
+      seen.add(prev.id);
+      continue;
+    }
+    const device = sameSystem
+      ? incoming.get(prev.id) ?? incoming.get(prev.deviceId)
+      : undefined;
     if (device) {
       const apiName = device.name || device.deviceId;
       merged.push({
         ...prev,
+        systemId: prev.systemId || sid,
+        origin: prev.origin ?? 'linked',
         deviceId: device.deviceId,
         name: apiName,
         nameOverride: migrateNameOverride(prev, apiName, device.deviceId),
@@ -243,7 +274,7 @@ export async function mergeDevicesIntoGates(
 
   for (const device of devices) {
     if (seen.has(device.deviceId)) continue;
-    merged.push(createDefaultGate(device));
+    merged.push(createDefaultGate(device, sid));
   }
 
   await saveGates(merged);
@@ -266,6 +297,14 @@ export async function getGate(gateId: string): Promise<GateConfig | null> {
   return gates.find((g) => g.id === gateId) ?? null;
 }
 
+export async function removeGate(gateId: string): Promise<GateConfig[]> {
+  const gates = await loadGates();
+  const next = gates.filter((g) => g.id !== gateId);
+  if (next.length === gates.length) return gates;
+  await saveGates(next);
+  return next;
+}
+
 export async function isMonitoringEnabled(): Promise<boolean> {
   const raw = await AsyncStorage.getItem(MONITORING_KEY);
   return raw === '1' || raw === 'true';
@@ -285,9 +324,27 @@ function normalizeGate(gate: Partial<GateConfig> & { deviceId?: string }): GateC
       ? overrideRaw.trim()
       : null;
 
+  const origin: GateOrigin = gate.origin === 'shared' ? 'shared' : 'linked';
+  const systemId =
+    typeof gate.systemId === 'string' && gate.systemId.trim()
+      ? gate.systemId.trim()
+      : null;
+  const sharedInviteCode =
+    typeof gate.sharedInviteCode === 'string' && gate.sharedInviteCode.trim()
+      ? gate.sharedInviteCode.trim()
+      : null;
+  const sharedFromName =
+    typeof gate.sharedFromName === 'string' && gate.sharedFromName.trim()
+      ? gate.sharedFromName.trim()
+      : null;
+
   return {
     id,
     deviceId,
+    systemId,
+    origin,
+    sharedInviteCode,
+    sharedFromName,
     name: String(gate.name ?? deviceId),
     nameOverride,
     enabled: Boolean(gate.enabled),

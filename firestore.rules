@@ -1,0 +1,224 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: Firebase Auth uid
+    // Fields:
+    //   - displayName: string (required, 1-80) — shown on invites
+    //   - emailLower: string|null (optional, email) — PII, owner only
+    //   - isAnonymous: bool (required)
+    //   - createdAt: timestamp (required, immutable)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: invites
+    // Document ID: 8-char invite code
+    // Fields:
+    //   - fromUid: string (required, immutable)
+    //   - fromName: string (required, 1-80)
+    //   - toEmailLower: string|null
+    //   - status: pending|accepted|declined|revoked
+    //   - createdAt, expiresAt: timestamp
+    //   - acceptedByUid: string|null
+    //   - acceptedAt: timestamp|null
+    //   - gate: map (deviceId, name, nameOverride, lat, lng, radiusMeters,
+    //     cooldownMs, bluetooth, systemLabel) — no PalGate tokens
+    //
+    // Collection: inviteCreds
+    // Document ID: same invite code
+    // Fields:
+    //   - sessionToken: string (hex)
+    //   - phoneNumber: number
+    //   - tokenType: 0|1|2
+    // Never list this collection. Get only with the code or as owner/acceptor.
+    //
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$');
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['displayName', 'emailLower', 'isAnonymous', 'createdAt', 'updatedAt']) &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 80 &&
+        data.isAnonymous is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (data.emailLower == null || isValidEmail(data.emailLower));
+    }
+
+    function isValidBtDevice(item) {
+      return item is map &&
+        item.keys().hasOnly(['name', 'address']) &&
+        (!('name' in item) || (item.name is string && item.name.size() <= 80)) &&
+        (!('address' in item) || (item.address is string && item.address.size() <= 64));
+    }
+
+    function isValidGateMap(g) {
+      return g is map &&
+        g.keys().hasOnly([
+          'deviceId', 'name', 'nameOverride', 'lat', 'lng',
+          'radiusMeters', 'cooldownMs', 'bluetooth', 'systemLabel'
+        ]) &&
+        g.deviceId is string && g.deviceId.size() >= 1 && g.deviceId.size() <= 120 &&
+        g.name is string && g.name.size() <= 120 &&
+        (g.nameOverride == null || (g.nameOverride is string && g.nameOverride.size() <= 120)) &&
+        (g.lat == null || g.lat is number) &&
+        (g.lng == null || g.lng is number) &&
+        g.radiusMeters is number && g.radiusMeters >= 25 && g.radiusMeters <= 250 &&
+        g.cooldownMs is number && g.cooldownMs >= 0 && g.cooldownMs <= 3600000 &&
+        g.systemLabel is string && g.systemLabel.size() <= 80 &&
+        g.bluetooth is map &&
+        g.bluetooth.keys().hasOnly(['required', 'devices']) &&
+        g.bluetooth.required is bool &&
+        g.bluetooth.devices is list &&
+        g.bluetooth.devices.size() <= 12 &&
+        (g.bluetooth.devices.size() == 0 || isValidBtDevice(g.bluetooth.devices[0])) &&
+        (g.bluetooth.devices.size() < 2 || isValidBtDevice(g.bluetooth.devices[1])) &&
+        (g.bluetooth.devices.size() < 3 || isValidBtDevice(g.bluetooth.devices[2])) &&
+        (g.bluetooth.devices.size() < 4 || isValidBtDevice(g.bluetooth.devices[3]));
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasOnly([
+          'fromUid', 'fromName', 'toEmailLower', 'status',
+          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedAt', 'gate'
+        ]) &&
+        data.fromUid is string && data.fromUid.size() > 0 && data.fromUid.size() <= 128 &&
+        data.fromName is string && data.fromName.size() >= 1 && data.fromName.size() <= 80 &&
+        (data.toEmailLower == null || isValidEmail(data.toEmailLower)) &&
+        data.status in ['pending', 'accepted', 'declined', 'revoked'] &&
+        data.createdAt is timestamp &&
+        data.expiresAt is timestamp &&
+        (data.acceptedByUid == null || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128)) &&
+        (data.acceptedAt == null || data.acceptedAt is timestamp) &&
+        isValidGateMap(data.gate);
+    }
+
+    function isValidInviteCreds(data) {
+      return data.keys().hasOnly(['sessionToken', 'phoneNumber', 'tokenType']) &&
+        data.sessionToken is string &&
+        data.sessionToken.size() >= 32 &&
+        data.sessionToken.size() <= 128 &&
+        data.phoneNumber is number &&
+        data.phoneNumber > 0 &&
+        data.tokenType in [0, 1, 2];
+    }
+
+    function inviteMeta(code) {
+      return get(/databases/$(database)/documents/invites/$(code)).data;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId);
+    }
+
+    match /invites/{code} {
+      allow get: if isAuthenticated() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.acceptedByUid == request.auth.uid ||
+        (resource.data.toEmailLower is string &&
+          request.auth.token.email is string &&
+          resource.data.toEmailLower == request.auth.token.email.lower()) ||
+        resource.data.status == 'pending'
+      );
+
+      allow list: if isAuthenticated() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.acceptedByUid == request.auth.uid ||
+        (resource.data.toEmailLower is string &&
+          request.auth.token.email is string &&
+          resource.data.toEmailLower == request.auth.token.email.lower())
+      );
+
+      allow create: if isAuthenticated() &&
+        isValidInvite(request.resource.data) &&
+        request.resource.data.fromUid == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.acceptedByUid == null &&
+        request.resource.data.acceptedAt == null &&
+        code.matches('^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$');
+
+      allow update: if isAuthenticated() &&
+        isValidInvite(request.resource.data) &&
+        request.resource.data.fromUid == resource.data.fromUid &&
+        request.resource.data.gate == resource.data.gate &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.expiresAt == resource.data.expiresAt &&
+        request.resource.data.fromName == resource.data.fromName &&
+        request.resource.data.toEmailLower == resource.data.toEmailLower &&
+        (
+          (
+            resource.data.status == 'pending' &&
+            request.resource.data.status == 'accepted' &&
+            request.auth.uid != resource.data.fromUid &&
+            request.resource.data.acceptedByUid == request.auth.uid
+          ) ||
+          (
+            resource.data.status == 'pending' &&
+            request.resource.data.status == 'declined' &&
+            request.auth.uid != resource.data.fromUid &&
+            request.resource.data.acceptedByUid == request.auth.uid
+          ) ||
+          (
+            resource.data.status in ['pending', 'accepted'] &&
+            request.resource.data.status == 'revoked' &&
+            request.auth.uid == resource.data.fromUid &&
+            request.resource.data.acceptedByUid == resource.data.acceptedByUid
+          )
+        );
+
+      allow delete: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
+    }
+
+    match /inviteCreds/{code} {
+      allow get: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/invites/$(code)) &&
+        (
+          inviteMeta(code).fromUid == request.auth.uid ||
+          inviteMeta(code).status == 'pending' ||
+          (
+            inviteMeta(code).status == 'accepted' &&
+            inviteMeta(code).acceptedByUid == request.auth.uid
+          )
+        );
+
+      allow list: if false;
+
+      allow create: if isAuthenticated() &&
+        isValidInviteCreds(request.resource.data) &&
+        existsAfter(/databases/$(database)/documents/invites/$(code)) &&
+        getAfter(/databases/$(database)/documents/invites/$(code)).data.fromUid == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/invites/$(code)).data.status == 'pending';
+
+      allow update: if false;
+
+      allow delete: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/invites/$(code)) &&
+        inviteMeta(code).fromUid == request.auth.uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

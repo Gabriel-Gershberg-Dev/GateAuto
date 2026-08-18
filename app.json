@@ -27,6 +27,7 @@
     },
     "android": {
       "package": "com.gateauto.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0D3D42",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -81,6 +82,7 @@
         }
       ],
       "expo-secure-store",
+      "expo-web-browser",
       [
         "with-rn-bluetooth-classic",
         {

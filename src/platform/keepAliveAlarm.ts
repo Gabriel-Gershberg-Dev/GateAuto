@@ -16,6 +16,7 @@ type GateAutoKeepAliveNative = {
     phoneNumber: number,
     tokenType: number,
   ): Promise<boolean>;
+  syncGateCredentialsJson?(json: string): Promise<boolean>;
   clearCredentials?(): Promise<boolean>;
   tryClaimOpen?(gateId: string, cooldownMs: number): Promise<boolean>;
   markOpened?(gateId: string): Promise<boolean>;
@@ -68,6 +69,16 @@ export async function scheduleCooldownWake(delayMs: number): Promise<void> {
     await native.scheduleCooldownWake(Math.max(2_000, delayMs));
   } catch (error) {
     console.warn('[GateAuto] scheduleCooldownWake failed', error);
+  }
+}
+
+export async function writeNativeGateCredentialsJson(json: string): Promise<void> {
+  const native = getNative();
+  if (!native?.syncGateCredentialsJson) return;
+  try {
+    await native.syncGateCredentialsJson(json);
+  } catch (error) {
+    console.warn('[GateAuto] writeNativeGateCredentialsJson failed', error);
   }
 }
 

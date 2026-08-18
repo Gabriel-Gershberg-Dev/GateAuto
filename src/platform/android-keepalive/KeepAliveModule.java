@@ -115,6 +115,16 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void syncGateCredentialsJson(String json, Promise promise) {
+    try {
+      KeepAlivePrefs.setGateCredentialsJson(getReactApplicationContext(), json);
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_gate_creds", e);
+    }
+  }
+
+  @ReactMethod
   public void clearCredentials(Promise promise) {
     try {
       KeepAlivePrefs.clearCredentials(getReactApplicationContext());

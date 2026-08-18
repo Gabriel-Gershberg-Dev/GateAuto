@@ -19,6 +19,7 @@ public final class KeepAlivePrefs {
   private static final String KEY_SESSION = "sessionToken";
   private static final String KEY_PHONE = "phoneNumber";
   private static final String KEY_TOKEN_TYPE = "tokenType";
+  private static final String KEY_GATE_CREDS = "gateCredentialsJson";
   private static final String KEY_EVENTS = "nativeEventsJson";
   private static final int MAX_NATIVE_EVENTS = 40;
   private static final Set<String> IN_FLIGHT = new HashSet<>();
@@ -105,7 +106,56 @@ public final class KeepAlivePrefs {
       .remove(KEY_SESSION)
       .remove(KEY_PHONE)
       .remove(KEY_TOKEN_TYPE)
+      .remove(KEY_GATE_CREDS)
       .apply();
+  }
+
+  public static void setGateCredentialsJson(Context context, String json) {
+    prefs(context)
+      .edit()
+      .putString(KEY_GATE_CREDS, json == null || json.trim().isEmpty() ? "{}" : json)
+      .apply();
+  }
+
+  private static JSONObject gateCredsRow(Context context, String gateId) {
+    if (gateId == null || gateId.isEmpty()) return null;
+    try {
+      JSONObject map = new JSONObject(prefs(context).getString(KEY_GATE_CREDS, "{}"));
+      return map.optJSONObject(gateId);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  public static String sessionTokenForGate(Context context, String gateId) {
+    JSONObject row = gateCredsRow(context, gateId);
+    if (row != null) {
+      String t = row.optString("sessionToken", "");
+      if (t != null && t.trim().length() >= 32) return t;
+    }
+    return sessionToken(context);
+  }
+
+  public static long phoneNumberForGate(Context context, String gateId) {
+    JSONObject row = gateCredsRow(context, gateId);
+    if (row != null && row.has("phoneNumber")) {
+      long n = row.optLong("phoneNumber", 0L);
+      if (n > 0) return n;
+    }
+    return phoneNumber(context);
+  }
+
+  public static int tokenTypeForGate(Context context, String gateId) {
+    JSONObject row = gateCredsRow(context, gateId);
+    if (row != null && row.has("tokenType")) {
+      return row.optInt("tokenType", tokenType(context));
+    }
+    return tokenType(context);
+  }
+
+  public static boolean hasCredentialsForGate(Context context, String gateId) {
+    String token = sessionTokenForGate(context, gateId);
+    return token != null && token.trim().length() >= 32 && phoneNumberForGate(context, gateId) > 0;
   }
 
   public static String sessionToken(Context context) {
@@ -122,7 +172,15 @@ public final class KeepAlivePrefs {
 
   public static boolean hasCredentials(Context context) {
     String token = sessionToken(context);
-    return token != null && token.trim().length() >= 32 && phoneNumber(context) > 0;
+    if (token != null && token.trim().length() >= 32 && phoneNumber(context) > 0) {
+      return true;
+    }
+    try {
+      JSONObject map = new JSONObject(prefs(context).getString(KEY_GATE_CREDS, "{}"));
+      return map.length() > 0;
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   public static long lastOpenedAt(Context context, String gateId) {

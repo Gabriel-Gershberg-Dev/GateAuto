@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { parseAccountExport } from '../../data/accountTransfer';
 import { hasCredentials, saveCredentials } from '../../data/credentials';
+import { upsertSystem } from '../../data/palgateSystems';
+import { SHOW_EXPORT_UI } from '../flags';
 import {
   startLinkingForegroundWatch,
   stopLinkingForegroundWatch,
@@ -55,12 +57,14 @@ const EMPTY_DEBUG: PollInfo = {
   elapsedMs: null,
 };
 
-export function LinkAccountScreen({ navigation }: Props) {
+export function LinkAccountScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigationRef = useRef(navigation);
   navigationRef.current = navigation;
 
+  const purpose = route.params?.purpose ?? 'primary';
+  const addingAnother = purpose === 'additional';
   const [alreadyLinked, setAlreadyLinked] = useState<boolean | null>(null);
   const [session, setSession] = useState<LinkingProgress | null>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -115,19 +119,23 @@ export function LinkAccountScreen({ navigation }: Props) {
     ) => {
       setStatus({ kind: 'verifying' });
       await stopLinkingGuards();
-      await saveCredentials(credentials);
+      if (addingAnother) {
+        await upsertSystem(credentials, { origin: 'linked' });
+      } else {
+        await saveCredentials(credentials);
+      }
       await checkToken(credentials);
       setStatus({ kind: 'success' });
-      if (options?.offerExport) {
+      if (SHOW_EXPORT_UI && options?.offerExport && !addingAnother) {
         // Emulator/QR link: offer export before Permissions for phone transfer.
         navigationRef.current.replace('ExportAccount', {
           continueTo: 'Permissions',
         });
         return;
       }
-      navigationRef.current.replace('Permissions');
+      navigationRef.current.replace(addingAnother ? 'GatesList' : 'Permissions');
     },
-    [stopLinkingGuards],
+    [addingAnother, stopLinkingGuards],
   );
 
   const startWait = useCallback(
@@ -202,7 +210,7 @@ export function LinkAccountScreen({ navigation }: Props) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const linked = await hasCredentials();
+      const linked = addingAnother ? false : await hasCredentials();
       if (cancelled) return;
       setAlreadyLinked(linked);
       if (linked) {
@@ -351,15 +359,17 @@ export function LinkAccountScreen({ navigation }: Props) {
       >
         <Text style={styles.title}>Account already linked</Text>
         <Text style={styles.body}>
-          Export credentials to another phone (emulator → physical), or import
-          a replacement payload below.
+          This phone already has PalGate credentials. Add another system from
+          Gate systems, or import a replacement payload below.
         </Text>
-        <Pressable
-          style={styles.button}
-          onPress={() => navigation.navigate('ExportAccount')}
-        >
-          <Text style={styles.buttonText}>Export account</Text>
-        </Pressable>
+        {SHOW_EXPORT_UI ? (
+          <Pressable
+            style={styles.button}
+            onPress={() => navigation.navigate('ExportAccount')}
+          >
+            <Text style={styles.buttonText}>Export account</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           style={styles.buttonSecondary}
           onPress={() => navigation.replace('GatesList')}
@@ -406,12 +416,13 @@ export function LinkAccountScreen({ navigation }: Props) {
       contentContainerStyle={styles.container}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.title}>Link PalGate account</Text>
+      <Text style={styles.title}>
+        {addingAnother ? 'Link another PalGate' : 'Link PalGate account'}
+      </Text>
       <Text style={styles.body}>
-        Scan with PalGate on this phone: keep this screen's notification
-        (“GateAuto linking…”), switch to PalGate, scan the QR, then return.
-        GateAuto runs a short foreground keep-alive so the long-poll can
-        continue (or auto-restarts within ~1s when you come back).
+        {addingAnother
+          ? 'Scan a Linked Device QR from a different PalGate account (another neighborhood or home). Keep this screen’s notification, switch to PalGate, scan, then return.'
+          : 'Scan with PalGate on this phone: keep this screen’s notification (“GateAuto linking…”), switch to PalGate, scan the QR, then return. GateAuto runs a short foreground keep-alive so the long-poll can continue (or auto-restarts within ~1s when you come back).'}
       </Text>
       <Text style={styles.body}>
         Why emulator used to be required: fully switching apps often killed the

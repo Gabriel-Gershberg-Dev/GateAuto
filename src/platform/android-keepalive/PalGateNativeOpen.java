@@ -62,9 +62,9 @@ public final class PalGateNativeOpen {
     if (gate == null) return "Unknown gate";
     String deviceId = gate.optString("deviceId", "").trim();
     if (deviceId.isEmpty()) return "Missing deviceId";
-    if (!KeepAlivePrefs.hasCredentials(context)) return "Not linked to PalGate";
+    if (!KeepAlivePrefs.hasCredentialsForGate(context, gateId)) return "Not linked to PalGate";
     try {
-      httpOpen(context, deviceId);
+      httpOpen(context, deviceId, gateId);
       // Record last-open for auto cooldown, but do not applyBurst (auto-only lock).
       KeepAlivePrefs.setLastOpenedAt(context, gateId, System.currentTimeMillis());
       notifyOpened(context, GeofenceRegistrar.displayLabel(gate));
@@ -252,7 +252,7 @@ public final class PalGateNativeOpen {
       Log.i(TAG, "native open skip " + gateId + " — auto-open off");
       return;
     }
-    if (!KeepAlivePrefs.hasCredentials(context)) {
+    if (!KeepAlivePrefs.hasCredentialsForGate(context, gateId)) {
       Log.w(TAG, "native open skip — no credentials");
       return;
     }
@@ -261,7 +261,7 @@ public final class PalGateNativeOpen {
       return;
     }
     try {
-      httpOpen(context, deviceId);
+      httpOpen(context, deviceId, gateId);
       boolean lockEngaged = KeepAlivePrefs.markOpened(context, gateId);
       KeepAliveScheduler.scheduleCooldownWake(context, Math.max(3_000L, cooldownMs + 1_500L));
       String label = GeofenceRegistrar.displayLabel(gate);
@@ -304,7 +304,7 @@ public final class PalGateNativeOpen {
     }
   }
 
-  private static void httpOpen(Context context, String deviceId) throws Exception {
+  private static void httpOpen(Context context, String deviceId, String gateId) throws Exception {
     String trimmed = deviceId.trim();
     String baseId = trimmed;
     int outputNum = 1;
@@ -322,9 +322,9 @@ public final class PalGateNativeOpen {
     }
     String token =
       PalGateToken.generate(
-        KeepAlivePrefs.sessionToken(context),
-        KeepAlivePrefs.phoneNumber(context),
-        KeepAlivePrefs.tokenType(context),
+        KeepAlivePrefs.sessionTokenForGate(context, gateId),
+        KeepAlivePrefs.phoneNumberForGate(context, gateId),
+        KeepAlivePrefs.tokenTypeForGate(context, gateId),
         System.currentTimeMillis() / 1000L
       );
     String url =

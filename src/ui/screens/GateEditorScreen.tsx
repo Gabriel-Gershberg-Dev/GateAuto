@@ -3,7 +3,6 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { loadCredentials } from '../../data/credentials';
+import { loadCredentialsForGate } from '../../data/credentials';
 import { appendEvent } from '../../data/eventLog';
 import {
   DEFAULT_COOLDOWN_MS,
@@ -296,16 +295,18 @@ export function GateEditorScreen({ navigation, route }: Props) {
       setBtConnected(lists.connected);
       setBtBonded(lists.bonded);
       if (lists.connected.length === 0 && lists.bonded.length === 0) {
-        Alert.alert(
-          'Bluetooth',
-          'No connected or previously paired Bluetooth devices found. Connect/pair the car in Android Bluetooth settings and grant Nearby devices permission. (Dev client required for native BT.)',
-        );
+        setInfo({
+          title: 'Bluetooth',
+          message:
+            'No connected or previously paired Bluetooth devices found. Connect/pair the car in Android Bluetooth settings and grant Nearby devices permission. (Dev client required for native BT.)',
+        });
       }
     } catch {
-      Alert.alert(
-        'Bluetooth',
-        'Car Bluetooth matching is unavailable in this build. Use a development client with native Bluetooth.',
-      );
+      setInfo({
+        title: 'Bluetooth',
+        message:
+          'Car Bluetooth matching is unavailable in this build. Use a development client with native Bluetooth.',
+      });
     } finally {
       setBtPickerLoading(false);
     }
@@ -393,9 +394,12 @@ export function GateEditorScreen({ navigation, route }: Props) {
 
   const onTestOpen = async () => {
     if (!gate) return;
-    const credentials = await loadCredentials();
+    const credentials = await loadCredentialsForGate(gate);
     if (!credentials) {
-      Alert.alert('Not linked', 'Link a PalGate account first.');
+      setInfo({
+        title: 'Not linked',
+        message: 'Link a PalGate account first from Gate systems.',
+      });
       return;
     }
 
@@ -626,6 +630,13 @@ export function GateEditorScreen({ navigation, route }: Props) {
         Wait this long before auto-opening again (default {DEFAULT_COOLDOWN_SECONDS}{' '}
         sec).
       </Text>
+
+      <Pressable
+        style={styles.buttonSecondary}
+        onPress={() => navigation.navigate('ShareGate', { gateId: gate.id })}
+      >
+        <Text style={styles.buttonSecondaryText}>Share this gate</Text>
+      </Pressable>
 
       <Pressable
         style={[

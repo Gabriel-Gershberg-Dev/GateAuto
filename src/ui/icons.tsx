@@ -142,3 +142,50 @@ export function IconInfo({ color, size = 18 }: IconProps) {
     </>,
   );
 }
+
+export function IconShare({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" {...stroke(color)} />
+      <Path d="M16 6l-4-4-4 4" {...stroke(color)} />
+      <Path d="M12 2v13" {...stroke(color)} />
+    </>,
+  );
+}
+
+export function IconPerson({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Circle cx="12" cy="8" r="3.2" {...stroke(color)} />
+      <Path d="M5 19.2c.8-3.2 3.2-5 7-5s6.2 1.8 7 5" {...stroke(color)} />
+    </>,
+  );
+}
+
+export function IconQr({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M4 4h6v6H4z" {...stroke(color)} />
+      <Path d="M14 4h6v6h-6z" {...stroke(color)} />
+      <Path d="M4 14h6v6H4z" {...stroke(color)} />
+      <Path d="M14 14h2v2h-2z" {...stroke(color)} />
+      <Path d="M18 14h2v2h-2z" {...stroke(color)} />
+      <Path d="M14 18h2v2h-2z" {...stroke(color)} />
+      <Path d="M18 18h2v2h-2z" {...stroke(color)} />
+    </>,
+  );
+}
+
+export function IconGoogleMark({ color, size = 18 }: IconProps) {
+  return wrap(
+    size,
+    <Path
+      d="M12 11.2v2.4h5.5c-.2 1.4-1.6 4-5.5 4A6.2 6.2 0 1 1 12 5.8c1.6 0 2.7.7 3.3 1.3l2.2-2.1C16.2 3.7 14.3 2.8 12 2.8 6.9 2.8 2.8 6.9 2.8 12S6.9 21.2 12 21.2c5.3 0 8.8-3.7 8.8-8.9 0-.6 0-1-.1-1.5H12z"
+      fill={color}
+      stroke="none"
+    />,
+  );
+}

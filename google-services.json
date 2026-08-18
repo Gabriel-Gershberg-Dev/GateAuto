@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "312116795772",
+    "project_id": "gateauto-app",
+    "storage_bucket": "gateauto-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:312116795772:android:3ada4aa772eb622990acf9",
+        "android_client_info": {
+          "package_name": "com.gateauto.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "312116795772-g1b39g4059kti2bnobd0vi4lh2302e8p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gateauto.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "312116795772-2ihc48g9hrln7jsr2jo2o96ghoistea5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCsMnTrZMNkXGMVrlwczb_FHwe8dk4yoyA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "312116795772-2ihc48g9hrln7jsr2jo2o96ghoistea5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

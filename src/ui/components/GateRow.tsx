@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { displayGateName, type GateConfig } from '../../data/gatesStore';
 import { BarrierMark } from './BarrierMark';
+import { IconShare } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, type ThemeColors } from '../theme';
 
@@ -25,6 +26,7 @@ export type GateOpenFlash = {
 type Props = {
   gate: GateConfig;
   onPress: () => void;
+  onShare?: () => void;
   onToggleEnabled: (enabled: boolean) => void;
   /** Master Auto-open in Settings. When off, the per-gate Auto switch is locked. */
   autoOpenMaster?: boolean;
@@ -43,6 +45,7 @@ type Props = {
 export function GateRow({
   gate,
   onPress,
+  onShare,
   onToggleEnabled,
   autoOpenMaster = true,
   onAutoOpenBlocked,
@@ -204,6 +207,16 @@ export function GateRow({
             {status}
           </Text>
         </View>
+        {onShare ? (
+          <Pressable
+            onPress={onShare}
+            hitSlop={8}
+            accessibilityLabel="Share gate"
+            style={styles.shareBtn}
+          >
+            <IconShare color={colors.muted} size={18} />
+          </Pressable>
+        ) : null}
         <Pressable
           style={({ pressed }) => [
             styles.openBtn,
@@ -339,6 +352,12 @@ function createStyles(c: ThemeColors) {
     failHint: {
       color: c.fail,
       fontWeight: '600',
+    },
+    shareBtn: {
+      width: 36,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     openBtn: {
       backgroundColor: c.primary,

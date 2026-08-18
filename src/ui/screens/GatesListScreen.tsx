@@ -2,7 +2,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Platform,
   Pressable,
@@ -13,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { loadCredentials } from '../../data/credentials';
+import { loadCredentials, loadCredentialsForGate } from '../../data/credentials';
 import { appendEvent } from '../../data/eventLog';
 import { moveToIndex } from '../../data/gateOrder';
 import {
@@ -27,6 +26,7 @@ import {
   upsertGate,
   type GateConfig,
 } from '../../data/gatesStore';
+import { listLinkedSystems } from '../../data/palgateSystems';
 import {
   getActiveLocks,
   getActiveLocksBanner,
@@ -36,7 +36,7 @@ import { importNativeOpenEvents } from '../../platform/keepAliveAlarm';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { getDevices, openGate, PalGateApiError } from '../../palgate/api';
 import { BarrierMark } from '../components/BarrierMark';
-import { ConfirmSheet } from '../components/ConfirmSheet';
+import { ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { GateRow, type GateOpenFlash } from '../components/GateRow';
 import { IconLog, IconRefresh, IconSettings } from '../icons';
 import { useTheme } from '../ThemeProvider';
@@ -70,6 +70,9 @@ export function GatesListScreen({ navigation }: Props) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [autoOpenMaster, setAutoOpenMaster] = useState(true);
   const [autoOpenBlockedOpen, setAutoOpenBlockedOpen] = useState(false);
+  const [info, setInfo] = useState<{ title: string; message: string } | null>(
+    null,
+  );
   const persistChain = useRef(Promise.resolve());
   const listRef = useRef<ScrollView>(null);
   const draggingRef = useRef(false);
@@ -122,19 +125,35 @@ export function GatesListScreen({ navigation }: Props) {
 
   const refreshDevices = useCallback(async () => {
     setError(null);
-    const credentials = await loadCredentials();
-    if (!credentials) {
-      navigation.reset({ index: 0, routes: [{ name: 'LinkAccount' }] });
-      return;
+    const systems = await listLinkedSystems();
+    if (systems.length === 0) {
+      const creds = await loadCredentials();
+      if (!creds) {
+        navigation.navigate('GateSystems');
+        return;
+      }
     }
 
     try {
-      const raw = await getDevices(credentials);
-      const devices = parseDevicesResponse(raw);
-      const merged = await mergeDevicesIntoGates(devices);
+      let merged = await loadGates();
+      const toRefresh = systems.length > 0 ? systems : [];
+      if (toRefresh.length === 0) {
+        const creds = await loadCredentials();
+        if (creds) {
+          const raw = await getDevices(creds);
+          const devices = parseDevicesResponse(raw);
+          merged = await mergeDevicesIntoGates(devices);
+        }
+      } else {
+        for (const sys of toRefresh) {
+          const raw = await getDevices(sys.credentials);
+          const devices = parseDevicesResponse(raw);
+          merged = await mergeDevicesIntoGates(devices, sys.id);
+        }
+      }
       setGates(merged);
       await syncNativeRegions();
-      if (devices.length === 0) {
+      if (merged.filter((g) => g.origin !== 'shared').length === 0) {
         setError('No devices returned from PalGate. Pull to refresh.');
       }
     } catch (e) {
@@ -378,9 +397,12 @@ export function GatesListScreen({ navigation }: Props) {
 
   const onOpen = async (gate: GateConfig) => {
     if (openingIds.has(gate.id)) return;
-    const credentials = await loadCredentials();
+    const credentials = await loadCredentialsForGate(gate);
     if (!credentials) {
-      Alert.alert('Not linked', 'Link a PalGate account first.');
+      setInfo({
+        title: 'Not linked',
+        message: 'Link a PalGate account first from Gate systems.',
+      });
       return;
     }
 
@@ -443,7 +465,7 @@ export function GatesListScreen({ navigation }: Props) {
           <View style={styles.emptyBox}>
             <BarrierMark size={56} color={colors.muted} />
             <Text style={styles.empty}>
-              No gates yet. Pull to refresh after linking.
+              No gates yet. Scan PalGate from Gate systems, or pull to refresh.
             </Text>
           </View>
         ) : (
@@ -477,6 +499,9 @@ export function GatesListScreen({ navigation }: Props) {
                   onPress={() =>
                     navigation.navigate('GateEditor', { gateId: item.id })
                   }
+                  onShare={() =>
+                    navigation.navigate('ShareGate', { gateId: item.id })
+                  }
                   onToggleEnabled={(enabled) => void onToggle(item, enabled)}
                   onOpen={() => void onOpen(item)}
                   opening={openingIds.has(item.id)}
@@ -502,6 +527,12 @@ export function GatesListScreen({ navigation }: Props) {
           setAutoOpenBlockedOpen(false);
           navigation.navigate('Settings');
         }}
+      />
+      <InfoSheet
+        visible={info != null}
+        title={info?.title ?? ''}
+        message={info?.message ?? ''}
+        onDismiss={() => setInfo(null)}
       />
     </View>
   );
