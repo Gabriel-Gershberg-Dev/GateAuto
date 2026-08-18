@@ -11,7 +11,9 @@ import android.util.Log;
  * Alarm / SCREEN_ON / cooldown: refresh Play fences (INITIAL_TRIGGER 0) and
  * poll/open in this process. Samsung often never delivers ENTER while locked —
  * pollNearby is the recover path (inside radius + auto-on + cooldown + listed
- * car if BT-required). Never start a location FGS from here.
+ * car if BT-required). Never start a location FGS from here — if the keep-alive
+ * FGS died while locked, re-register Play fences and skip a location request;
+ * Samsung often needs Settings → Apps → GateAuto → Battery → Unrestricted.
  */
 public class KeepAliveReceiver extends BroadcastReceiver {
   private static final String TAG = "GateAutoKeepAlive";

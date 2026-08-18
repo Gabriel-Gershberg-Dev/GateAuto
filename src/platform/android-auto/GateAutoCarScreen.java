@@ -118,7 +118,7 @@ public class GateAutoCarScreen extends Screen {
   private void onToggleAutoOpen() {
     CarContext ctx = getCarContext();
     boolean next = !KeepAlivePrefs.isArmed(ctx);
-    KeepAliveModule.applyArmed(ctx, next);
+    KeepAliveModule.applyArmed(ctx, next, next);
     CarToast.makeText(
         ctx,
         next ? "Auto-open on" : "Auto-open off",

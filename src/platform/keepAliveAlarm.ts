@@ -9,6 +9,7 @@ export { nativeRegionFromGate, type NativeGeofenceRegion };
 type GateAutoKeepAliveNative = {
   setArmed(armed: boolean): Promise<boolean>;
   isArmed?(): Promise<boolean>;
+  startLocationFgs?(): Promise<boolean>;
   syncRegions?(json: string): Promise<boolean>;
   getRegionsJson?(): Promise<string>;
   scheduleCooldownWake?(delayMs: number): Promise<boolean>;
@@ -40,6 +41,23 @@ export function hasNativeKeepAlive(): boolean {
   return getNative() != null;
 }
 
+/** Start native location FGS from the UI process (no-op if background / missing). */
+export async function startNativeLocationFgs(): Promise<boolean> {
+  const native = getNative();
+  if (!native?.startLocationFgs) {
+    console.warn(
+      '[GateAuto] startNativeLocationFgs skipped — GateAutoKeepAlive native module missing',
+    );
+    return false;
+  }
+  try {
+    return Boolean(await native.startLocationFgs());
+  } catch (error) {
+    console.warn('[GateAuto] startNativeLocationFgs failed', error);
+    return false;
+  }
+}
+
 /** Native KeepAlivePrefs.armed, or null when the module is missing. */
 export async function getNativeKeepAliveArmed(): Promise<boolean | null> {
   const native = getNative();
@@ -54,7 +72,12 @@ export async function getNativeKeepAliveArmed(): Promise<boolean | null> {
 /** Mirror monitoring-enabled into native AlarmManager (no-op off Android / Expo Go). */
 export async function setNativeKeepAliveArmed(armed: boolean): Promise<void> {
   const native = getNative();
-  if (!native?.setArmed) return;
+  if (!native?.setArmed) {
+    console.warn(
+      '[GateAuto] setNativeKeepAliveArmed skipped — GateAutoKeepAlive native module missing',
+    );
+    return;
+  }
   try {
     await native.setArmed(armed);
   } catch (error) {
@@ -255,7 +278,12 @@ export async function syncNativeMonitoring(
   regions: NativeGeofenceRegion[],
 ): Promise<boolean> {
   const native = getNative();
-  if (!native?.setArmed) return false;
+  if (!native?.setArmed) {
+    console.warn(
+      '[GateAuto] syncNativeMonitoring skipped — GateAutoKeepAlive native module missing',
+    );
+    return false;
+  }
   try {
     if (native.syncRegions) {
       await native.syncRegions(JSON.stringify(regions));

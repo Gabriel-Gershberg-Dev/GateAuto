@@ -39,7 +39,7 @@ public final class GeofenceRegistrar {
 
   public static void saveRegionsJson(Context context, String json) {
     String value = json == null ? "[]" : json;
-    prefs(context).edit().putString(KEY_REGIONS, value).apply();
+    prefs(context).edit().putString(KEY_REGIONS, value).commit();
     int n = 0;
     int auto = 0;
     try {

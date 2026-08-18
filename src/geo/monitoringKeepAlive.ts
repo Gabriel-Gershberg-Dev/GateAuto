@@ -26,7 +26,7 @@ export const MONITORING_KEEPALIVE_TASK_NAME = 'GATEAUTO_MONITORING_KEEPALIVE_TAS
 export const MONITORING_POLL_WAKE_INTERVAL_MS = 30_000;
 
 /** Bump when keep-alive timing/options change so armed installs re-apply once. */
-const KEEPALIVE_CONFIG_VERSION = 'recover-poll-v8';
+const KEEPALIVE_CONFIG_VERSION = 'recover-poll-v9';
 const KEEPALIVE_CONFIG_KEY = 'gateauto.keepaliveConfigVersion';
 
 async function ensureKeepAlivePermissions(): Promise<boolean> {

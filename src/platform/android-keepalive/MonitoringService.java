@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.location.Location;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -22,6 +23,10 @@ import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.gms.tasks.Tasks;
+
+import java.util.concurrent.TimeUnit;
 
 import com.gateauto.app.R;
 
@@ -38,8 +43,38 @@ public class MonitoringService extends Service {
   private static final long REREGISTER_MS = 8 * 60 * 1000L;
   private static final long LOCATION_INTERVAL_MS = 30_000L;
 
+  private static volatile MonitoringService instance;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private FusedLocationProviderClient fused;
+
+  public static boolean isRunning() {
+    return instance != null;
+  }
+
+  /** One-shot in this already-running FGS. Does not start a new service. */
+  public static Location awaitFreshLocation(long timeoutMs) {
+    MonitoringService svc = instance;
+    if (svc == null) return null;
+    FusedLocationProviderClient client = svc.fused;
+    if (client == null) {
+      client = LocationServices.getFusedLocationProviderClient(svc);
+    }
+    try {
+      CancellationTokenSource cancel = new CancellationTokenSource();
+      return Tasks.await(
+        client.getCurrentLocation(
+          Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+          cancel.getToken()
+        ),
+        Math.max(1_000L, timeoutMs),
+        TimeUnit.MILLISECONDS
+      );
+    } catch (Exception e) {
+      Log.w(TAG, "awaitFreshLocation failed", e);
+      return null;
+    }
+  }
+
   private final LocationListener locationListener =
     location -> KeepAliveModule.requestJsPoll(MonitoringService.this);
   private final Runnable reregister =
@@ -56,6 +91,10 @@ public class MonitoringService extends Service {
       }
     };
 
+  /**
+   * Start from the UI / Android Auto process only. Alarm/SCREEN_ON must never
+   * call this — Android 12+ rejects background location FGS starts.
+   */
   public static void start(Context context) {
     if (!KeepAlivePrefs.isArmed(context)) return;
     Intent intent = new Intent(context, MonitoringService.class);
@@ -65,8 +104,13 @@ public class MonitoringService extends Service {
       } else {
         context.startService(intent);
       }
+      Log.i(TAG, "MonitoringService.start requested (UI/AA process)");
     } catch (Exception e) {
-      Log.w(TAG, "MonitoringService.start failed", e);
+      Log.w(
+        TAG,
+        "MonitoringService.start failed (background FGS start blocked?)",
+        e
+      );
     }
   }
 
@@ -81,6 +125,7 @@ public class MonitoringService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
+    instance = this;
     ensureChannel();
     Notification notification = buildPinnedNotification();
     if (Build.VERSION.SDK_INT >= 34) {
@@ -118,6 +163,7 @@ public class MonitoringService extends Service {
   public void onDestroy() {
     handler.removeCallbacks(reregister);
     stopLocationUpdates();
+    if (instance == this) instance = null;
     Log.i(TAG, "MonitoringService destroyed");
     super.onDestroy();
   }

@@ -49,7 +49,7 @@ import {
   type GateConfig,
 } from '../data/gatesStore';
 import { appendEvent, type EventKind } from '../data/eventLog';
-import { hydrateUserScope, scopedAsyncKey } from '../data/userScope';
+import { getActiveUid, hydrateUserScope, scopedAsyncKey } from '../data/userScope';
 import {
   assertCanOpen,
   logBlockedOpen,
@@ -78,6 +78,7 @@ import {
 import {
   setNativeKeepAliveArmed,
   getNativeKeepAliveArmed,
+  startNativeLocationFgs,
   syncNativeMonitoring,
   scheduleCooldownWake,
   nativeRegionFromGate,
@@ -350,10 +351,10 @@ function ensureBtConnectHandlerWired(): void {
 async function startBackgroundHelpers(): Promise<void> {
   ensureBtConnectHandlerWired();
   await startBluetoothConnectMonitor();
-  // Expo location FGS is what actually keeps JS TaskManager running in the
-  // background. A plain Java service does not — that is why the last APK
-  // stopped opening after leaving the app.
+  // Expo location FGS + native MonitoringService must start from this UI
+  // process. Alarm/SCREEN_ON cannot startForegroundService while locked.
   await startMonitoringKeepAlive();
+  await startNativeLocationFgs();
 }
 
 /** Restart BT watch + quiet FGS without re-registering geofences. */
@@ -446,6 +447,10 @@ export async function syncGeofences(): Promise<void> {
   const nativeRegions = allGates
     .filter((g) => String(g.deviceId ?? '').trim())
     .map((g) => nativeRegionFromGate(g));
+  const autoOn = nativeRegions.filter((r) => r.enabled !== false).length;
+  console.log(
+    `[GateAuto] native sync uid=${getActiveUid() ?? 'none'} gates=${nativeRegions.length} auto-on=${autoOn} monitoring=${monitoring}`,
+  );
   const primaryCreds = await loadCredentials();
   if (primaryCreds) {
     await writeNativeCredentials(primaryCreds);
@@ -487,7 +492,11 @@ export async function syncGeofences(): Promise<void> {
 
 export async function startMonitoring(): Promise<void> {
   await ensureMonitoringPermissions();
+  await hydrateUserScope();
   await setMonitoringEnabled(true);
+  // Location FGS from the UI process *before* other awaits — Android 12+
+  // rejects startForegroundService after the user locks.
+  await startMonitoringKeepAlive();
   try {
     await syncGeofences();
     await persistArmedAt();

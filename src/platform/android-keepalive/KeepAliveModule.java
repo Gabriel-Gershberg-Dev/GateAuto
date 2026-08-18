@@ -43,6 +43,14 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
    * can still list gates when Auto-open is off.
    */
   public static void applyArmed(Context context, boolean armed) {
+    applyArmed(context, armed, false);
+  }
+
+  /**
+   * @param startLocationFgs true only from the UI / Android Auto process.
+   *     KeepAliveReceiver must never pass true (background FGS start is blocked).
+   */
+  public static void applyArmed(Context context, boolean armed, boolean startLocationFgs) {
     Context ctx = context.getApplicationContext();
     KeepAlivePrefs.setArmed(ctx, armed);
     Log.i(
@@ -53,11 +61,16 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
         + GeofenceRegistrar.regionsArray(ctx).length()
         + " creds="
         + KeepAlivePrefs.hasCredentials(ctx)
+        + " startFgs="
+        + startLocationFgs
     );
     if (armed) {
       KeepAliveScheduler.start(ctx);
       // Never INITIAL_TRIGGER — already-outside EXIT would open every other pin.
       GeofenceRegistrar.register(ctx, false);
+      if (startLocationFgs) {
+        MonitoringService.start(ctx);
+      }
     } else {
       KeepAliveScheduler.stop(ctx);
       MonitoringService.stop(ctx);
@@ -68,10 +81,40 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   @ReactMethod
   public void setArmed(boolean armed, Promise promise) {
     try {
-      applyArmed(getReactApplicationContext(), armed);
+      ReactApplicationContext ctx = getReactApplicationContext();
+      boolean ui = ctx.getCurrentActivity() != null;
+      if (armed && !ui) {
+        Log.w(
+          NAME,
+          "native FGS skip — no UI activity (not starting location FGS from background)"
+        );
+      }
+      applyArmed(ctx, armed, armed && ui);
       promise.resolve(true);
     } catch (Exception e) {
       promise.reject("keepalive", e);
+    }
+  }
+
+  /** Start the native location FGS from the foreground UI process. */
+  @ReactMethod
+  public void startLocationFgs(Promise promise) {
+    try {
+      ReactApplicationContext ctx = getReactApplicationContext();
+      if (!KeepAlivePrefs.isArmed(ctx)) {
+        Log.w(NAME, "startLocationFgs skip — not armed");
+        promise.resolve(false);
+        return;
+      }
+      if (ctx.getCurrentActivity() == null) {
+        Log.w(NAME, "startLocationFgs skip — no UI activity");
+        promise.resolve(false);
+        return;
+      }
+      MonitoringService.start(ctx);
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_fgs", e);
     }
   }
 

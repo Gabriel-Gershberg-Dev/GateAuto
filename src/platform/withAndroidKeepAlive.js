@@ -168,7 +168,7 @@ function withKeepAlivePackage(config) {
         contents = `${importLine}\n${contents}`;
       }
     }
-    if (!contents.includes('KeepAlivePackage()')) {
+    if (!contents.includes('add(KeepAlivePackage())')) {
       if (contents.includes('add(GateAutoCarBluetoothPackage())')) {
         contents = contents.replace(
           'add(GateAutoCarBluetoothPackage())',
@@ -220,5 +220,5 @@ function withAndroidKeepAlive(config) {
 module.exports = createRunOncePlugin(
   withAndroidKeepAlive,
   'gateauto-android-keep-alive',
-  '1.6.0',
+  '1.7.0',
 );

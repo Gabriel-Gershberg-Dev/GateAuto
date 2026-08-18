@@ -28,7 +28,7 @@ public final class KeepAlivePrefs {
   private KeepAlivePrefs() {}
 
   public static void setArmed(Context context, boolean armed) {
-    prefs(context).edit().putBoolean(KEY_ARMED, armed).apply();
+    prefs(context).edit().putBoolean(KEY_ARMED, armed).commit();
   }
 
   public static boolean isArmed(Context context) {
@@ -96,7 +96,7 @@ public final class KeepAlivePrefs {
       .putString(KEY_SESSION, sessionToken == null ? "" : sessionToken)
       .putLong(KEY_PHONE, phoneNumber)
       .putInt(KEY_TOKEN_TYPE, tokenType)
-      .apply();
+      .commit();
   }
 
   public static void clearCredentials(Context context) {
@@ -105,14 +105,14 @@ public final class KeepAlivePrefs {
       .remove(KEY_SESSION)
       .remove(KEY_PHONE)
       .remove(KEY_TOKEN_TYPE)
-      .apply();
+      .commit();
   }
 
   public static void setGateCredentialsJson(Context context, String json) {
     prefs(context)
       .edit()
       .putString(KEY_GATE_CREDS, json == null || json.trim().isEmpty() ? "{}" : json)
-      .apply();
+      .commit();
   }
 
   private static JSONObject gateCredsRow(Context context, String gateId) {

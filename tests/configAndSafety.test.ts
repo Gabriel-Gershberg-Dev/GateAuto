@@ -265,6 +265,8 @@ describe('nativeRegionFromGate', () => {
     assert.equal(region.btRequired, true);
     assert.deepEqual(region.btAddresses, ['AA:BB:CC:DD:EE:FF']);
     assert.equal(pollAllowsAutoOpen(Boolean(region.btRequired)), false);
+    assert.equal(pollAllowsAutoOpen(true, true), true);
+    assert.equal(pollAllowsAutoOpen(false), true);
   });
 });
 

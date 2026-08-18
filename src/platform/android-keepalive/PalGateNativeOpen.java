@@ -1,5 +1,6 @@
 package com.gateauto.app.keepalive;
 
+import android.app.ActivityManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothDevice;
@@ -14,6 +15,8 @@ import androidx.core.app.NotificationCompat;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationTokenSource;
 import com.google.android.gms.tasks.Tasks;
 
 import org.json.JSONArray;
@@ -213,6 +216,7 @@ public final class PalGateNativeOpen {
    * pin radius (Samsung often never delivers ENTER while locked). Guards:
    * armed, last loc present, within radius (250m cap), cooldown/safety lock,
    * credentials. BT-required: listed car currently connected — not any HID.
+   * Never starts a location FGS (Android 12+ blocks that from this receiver).
    */
   public static void pollNearby(Context context) {
     if (!KeepAlivePrefs.isArmed(context)) {
@@ -224,9 +228,8 @@ public final class PalGateNativeOpen {
       Log.w(TAG, "native poll — empty native regions (locked cannot open)");
       return;
     }
-    Location last = lastLocation(context);
+    Location last = resolvePollLocation(context);
     if (last == null) {
-      Log.w(TAG, "native poll — no last location");
       return;
     }
     int auto = 0;
@@ -465,6 +468,35 @@ public final class PalGateNativeOpen {
     return out[0];
   }
 
+  /**
+   * Fused getLastLocation first (no FGS). If empty and a location FGS is
+   * already running, request a fix in that process. Never startForegroundService.
+   */
+  private static Location resolvePollLocation(Context context) {
+    Location last = lastLocation(context);
+    if (last != null) {
+      Log.i(TAG, "native poll loc=fused last");
+      return last;
+    }
+    boolean fgs = locationFgsRunning(context);
+    if (!fgs) {
+      Log.w(
+        TAG,
+        "native poll — no last location (location FGS not running; not starting FGS from background). Samsung: Settings → Apps → GateAuto → Battery → Unrestricted so the keep-alive FGS started at Auto-on can stay alive while locked."
+      );
+      return null;
+    }
+    Log.i(TAG, "native poll — no last loc, requesting in existing FGS");
+    Location fresh =
+      MonitoringService.isRunning()
+        ? MonitoringService.awaitFreshLocation(8_000L)
+        : currentLocationNoNewFgs(context);
+    if (fresh == null) {
+      Log.w(TAG, "native poll — no last location (FGS running but getCurrentLocation empty)");
+    }
+    return fresh;
+  }
+
   private static Location lastLocation(Context context) {
     try {
       FusedLocationProviderClient fused =
@@ -474,6 +506,51 @@ public final class PalGateNativeOpen {
       Log.w(TAG, "lastLocation failed", e);
       return null;
     }
+  }
+
+  private static Location currentLocationNoNewFgs(Context context) {
+    try {
+      FusedLocationProviderClient fused =
+        LocationServices.getFusedLocationProviderClient(context);
+      CancellationTokenSource cancel = new CancellationTokenSource();
+      return Tasks.await(
+        fused.getCurrentLocation(
+          Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+          cancel.getToken()
+        ),
+        8,
+        TimeUnit.SECONDS
+      );
+    } catch (Exception e) {
+      Log.w(TAG, "getCurrentLocation failed", e);
+      return null;
+    }
+  }
+
+  static boolean locationFgsRunning(Context context) {
+    if (MonitoringService.isRunning()) return true;
+    ActivityManager am =
+      (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+    if (am == null) return false;
+    String pkg = context.getPackageName();
+    try {
+      for (ActivityManager.RunningServiceInfo info : am.getRunningServices(64)) {
+        if (info.service == null || !pkg.equals(info.service.getPackageName())) {
+          continue;
+        }
+        if (!info.foreground) continue;
+        String cls = info.service.getClassName();
+        if (cls == null) continue;
+        if (cls.contains("LocationTaskService")
+          || cls.contains("MonitoringService")
+          || cls.contains("KeepAliveService")) {
+          return true;
+        }
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "locationFgsRunning failed", e);
+    }
+    return false;
   }
 
   private static boolean deviceWanted(JSONObject gate, String address, String name) {
