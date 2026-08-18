@@ -63,14 +63,22 @@ service cloud.firestore {
         request.resource.data.uid == resource.data.uid;
     }
 
-    // Sharing (create invite) needs Google or email on the ID token.
-    // Anonymous Auth has no email. Do not use sign_in_provider alone —
-    // after linkWithCredential it can lag behind user.isAnonymous.
+    // Sharing (create invite) needs a Google or email identity on the ID token.
+    // Guest tokens have sign_in_provider == 'anonymous' and no email.
+    // After linkWithCredential, email or identities['google.com'] can appear
+    // before sign_in_provider catches up — accept any of those.
     function isSharingAccount() {
-      return isAuthenticated() &&
-        request.auth.token.email is string &&
-        request.auth.token.email.size() >= 3 &&
-        request.auth.token.email.size() <= 320;
+      return isAuthenticated() && (
+        (
+          request.auth.token.firebase.sign_in_provider != 'anonymous' &&
+          request.auth.token.firebase.identities.keys().hasAny(['google.com', 'password'])
+        ) ||
+        (
+          request.auth.token.email is string &&
+          request.auth.token.email.size() >= 3 &&
+          request.auth.token.email.size() <= 320
+        )
+      );
     }
 
     function isRecentTimestamp(time) {
@@ -141,7 +149,7 @@ service cloud.firestore {
         g.bluetooth.keys().hasOnly(['required', 'devices']) &&
         g.bluetooth.required is bool &&
         isValidBtDeviceList(g.bluetooth.devices) &&
-        (!('credIndex' in g) || (g.credIndex is int && g.credIndex >= 0 && g.credIndex <= 7));
+        (!('credIndex' in g) || (g.credIndex is number && g.credIndex >= 0 && g.credIndex <= 7));
     }
 
     function isValidGateList(gates) {
@@ -190,7 +198,9 @@ service cloud.firestore {
         p.phoneNumber is number &&
         p.phoneNumber > 0 &&
         p.phoneNumber < 100000000000000 &&
-        p.tokenType in [0, 1, 2];
+        p.tokenType is number &&
+        p.tokenType >= 0 &&
+        p.tokenType <= 2;
     }
 
     function isValidInviteCreds(data) {
@@ -235,6 +245,7 @@ service cloud.firestore {
       // Missing docs must be gettable so the app can allocate a free code
       // (getDoc on a new id) and so a wrong code returns not-found, not denied.
       allow get: if isAuthenticated() && (
+        !exists(/databases/$(database)/documents/invites/$(code)) ||
         resource == null ||
         resource.data.fromUid == request.auth.uid ||
         resource.data.acceptedByUid == request.auth.uid ||

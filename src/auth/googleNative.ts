@@ -14,6 +14,7 @@ export function configureGoogleSignIn(): void {
   if (configured) return;
   GoogleSignin.configure({
     webClientId: googleWebClientId,
+    scopes: ['email', 'profile'],
     offlineAccess: false,
   });
   configured = true;

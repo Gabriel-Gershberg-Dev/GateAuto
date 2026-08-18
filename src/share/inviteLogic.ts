@@ -123,15 +123,76 @@ export function inviteGateList(data: {
   return [];
 }
 
+const SHARING_PROVIDERS = ['password', 'google.com'];
+
 export function isRealFirebaseAccount(input: {
   isAnonymous: boolean;
   providers: string[];
+  email?: string | null;
 }): boolean {
-  if (input.isAnonymous) return false;
-  return (
-    input.providers.includes('password') ||
-    input.providers.includes('google.com')
-  );
+  if (input.providers.some((p) => SHARING_PROVIDERS.includes(p))) return true;
+  if (input.email?.trim()) return !input.isAnonymous;
+  return false;
+}
+
+/** Settings / share copy: Guest vs Google/email. Ignores a leftover "Guest" name. */
+export function accountHeading(input: {
+  isRealAccount: boolean;
+  displayName: string | null;
+  email: string | null;
+}): { label: string; detail: string; showUpgrade: boolean } {
+  if (!input.isRealAccount) {
+    return {
+      label: 'Guest',
+      detail: 'Local gates only — upgrade to share',
+      showUpgrade: true,
+    };
+  }
+  const name = input.displayName?.trim() ?? '';
+  const email = input.email?.trim() || null;
+  const usableName = name && name.toLowerCase() !== 'guest' ? name : '';
+  return {
+    label: usableName || email || 'Signed in',
+    detail: email || 'Google or email account',
+    showUpgrade: false,
+  };
+}
+
+function clip(value: string, max: number): string {
+  return value.slice(0, max);
+}
+
+function finiteCoord(raw: unknown, min: number, max: number): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  return n;
+}
+
+/** Clamp a gate map to Firestore invite bounds so 1- and multi-gate writes match rules. */
+export function toInviteGateMap(gate: SharedGatePayload): SharedGatePayload {
+  const credIndex = Math.floor(Number(gate.credIndex));
+  return {
+    deviceId: clip(String(gate.deviceId ?? ''), 120),
+    name: clip(String(gate.name ?? ''), 120),
+    nameOverride:
+      gate.nameOverride == null ? null : clip(String(gate.nameOverride), 120) || null,
+    lat: finiteCoord(gate.lat, -90, 90),
+    lng: finiteCoord(gate.lng, -180, 180),
+    radiusMeters: clampInviteRadiusMeters(gate.radiusMeters),
+    cooldownMs: clampInviteCooldownMs(gate.cooldownMs),
+    bluetooth: {
+      required: Boolean(gate.bluetooth?.required),
+      devices: (gate.bluetooth?.devices ?? []).slice(0, 12).map((d) => ({
+        ...(d.name ? { name: clip(String(d.name), 80) } : {}),
+        ...(d.address ? { address: clip(String(d.address), 64) } : {}),
+      })),
+    },
+    systemLabel: clip(String(gate.systemLabel || 'Shared'), 80) || 'Shared',
+    credIndex:
+      Number.isInteger(credIndex) && credIndex >= 0 && credIndex < INVITE_MAX_PACKS
+        ? credIndex
+        : 0,
+  };
 }
 
 export function canTransitionInvite(

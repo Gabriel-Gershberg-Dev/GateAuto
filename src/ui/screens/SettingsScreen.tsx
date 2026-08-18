@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../auth/AuthProvider';
 import { promptGoogleIdToken } from '../../auth/googleNative';
+import { accountHeading } from '../../share/inviteLogic';
 import { appendEvent } from '../../data/eventLog';
 import { clearCredentials } from '../../data/credentials';
 import { tryStopGeofencing } from '../../integrations/optionalNative';
@@ -59,12 +60,11 @@ export function SettingsScreen({ navigation }: Props) {
     })();
   };
 
-  const accountLabel = auth.user?.isAnonymous
-    ? 'Guest'
-    : auth.user?.displayName || auth.user?.email || 'Signed in';
-  const accountDetail = auth.user?.isAnonymous
-    ? 'Local gates only — upgrade to share'
-    : auth.user?.email || 'Google or email account';
+  const heading = accountHeading({
+    isRealAccount: Boolean(auth.user?.isRealAccount),
+    displayName: auth.user?.displayName ?? null,
+    email: auth.user?.email ?? null,
+  });
 
   return (
     <>
@@ -72,14 +72,14 @@ export function SettingsScreen({ navigation }: Props) {
       <Group>
         <SettingsRow
           icon={<IconPerson color={colors.primary} />}
-          label={accountLabel}
-          detail={accountDetail}
+          label={heading.label}
+          detail={heading.detail}
           onPress={() => {
-            if (auth.user?.isAnonymous) setUpgradeOpen(true);
+            if (heading.showUpgrade) setUpgradeOpen(true);
           }}
           colors={colors}
         />
-        {auth.user?.isAnonymous ? (
+        {heading.showUpgrade ? (
           <>
             <Hairline inset={56} />
             <SettingsRow

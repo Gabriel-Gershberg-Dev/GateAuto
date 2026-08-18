@@ -8,9 +8,11 @@ import {
   inviteGateList,
   INVITE_CODE_LENGTH,
   isRealFirebaseAccount,
+  accountHeading,
   isValidInviteCode,
   normalizeInviteCode,
   sharedGateId,
+  toInviteGateMap,
 } from '../src/share/inviteLogic';
 
 describe('invite codes', () => {
@@ -75,6 +77,66 @@ describe('account + invite transitions', () => {
       }),
       true,
     );
+    assert.equal(
+      isRealFirebaseAccount({
+        isAnonymous: true,
+        providers: ['google.com'],
+      }),
+      true,
+    );
+    assert.equal(
+      isRealFirebaseAccount({
+        isAnonymous: false,
+        providers: [],
+        email: 'ada@gmail.com',
+      }),
+      true,
+    );
+  });
+
+  it('labels a leftover Guest name as the Google/email account', () => {
+    const guest = accountHeading({
+      isRealAccount: false,
+      displayName: 'Ada',
+      email: null,
+    });
+    assert.equal(guest.label, 'Guest');
+    assert.equal(guest.showUpgrade, true);
+    const google = accountHeading({
+      isRealAccount: true,
+      displayName: 'Guest',
+      email: 'ada@gmail.com',
+    });
+    assert.equal(google.label, 'ada@gmail.com');
+    assert.equal(google.showUpgrade, false);
+  });
+
+  it('clamps multi-gate invite maps to Firestore bounds', () => {
+    const mapped = toInviteGateMap({
+      deviceId: 'd'.repeat(200),
+      name: 'n'.repeat(200),
+      nameOverride: 'o'.repeat(200),
+      lat: 91,
+      lng: -200,
+      radiusMeters: 9,
+      cooldownMs: 9_000_000,
+      bluetooth: {
+        required: true,
+        devices: [{ name: 'car'.repeat(40), address: 'aa:bb' }],
+      },
+      systemLabel: 'sys'.repeat(40),
+      credIndex: 3.9,
+    });
+    assert.equal(mapped.deviceId.length, 120);
+    assert.equal(mapped.name.length, 120);
+    assert.equal(mapped.nameOverride?.length, 120);
+    assert.equal(mapped.lat, null);
+    assert.equal(mapped.lng, null);
+    assert.equal(mapped.radiusMeters, 25);
+    assert.equal(mapped.cooldownMs, 3_600_000);
+    assert.equal(mapped.bluetooth.devices[0].name?.length, 80);
+    assert.equal(mapped.systemLabel.length, 80);
+    assert.equal(mapped.credIndex, 3);
   });
 
   it('enforces invite status transitions', () => {

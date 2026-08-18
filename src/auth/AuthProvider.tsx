@@ -60,19 +60,49 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function providersOf(user: User): string[] {
+  return user.providerData.map((p) => p.providerId);
+}
+
+function isRealUser(user: User): boolean {
+  return isRealFirebaseAccount({
+    isAnonymous: user.isAnonymous,
+    providers: providersOf(user),
+    email: user.email,
+  });
+}
+
 function viewOf(user: User): AuthUserView {
-  const providers = user.providerData.map((p) => p.providerId);
+  const providers = providersOf(user);
+  const isRealAccount = isRealFirebaseAccount({
+    isAnonymous: user.isAnonymous,
+    providers,
+    email: user.email,
+  });
   return {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
-    isAnonymous: user.isAnonymous,
-    isRealAccount: isRealFirebaseAccount({
-      isAnonymous: user.isAnonymous,
-      providers,
-    }),
+    isAnonymous: user.isAnonymous && !isRealAccount,
+    isRealAccount,
     providers,
   };
+}
+
+async function settleUser(user: User): Promise<User> {
+  await user.reload();
+  await user.getIdToken(true);
+  return auth.currentUser ?? user;
+}
+
+function displayNameForProfile(user: User, name?: string): string {
+  const explicit = name?.trim();
+  if (explicit && explicit.toLowerCase() !== 'guest') return explicit.slice(0, 80);
+  const existing = user.displayName?.trim() ?? '';
+  if (existing && existing.toLowerCase() !== 'guest') return existing.slice(0, 80);
+  const local = user.email?.split('@')[0]?.trim();
+  if (local) return local.slice(0, 80);
+  return isRealUser(user) ? 'Signed in' : 'Guest';
 }
 
 function errorCode(error: unknown): string {
@@ -115,26 +145,47 @@ function authMessage(error: unknown): string {
   }
 }
 
-async function persistProfile(user: User, name?: string): Promise<void> {
-  await user.getIdToken(true);
-  const displayName =
-    name?.trim() || user.displayName?.trim() || (user.isAnonymous ? 'Guest' : '');
-  if (displayName && user.displayName !== displayName) {
-    await updateProfile(user, { displayName });
+async function persistProfile(user: User, name?: string): Promise<User> {
+  const settled = await settleUser(user);
+  const displayName = displayNameForProfile(settled, name);
+  if (displayName && settled.displayName !== displayName) {
+    await updateProfile(settled, { displayName });
+    await settled.reload();
   }
-  const ref = doc(db, 'users', user.uid);
+  const latest = auth.currentUser ?? settled;
+  const ref = doc(db, 'users', latest.uid);
   const existing = await getDoc(ref);
   await setDoc(
     ref,
     {
-      displayName: (displayName || 'Guest').slice(0, 80),
-      emailLower: user.email ? user.email.trim().toLowerCase() : null,
-      isAnonymous: user.isAnonymous,
+      displayName: displayName.slice(0, 80),
+      emailLower: latest.email ? latest.email.trim().toLowerCase() : null,
+      isAnonymous: !isRealUser(latest),
       updatedAt: serverTimestamp(),
       ...(existing.exists() ? {} : { createdAt: serverTimestamp() }),
     },
     { merge: true },
   );
+  return auth.currentUser ?? latest;
+}
+
+async function linkOrSignInGoogle(
+  idToken: string,
+): Promise<{ user: User; switchedAccount: boolean }> {
+  const credential = GoogleAuthProvider.credential(idToken);
+  const current = auth.currentUser;
+  if (current && (current.isAnonymous || !isRealUser(current))) {
+    try {
+      const cred = await linkWithCredential(current, credential);
+      return { user: await persistProfile(cred.user), switchedAccount: false };
+    } catch (e) {
+      if (!isCredentialTaken(e)) throw e;
+      const cred = await signInWithCredential(auth, credential);
+      return { user: await persistProfile(cred.user), switchedAccount: true };
+    }
+  }
+  const cred = await signInWithCredential(auth, credential);
+  return { user: await persistProfile(cred.user), switchedAccount: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -145,11 +196,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     configureGoogleSignIn();
     const unsub = onAuthStateChanged(auth, (next) => {
-      setFirebaseUser(next);
-      setReady(true);
-      if (next) {
-        void persistProfile(next).catch(() => undefined);
+      if (!next) {
+        setFirebaseUser(null);
+        setReady(true);
+        return;
       }
+      void (async () => {
+        try {
+          const settled = await persistProfile(next);
+          setFirebaseUser(auth.currentUser ?? settled);
+        } catch {
+          setFirebaseUser(auth.currentUser ?? next);
+        } finally {
+          setReady(true);
+        }
+      })();
     });
     return unsub;
   }, []);
@@ -167,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(null);
         try {
           const cred = await signInAnonymously(auth);
-          await persistProfile(cred.user);
+          setFirebaseUser(await persistProfile(cred.user));
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -184,7 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email.trim(),
             password,
           );
-          await persistProfile(cred.user, trimmed);
+          setFirebaseUser(await persistProfile(cred.user, trimmed));
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -199,7 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email.trim(),
             password,
           );
-          await persistProfile(cred.user);
+          setFirebaseUser(await persistProfile(cred.user));
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -209,9 +270,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInGoogle: async (idToken) => {
         setError(null);
         try {
-          const credential = GoogleAuthProvider.credential(idToken);
-          const cred = await signInWithCredential(auth, credential);
-          await persistProfile(cred.user);
+          const { user } = await linkOrSignInGoogle(idToken);
+          setFirebaseUser(user);
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -228,16 +288,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const credential = EmailAuthProvider.credential(email.trim(), password);
           try {
             const cred = await linkWithCredential(current, credential);
-            await persistProfile(cred.user, trimmed);
+            setFirebaseUser(await persistProfile(cred.user, trimmed));
             return { switchedAccount: false };
           } catch (e) {
-            if (!current.isAnonymous || !isCredentialTaken(e)) throw e;
+            if (!isCredentialTaken(e)) throw e;
             const cred = await signInWithEmailAndPassword(
               auth,
               email.trim(),
               password,
             );
-            await persistProfile(cred.user, trimmed);
+            setFirebaseUser(await persistProfile(cred.user, trimmed));
             return { switchedAccount: true };
           }
         } catch (e) {
@@ -248,22 +308,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       upgradeWithGoogle: async (idToken) => {
         setError(null);
-        const current = auth.currentUser;
-        if (!current) throw new Error('Sign in first.');
+        if (!auth.currentUser) throw new Error('Sign in first.');
         try {
-          const credential = GoogleAuthProvider.credential(idToken);
-          try {
-            const cred = await linkWithCredential(current, credential);
-            await persistProfile(cred.user);
-            return { switchedAccount: false };
-          } catch (e) {
-            if (!current.isAnonymous || !isCredentialTaken(e)) throw e;
-            // Same Google account already exists — adopt it. PalGate/gates
-            // stay on this phone (local storage is not keyed by Firebase uid).
-            const cred = await signInWithCredential(auth, credential);
-            await persistProfile(cred.user);
-            return { switchedAccount: true };
-          }
+          const { user, switchedAccount } = await linkOrSignInGoogle(idToken);
+          setFirebaseUser(user);
+          return { switchedAccount };
         } catch (e) {
           const message = authMessage(e);
           setError(message);

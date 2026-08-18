@@ -35,9 +35,11 @@ import {
   INVITE_MAX_GATES,
   INVITE_MAX_PACKS,
   inviteGateList,
+  isRealFirebaseAccount,
   isValidInviteCode,
   normalizeInviteCode,
   sharedGateId,
+  toInviteGateMap,
   type InviteStatus,
   type SharedGatePayload,
 } from './inviteLogic';
@@ -54,6 +56,24 @@ export type InviteDoc = {
   gate: SharedGatePayload;
   gates: SharedGatePayload[];
 };
+
+async function requireSharingUser(): Promise<{ uid: string }> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in first.');
+  await user.reload();
+  await user.getIdToken(true);
+  const latest = auth.currentUser ?? user;
+  if (
+    !isRealFirebaseAccount({
+      isAnonymous: latest.isAnonymous,
+      providers: latest.providerData.map((p) => p.providerId),
+      email: latest.email,
+    })
+  ) {
+    throw new Error('Sign in with Google or email to share a gate.');
+  }
+  return { uid: latest.uid };
+}
 
 function requireUid(): string {
   const uid = auth.currentUser?.uid;
@@ -121,7 +141,7 @@ export async function createGateInvites(
   gates: GateConfig[],
   options?: { toEmail?: string },
 ): Promise<{ code: string }> {
-  const uid = requireUid();
+  requireUid();
   if (gates.length === 0) throw new Error('Select at least one gate.');
   if (gates.length > INVITE_MAX_GATES) {
     throw new Error(`Share up to ${INVITE_MAX_GATES} gates in one code.`);
@@ -156,9 +176,9 @@ export async function createGateInvites(
         throw new Error('Too many PalGate systems in this share.');
       }
       packs.push({
-        sessionToken: creds.sessionToken,
-        phoneNumber: creds.phoneNumber,
-        tokenType: creds.tokenType,
+        sessionToken: String(creds.sessionToken).trim().toLowerCase().slice(0, 512),
+        phoneNumber: Number(creds.phoneNumber),
+        tokenType: Number(creds.tokenType),
       });
       credIndex = packs.length - 1;
     }
@@ -167,12 +187,15 @@ export async function createGateInvites(
       system?.label ||
       linked[0]?.label ||
       displayGateName(gate);
-    payloads.push({
-      ...gatePayload(gate, label.slice(0, 80)),
-      credIndex,
-    });
+    payloads.push(
+      toInviteGateMap({
+        ...gatePayload(gate, label.slice(0, 80)),
+        credIndex,
+      }),
+    );
   }
 
+  const { uid } = await requireSharingUser();
   const code = await newInviteCode();
   const expires = Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const batch = writeBatch(db);
