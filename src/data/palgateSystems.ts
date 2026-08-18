@@ -4,6 +4,10 @@ import { TokenType, type PalGateCredentials } from '../palgate/types';
 import { writeNativeCredentials } from '../platform/keepAliveAlarm';
 import { loadGates, type GateConfig } from './gatesStore';
 import {
+  mergeAllowedDeviceIds,
+  normalizeAllowedDeviceIds,
+} from './sharedCatalog';
+import {
   hydrateUserScope,
   legacySecureKey,
   scopedAsyncKey,
@@ -24,6 +28,10 @@ export type PalGateSystemMeta = {
   id: string;
   label: string;
   origin: PalGateSystemOrigin;
+  /** Same as origin: 'shared' invite vs owner-linked QR. */
+  source: PalGateSystemOrigin;
+  /** Device ids this shared-in system may expose. Null = full PalGate catalog. */
+  allowedDeviceIds: string[] | null;
   createdAt: number;
 };
 
@@ -55,13 +63,34 @@ export function labelForCredentials(
   return tail ? `Gate system ${index} · ${tail}` : `Gate system ${index}`;
 }
 
+function normalizeSystemMeta(
+  row: Partial<PalGateSystemMeta> & { id?: string; source?: PalGateSystemOrigin },
+): PalGateSystemMeta | null {
+  const id = String(row.id ?? '').trim();
+  if (!id) return null;
+  const origin: PalGateSystemOrigin =
+    row.origin === 'shared' || row.source === 'shared' ? 'shared' : 'linked';
+  const allowed = normalizeAllowedDeviceIds(row.allowedDeviceIds);
+  return {
+    id,
+    label: String(row.label ?? 'PalGate').slice(0, 80) || 'PalGate',
+    origin,
+    source: origin,
+    allowedDeviceIds: origin === 'shared' ? allowed : null,
+    createdAt: Number(row.createdAt) || Date.now(),
+  };
+}
+
 async function readMeta(): Promise<PalGateSystemMeta[]> {
   await hydrateUserScope();
   const raw = await AsyncStorage.getItem(metaKey());
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as PalGateSystemMeta[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((row) => normalizeSystemMeta(row))
+      .filter((row): row is PalGateSystemMeta => row != null);
   } catch {
     return [];
   }
@@ -179,6 +208,8 @@ async function migrateLegacyIfNeeded(): Promise<void> {
     id,
     label: labelForCredentials(legacy, 'linked', 1),
     origin: 'linked',
+    source: 'linked',
+    allowedDeviceIds: null,
     createdAt: Date.now(),
   };
   await writeSystemCreds(id, legacy);
@@ -187,7 +218,39 @@ async function migrateLegacyIfNeeded(): Promise<void> {
 
 export async function listSystems(): Promise<PalGateSystem[]> {
   await migrateLegacyIfNeeded();
-  const meta = await readMeta();
+  let meta = await readMeta();
+  if (
+    meta.some(
+      (row) =>
+        row.origin === 'shared' &&
+        (!row.allowedDeviceIds || row.allowedDeviceIds.length === 0),
+    )
+  ) {
+    const gates = await loadGates();
+    const sharedCount = meta.filter((row) => row.origin === 'shared').length;
+    let dirty = false;
+    meta = meta.map((row) => {
+      if (
+        row.origin !== 'shared' ||
+        (row.allowedDeviceIds && row.allowedDeviceIds.length > 0)
+      ) {
+        return row;
+      }
+      const ids = normalizeAllowedDeviceIds(
+        gates
+          .filter(
+            (g) =>
+              g.origin === 'shared' &&
+              (g.systemId === row.id || (!g.systemId && sharedCount === 1)),
+          )
+          .map((g) => g.deviceId),
+      );
+      if (ids.length === 0) return row;
+      dirty = true;
+      return { ...row, allowedDeviceIds: ids };
+    });
+    if (dirty) await writeMeta(meta);
+  }
   const out: PalGateSystem[] = [];
   for (const row of meta) {
     const credentials = await readSystemCreds(row.id);
@@ -211,31 +274,64 @@ export async function hasAnySystem(): Promise<boolean> {
   return all.length > 0;
 }
 
+export type UpsertSystemOptions = {
+  origin?: PalGateSystemOrigin;
+  label?: string;
+  allowedDeviceIds?: string[] | null;
+};
+
 /**
  * Add or reuse a PalGate credential set. Same phone+token updates the existing
- * system instead of duplicating.
+ * system instead of duplicating — except a share must not reuse an owner-linked
+ * catalog as a full-sync system (it becomes shared-in with an allowlist).
  */
 export async function upsertSystem(
   credentials: PalGateCredentials,
-  options?: { origin?: PalGateSystemOrigin; label?: string },
+  options?: UpsertSystemOptions,
 ): Promise<PalGateSystem> {
   await migrateLegacyIfNeeded();
   const origin = options?.origin ?? 'linked';
+  const incomingAllow =
+    origin === 'shared'
+      ? normalizeAllowedDeviceIds(options?.allowedDeviceIds)
+      : [];
   const existing = await listSystems();
   const fp = fingerprint(credentials);
   const match = existing.find((s) => fingerprint(s.credentials) === fp);
   if (match) {
+    let nextOrigin: PalGateSystemOrigin = match.origin;
+    let nextAllow = match.allowedDeviceIds;
+    if (origin === 'linked') {
+      nextOrigin = 'linked';
+      nextAllow = null;
+    } else if (match.origin === 'linked') {
+      nextOrigin = 'shared';
+      nextAllow = incomingAllow;
+    } else {
+      nextOrigin = 'shared';
+      nextAllow = mergeAllowedDeviceIds(match.allowedDeviceIds, incomingAllow);
+    }
     await writeSystemCreds(match.id, credentials);
     const nextMeta = (await readMeta()).map((row) =>
       row.id === match.id
         ? {
             ...row,
+            origin: nextOrigin,
+            source: nextOrigin,
+            allowedDeviceIds: nextOrigin === 'shared' ? nextAllow : null,
             label: options?.label?.trim() || row.label,
           }
         : row,
     );
     await writeMeta(nextMeta);
-    const updated = { ...match, credentials, label: options?.label?.trim() || match.label };
+    const updated: PalGateSystem = {
+      ...match,
+      credentials,
+      origin: nextOrigin,
+      source: nextOrigin,
+      allowedDeviceIds: nextOrigin === 'shared' ? nextAllow : null,
+      label: options?.label?.trim() || match.label,
+    };
     await syncNativeFromSystems();
     void import('./accountSync')
       .then((m) => m.scheduleCloudPush())
@@ -252,6 +348,8 @@ export async function upsertSystem(
     id,
     label,
     origin,
+    source: origin,
+    allowedDeviceIds: origin === 'shared' ? incomingAllow : null,
     createdAt: Date.now(),
   };
   await writeSystemCreds(id, credentials);
@@ -274,9 +372,12 @@ export async function removeSystem(systemId: string): Promise<void> {
 }
 
 export async function restoreSystems(rows: PalGateSystem[]): Promise<void> {
-  const meta: PalGateSystemMeta[] = rows.map(
-    ({ credentials: _c, ...row }) => row,
-  );
+  const meta: PalGateSystemMeta[] = rows
+    .map((row) => {
+      const { credentials: _c, ...rest } = row;
+      return normalizeSystemMeta(rest);
+    })
+    .filter((row): row is PalGateSystemMeta => row != null);
   await writeMeta(meta);
   for (const row of rows) {
     await writeSystemCreds(row.id, row.credentials);
@@ -329,8 +430,9 @@ export async function primaryCredentials(): Promise<PalGateCredentials | null> {
 
 export async function syncNativeFromSystems(): Promise<void> {
   const systems = await listSystems();
-  const primary =
-    systems.find((s) => s.origin === 'linked') ?? systems[0] ?? null;
+  // Shared-in creds open those devices (per-gate map) but must never become
+  // the phone's primary PalGate catalog token.
+  const primary = systems.find((s) => s.origin === 'linked') ?? null;
   await writeLegacy(primary?.credentials ?? null);
   await writeNativeCredentials(primary?.credentials ?? null);
 

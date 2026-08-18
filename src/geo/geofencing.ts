@@ -444,7 +444,10 @@ export async function syncGeofences(): Promise<void> {
   const nativeRegions = allGates
     .filter((g) => String(g.deviceId ?? '').trim())
     .map((g) => nativeRegionFromGate(g));
-  await writeNativeCredentials(await loadCredentials());
+  const primaryCreds = await loadCredentials();
+  if (primaryCreds) {
+    await writeNativeCredentials(primaryCreds);
+  }
   try {
     const { syncNativeFromSystems } = await import('../data/palgateSystems');
     await syncNativeFromSystems();

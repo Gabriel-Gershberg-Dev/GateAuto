@@ -106,7 +106,6 @@ public final class KeepAlivePrefs {
       .remove(KEY_SESSION)
       .remove(KEY_PHONE)
       .remove(KEY_TOKEN_TYPE)
-      .remove(KEY_GATE_CREDS)
       .apply();
   }
 

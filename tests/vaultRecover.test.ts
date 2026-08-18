@@ -126,6 +126,15 @@ describe('native regions and hub', () => {
     assert.equal(merged[1].id, 'b');
   });
 
+  it('does not dump native owner gates onto an invitee share-only list', () => {
+    const merged = mergeGateLists(
+      [gate('share:CODE:a', 'shared'), gate('share:CODE:b', 'shared')],
+      [gate('a'), gate('b'), gate('c'), gate('d')],
+    );
+    assert.equal(merged.length, 2);
+    assert.equal(merged.every((g) => g.origin === 'shared'), true);
+  });
+
   it('opens Gates list when gates exist even if PalGate systems are empty', () => {
     assert.equal(initialHubRoute({ gateCount: 4, systemCount: 0 }), 'GatesList');
     assert.equal(initialHubRoute({ gateCount: 0, systemCount: 1 }), 'GatesList');

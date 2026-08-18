@@ -13,6 +13,7 @@ import { isRealFirebaseAccount } from '../share/inviteLogic';
 import { displayGateName, type GateConfig } from './gatesStore';
 import type { PalGateCredentials } from '../palgate/types';
 import type { PalGateSystem, PalGateSystemMeta } from './palgateSystems';
+import { normalizeAllowedDeviceIds } from './sharedCatalog';
 
 export const CLOUD_MAX_GATES = 24;
 export const CLOUD_MAX_SYSTEMS = 8;
@@ -179,10 +180,14 @@ export async function pullCloudVault(uid: string): Promise<CloudVault> {
     const credentials = secretById.get(d.id);
     if (!credentials) continue;
     const origin = data.origin === 'shared' ? 'shared' : 'linked';
+    const allowedDeviceIds =
+      origin === 'shared' ? normalizeAllowedDeviceIds(data.allowedDeviceIds) : null;
     const meta: PalGateSystemMeta = {
       id: d.id,
       label: String(data.label ?? 'PalGate').slice(0, 80),
       origin,
+      source: origin,
+      allowedDeviceIds,
       createdAt: Date.now(),
     };
     systems.push({ ...meta, credentials });
@@ -226,6 +231,10 @@ export async function pushCloudVault(
     const payload: Record<string, unknown> = {
       label: clip(sys.label || 'PalGate', 80) || 'PalGate',
       origin: sys.origin === 'shared' ? 'shared' : 'linked',
+      allowedDeviceIds:
+        sys.origin === 'shared'
+          ? normalizeAllowedDeviceIds(sys.allowedDeviceIds)
+          : null,
       updatedAt: serverTimestamp(),
     };
     if (!existing) payload.createdAt = serverTimestamp();

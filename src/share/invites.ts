@@ -24,11 +24,13 @@ import {
 import {
   getSystem,
   listLinkedSystems,
+  listSystems,
   loadCredentialsForGate,
   upsertSystem,
 } from '../data/palgateSystems';
 import { normalizeBluetooth } from '../data/gateBluetooth';
 import { normalizeCooldownMs } from '../data/cooldownNormalize';
+import { stripLeakedPalGateCatalog } from '../data/sharedCatalog';
 import {
   bytesToInviteCode,
   clampInviteCooldownMs,
@@ -375,17 +377,23 @@ export async function acceptInvite(rawCode: string): Promise<GateConfig> {
   const systemByIndex: string[] = [];
   for (let i = 0; i < packs.length; i++) {
     const pack = packs[i];
+    const packGates = (
+      invite.gates.length ? invite.gates : [invite.gate]
+    ).filter((g) => (g.credIndex ?? 0) === i);
     const label =
-      invite.gates.find((g) => g.credIndex === i)?.systemLabel ||
+      packGates[0]?.systemLabel ||
       invite.gate.systemLabel ||
       'Shared';
+    const allowedDeviceIds = packGates
+      .map((g) => String(g.deviceId ?? '').trim())
+      .filter(Boolean);
     const system = await upsertSystem(
       {
         sessionToken: pack.sessionToken,
         phoneNumber: pack.phoneNumber,
         tokenType: pack.tokenType as 0 | 1 | 2,
       },
-      { origin: 'shared', label },
+      { origin: 'shared', label, allowedDeviceIds },
     );
     systemByIndex[i] = system.id;
   }
@@ -397,6 +405,8 @@ export async function acceptInvite(rawCode: string): Promise<GateConfig> {
     const credIndex = payload.credIndex ?? 0;
     const systemId = systemByIndex[credIndex] ?? systemByIndex[0];
     const id = sharedGateId(invite.code, payload.deviceId);
+    const display =
+      payload.nameOverride?.trim() || payload.name?.trim() || payload.deviceId;
     const gate: GateConfig = {
       id,
       deviceId: payload.deviceId,
@@ -404,8 +414,8 @@ export async function acceptInvite(rawCode: string): Promise<GateConfig> {
       origin: 'shared',
       sharedInviteCode: invite.code,
       sharedFromName: invite.fromName || null,
-      name: payload.name || payload.deviceId,
-      nameOverride: payload.nameOverride,
+      name: display,
+      nameOverride: payload.nameOverride?.trim() || null,
       enabled: false,
       lat: payload.lat,
       lng: payload.lng,
@@ -420,7 +430,8 @@ export async function acceptInvite(rawCode: string): Promise<GateConfig> {
     else next.push(gate);
     if (!first) first = gate;
   }
-  await saveGates(next);
+  const systems = await listSystems();
+  await saveGates(stripLeakedPalGateCatalog(next, systems));
 
   if (invite.status === 'pending') {
     await updateDoc(doc(db, 'invites', invite.code), {

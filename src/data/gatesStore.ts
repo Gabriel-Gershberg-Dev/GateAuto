@@ -10,6 +10,7 @@ import {
   type GateBluetoothConfig,
 } from './gateBluetooth';
 import { hydrateUserScope, scopedAsyncKey } from './userScope';
+import { filterDevicesForSystem, isSharedOrigin } from './sharedCatalog';
 
 export {
   DEFAULT_COOLDOWN_MS,
@@ -241,28 +242,50 @@ function migrateNameOverride(
   return null;
 }
 
-export async function mergeDevicesIntoGates(
+export type MergeDevicesOptions = {
+  systemId?: string | null;
+  origin?: GateOrigin;
+  allowedDeviceIds?: string[] | null;
+  /** Owner QR catalog may add new PalGate rows. Shared-in must never. */
+  adoptNewDevices?: boolean;
+};
+
+function markSeen(seen: Set<string>, gate: Pick<GateConfig, 'id' | 'deviceId'>): void {
+  seen.add(gate.id);
+  if (gate.deviceId) seen.add(gate.deviceId);
+}
+
+/**
+ * Merge a PalGate device list into stored gates. Shared-in rows keep invite
+ * display names and are never expanded to the owner's full PalGate catalog.
+ */
+export function mergeDevicesIntoGateList(
+  existing: GateConfig[],
   devices: DeviceSummary[],
-  systemId?: string | null,
-): Promise<GateConfig[]> {
-  const existing = await loadGates();
-  const incoming = new Map(devices.map((d) => [d.deviceId, d]));
+  options?: MergeDevicesOptions,
+): GateConfig[] {
+  const origin: GateOrigin = options?.origin === 'shared' ? 'shared' : 'linked';
+  const adoptNew =
+    options?.adoptNewDevices ?? !isSharedOrigin(origin);
+  const filtered = filterDevicesForSystem(devices, {
+    origin,
+    allowedDeviceIds: options?.allowedDeviceIds,
+  });
+  const incoming = new Map(filtered.map((d) => [d.deviceId, d]));
   const merged: GateConfig[] = [];
   const seen = new Set<string>();
-  const sid = systemId?.trim() || null;
+  const sid = options?.systemId?.trim() || null;
 
-  // Keep the user's list order. Refresh must not reshuffle gates.
   for (const prev of existing) {
-    const sameSystem =
-      !sid ||
+    if (
       prev.origin === 'shared' ||
-      !prev.systemId ||
-      prev.systemId === sid;
-    if (prev.origin === 'shared' || (sid && prev.systemId && prev.systemId !== sid)) {
+      (sid && prev.systemId && prev.systemId !== sid)
+    ) {
       merged.push(prev);
-      seen.add(prev.id);
+      markSeen(seen, prev);
       continue;
     }
+    const sameSystem = !sid || !prev.systemId || prev.systemId === sid;
     const device = sameSystem
       ? incoming.get(prev.id) ?? incoming.get(prev.deviceId)
       : undefined;
@@ -276,18 +299,33 @@ export async function mergeDevicesIntoGates(
         name: apiName,
         nameOverride: migrateNameOverride(prev, apiName, device.deviceId),
       });
-      seen.add(device.deviceId);
+      markSeen(seen, { id: prev.id, deviceId: device.deviceId });
     } else {
       merged.push(prev);
-      seen.add(prev.id);
+      markSeen(seen, prev);
     }
   }
 
-  for (const device of devices) {
-    if (seen.has(device.deviceId)) continue;
-    merged.push(createDefaultGate(device, sid));
+  if (adoptNew) {
+    for (const device of filtered) {
+      if (seen.has(device.deviceId)) continue;
+      merged.push(createDefaultGate(device, sid));
+      markSeen(seen, { id: device.deviceId, deviceId: device.deviceId });
+    }
   }
 
+  return merged;
+}
+
+export async function mergeDevicesIntoGates(
+  devices: DeviceSummary[],
+  systemIdOrOptions?: string | null | MergeDevicesOptions,
+): Promise<GateConfig[]> {
+  const options: MergeDevicesOptions =
+    systemIdOrOptions && typeof systemIdOrOptions === 'object'
+      ? systemIdOrOptions
+      : { systemId: systemIdOrOptions };
+  const merged = mergeDevicesIntoGateList(await loadGates(), devices, options);
   await saveGates(merged);
   return merged;
 }

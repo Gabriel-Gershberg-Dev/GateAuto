@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../auth/AuthProvider';
-import { loadCredentials, loadCredentialsForGate } from '../../data/credentials';
+import { loadCredentialsForGate } from '../../data/credentials';
 import { appendEvent } from '../../data/eventLog';
 import { moveToIndex } from '../../data/gateOrder';
 import {
@@ -27,7 +27,12 @@ import {
   upsertGate,
   type GateConfig,
 } from '../../data/gatesStore';
-import { listLinkedSystems } from '../../data/palgateSystems';
+import { listLinkedSystems, listSystems } from '../../data/palgateSystems';
+import {
+  filterDevicesForSystem,
+  shouldRefreshPalGateCatalog,
+  stripLeakedPalGateCatalog,
+} from '../../data/sharedCatalog';
 import {
   getActiveLocks,
   getActiveLocksBanner,
@@ -133,39 +138,53 @@ export function GatesListScreen({ navigation }: Props) {
 
   const refreshDevices = useCallback(async () => {
     setError(null);
-    const systems = await listLinkedSystems();
-    if (systems.length === 0) {
-      const creds = await loadCredentials();
-      if (!creds) {
+    const [linked, systems, local] = await Promise.all([
+      listLinkedSystems(),
+      listSystems(),
+      loadGates(),
+    ]);
+    let merged = stripLeakedPalGateCatalog(local, systems);
+    if (merged.length !== local.length) {
+      await saveGates(merged);
+    }
+
+    if (linked.length === 0) {
+      setGates(merged);
+      if (merged.length === 0 && systems.length === 0) {
         goToGateSystems(navigation);
         return;
       }
+      await syncNativeRegions();
+      return;
     }
 
     try {
-      let merged = await loadGates();
-      const toRefresh = systems.length > 0 ? systems : [];
-      if (toRefresh.length === 0) {
-        const creds = await loadCredentials();
-        if (creds) {
-          const raw = await getDevices(creds);
-          const devices = parseDevicesResponse(raw);
-          merged = await mergeDevicesIntoGates(devices);
-        }
-      } else {
-        for (const sys of toRefresh) {
-          const raw = await getDevices(sys.credentials);
-          const devices = parseDevicesResponse(raw);
-          merged = await mergeDevicesIntoGates(devices, sys.id);
-        }
+      for (const sys of linked) {
+        if (!shouldRefreshPalGateCatalog(sys)) continue;
+        const raw = await getDevices(sys.credentials);
+        const devices = filterDevicesForSystem(
+          parseDevicesResponse(raw),
+          sys,
+        );
+        merged = await mergeDevicesIntoGates(devices, {
+          systemId: sys.id,
+          origin: 'linked',
+          allowedDeviceIds: sys.allowedDeviceIds,
+          adoptNewDevices: true,
+        });
       }
+      merged = stripLeakedPalGateCatalog(merged, await listSystems());
+      await saveGates(merged);
       setGates(merged);
       await syncNativeRegions();
-      if (merged.filter((g) => g.origin !== 'shared').length === 0) {
+      if (
+        linked.length > 0 &&
+        merged.filter((g) => g.origin !== 'shared').length === 0
+      ) {
         setError('No devices returned from PalGate. Pull to refresh.');
       }
     } catch (e) {
-      const local = await loadGates();
+      const local = stripLeakedPalGateCatalog(await loadGates(), systems);
       setGates(local);
       const message =
         e instanceof PalGateApiError

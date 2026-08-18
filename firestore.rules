@@ -58,7 +58,9 @@ service cloud.firestore {
     //
     // Collection: users/{uid}/systems
     // Document ID: systemId
-    // Fields: label, origin, createdAt, updatedAt — no PalGate tokens
+    // Fields: label, origin (linked|shared), allowedDeviceIds (list|null),
+    //   createdAt, updatedAt — no PalGate tokens. Shared-in systems store
+    //   the invite device-id allowlist; linked QR systems use null.
     //
     // Collection: users/{uid}/secrets
     // Document ID: same as systemId
@@ -196,10 +198,44 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidAllowedDeviceId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 120;
+    }
+
+    function isValidAllowedDeviceIdList(ids) {
+      return ids is list &&
+        ids.size() <= 24 &&
+        (ids.size() < 1 || isValidAllowedDeviceId(ids[0])) &&
+        (ids.size() < 2 || isValidAllowedDeviceId(ids[1])) &&
+        (ids.size() < 3 || isValidAllowedDeviceId(ids[2])) &&
+        (ids.size() < 4 || isValidAllowedDeviceId(ids[3])) &&
+        (ids.size() < 5 || isValidAllowedDeviceId(ids[4])) &&
+        (ids.size() < 6 || isValidAllowedDeviceId(ids[5])) &&
+        (ids.size() < 7 || isValidAllowedDeviceId(ids[6])) &&
+        (ids.size() < 8 || isValidAllowedDeviceId(ids[7])) &&
+        (ids.size() < 9 || isValidAllowedDeviceId(ids[8])) &&
+        (ids.size() < 10 || isValidAllowedDeviceId(ids[9])) &&
+        (ids.size() < 11 || isValidAllowedDeviceId(ids[10])) &&
+        (ids.size() < 12 || isValidAllowedDeviceId(ids[11])) &&
+        (ids.size() < 13 || isValidAllowedDeviceId(ids[12])) &&
+        (ids.size() < 14 || isValidAllowedDeviceId(ids[13])) &&
+        (ids.size() < 15 || isValidAllowedDeviceId(ids[14])) &&
+        (ids.size() < 16 || isValidAllowedDeviceId(ids[15])) &&
+        (ids.size() < 17 || isValidAllowedDeviceId(ids[16])) &&
+        (ids.size() < 18 || isValidAllowedDeviceId(ids[17])) &&
+        (ids.size() < 19 || isValidAllowedDeviceId(ids[18])) &&
+        (ids.size() < 20 || isValidAllowedDeviceId(ids[19])) &&
+        (ids.size() < 21 || isValidAllowedDeviceId(ids[20])) &&
+        (ids.size() < 22 || isValidAllowedDeviceId(ids[21])) &&
+        (ids.size() < 23 || isValidAllowedDeviceId(ids[22])) &&
+        (ids.size() < 24 || isValidAllowedDeviceId(ids[23]));
+    }
+
     function isValidUserSystem(data) {
-      return data.keys().hasOnly(['label', 'origin', 'createdAt', 'updatedAt']) &&
+      return data.keys().hasOnly(['label', 'origin', 'allowedDeviceIds', 'createdAt', 'updatedAt']) &&
         data.label is string && data.label.size() >= 1 && data.label.size() <= 80 &&
         data.origin in ['linked', 'shared'] &&
+        (data.allowedDeviceIds == null || isValidAllowedDeviceIdList(data.allowedDeviceIds)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }

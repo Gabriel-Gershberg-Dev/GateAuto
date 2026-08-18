@@ -1,4 +1,5 @@
 import { shouldAdoptUnscopedVault } from './userScope';
+import { isSharedOnlyVault } from './sharedCatalog';
 
 export const UNBOUNDED_UID = '_unscoped';
 export const NATIVE_UID = '_native';
@@ -29,6 +30,8 @@ export type VaultSystemsMeta = {
   id: string;
   label: string;
   origin: 'linked' | 'shared';
+  source?: 'linked' | 'shared';
+  allowedDeviceIds?: string[] | null;
   createdAt: number;
 };
 
@@ -80,6 +83,9 @@ export function pickRecoverableVault(input: {
     return null;
   }
   if (linkedGateCount(input.currentGates) > 0 && input.currentSystemCount > 0) {
+    return null;
+  }
+  if (isSharedOnlyVault(input.currentGates)) {
     return null;
   }
   const ranked = input.candidates
@@ -175,9 +181,11 @@ export function gatesFromNativeRegions(raw: unknown): RecoveredGate[] {
 export function mergeGateLists(
   primary: RecoveredGate[],
   fill: RecoveredGate[],
+  options?: { appendUnmatched?: boolean },
 ): RecoveredGate[] {
   if (primary.length === 0) return fill;
   if (fill.length === 0) return primary;
+  const appendUnmatched = options?.appendUnmatched ?? !isSharedOnlyVault(primary);
   const merged = primary.map((g) => ({ ...g }));
   const extra: RecoveredGate[] = [];
   for (const gate of fill) {
@@ -185,7 +193,7 @@ export function mergeGateLists(
       (g) => g.id === gate.id || g.deviceId === gate.deviceId,
     );
     if (idx < 0) {
-      extra.push(gate);
+      if (appendUnmatched) extra.push(gate);
       continue;
     }
     const existing = merged[idx];
