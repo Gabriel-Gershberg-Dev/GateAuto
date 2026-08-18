@@ -52,6 +52,39 @@ public final class KeepAlivePrefs {
     return Math.max(geofenceSyncAtMem, prefs(context).getLong(KEY_GEOFENCE_SYNC_AT, 0L));
   }
 
+  /**
+   * Play never sends ENTER when Auto-open starts (or fences rewrite) while the
+   * user is already inside — INITIAL_TRIGGER stays off. Remember that so a
+   * later real EXIT is not dropped as false.
+   */
+  public static boolean isInside(Context context, String gateId) {
+    if (gateId == null || gateId.isEmpty()) return false;
+    return prefs(context).getBoolean("inside:" + gateId, false);
+  }
+
+  public static void setInside(Context context, String gateId, boolean inside) {
+    if (gateId == null || gateId.isEmpty()) return;
+    String key = "inside:" + gateId;
+    if (inside) {
+      prefs(context).edit().putBoolean(key, true).apply();
+    } else {
+      prefs(context).edit().remove(key).apply();
+    }
+  }
+
+  public static void clearAllInside(Context context) {
+    SharedPreferences p = prefs(context);
+    SharedPreferences.Editor ed = p.edit();
+    boolean any = false;
+    for (String k : p.getAll().keySet()) {
+      if (k != null && k.startsWith("inside:")) {
+        ed.remove(k);
+        any = true;
+      }
+    }
+    if (any) ed.apply();
+  }
+
   public static void setCredentials(
     Context context,
     String sessionToken,

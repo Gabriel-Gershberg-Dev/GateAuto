@@ -9,6 +9,7 @@ import {
   GOOD_REFINE_ACCURACY_M,
   MAX_REFINE_ACCURACY_M,
   maxOpenDistanceM,
+  nativeExitOpenAllowed,
 } from '../src/geo/proximity';
 import { cooldownRemainingMs } from '../src/geo/cooldown';
 import { bannerTopOffset } from '../src/ui/bannerInset';
@@ -101,6 +102,20 @@ describe('assertNearGate — far-away protection', () => {
     assert.equal(maxOpenDistanceM(5000, 'enter'), ABSOLUTE_MAX_OPEN_DISTANCE_M);
     assert.equal(maxOpenDistanceM(50, 'enter'), 50);
     assert.equal(maxOpenDistanceM(50, 'exit'), 50 * EXIT_RADIUS_FACTOR);
+  });
+});
+
+describe('nativeExitOpenAllowed — already-inside without Play ENTER', () => {
+  it('allows EXIT when we marked inside even if last loc is already far', () => {
+    assert.equal(nativeExitOpenAllowed(true, false), true);
+  });
+
+  it('skips EXIT with no inside mark and last loc far (false exit / Off→On)', () => {
+    assert.equal(nativeExitOpenAllowed(false, false), false);
+  });
+
+  it('allows EXIT without an inside mark if last loc still within radius×1.1', () => {
+    assert.equal(nativeExitOpenAllowed(false, true), true);
   });
 });
 

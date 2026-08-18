@@ -8,8 +8,8 @@ import android.os.Looper;
 import android.util.Log;
 
 /**
- * Alarm / SCREEN_ON: re-register Play geofences (Samsung/Play drop them
- * after swipe/Doze) then poll/open in this process. Cooldown only polls.
+ * Alarm / SCREEN_ON / cooldown: poll/open in this process. Register Play
+ * fences only when the enabled region list changed (or after reboot).
  * Do not start a location FGS from here — Samsung strips location access
  * from a service started in the background.
  */

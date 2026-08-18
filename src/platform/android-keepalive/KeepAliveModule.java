@@ -56,7 +56,8 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       // Never INITIAL_TRIGGER — already-outside EXIT would open every other pin.
       GeofenceRegistrar.register(ctx, false);
       if (!wasArmed) {
-        // Already inside: Play will not re-fire ENTER. Non-BT poll only.
+        // Already inside: Play will not re-fire ENTER (no INITIAL_TRIGGER).
+        // Poll marks inside so a later real leave is not dropped as false EXIT.
         pollNearbySoon(ctx, "arm");
       }
     } else {

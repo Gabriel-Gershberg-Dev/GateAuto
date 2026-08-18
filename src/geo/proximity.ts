@@ -85,6 +85,19 @@ export function maxOpenDistanceM(
 }
 
 /**
+ * Native EXIT (Play, INITIAL_TRIGGER off): a later leave is credible if we
+ * already marked the user inside (Off→On / poll / ENTER), or last location
+ * still sits within radius×1.1 (cap 250m). No inside mark and last loc
+ * already far is the Off→On fake EXIT.
+ */
+export function nativeExitOpenAllowed(
+  markedInside: boolean,
+  lastLocWithinExitRadius: boolean,
+): boolean {
+  return markedInside || lastLocWithinExitRadius;
+}
+
+/**
  * Accuracy gate for a fix that already passed distance.
  * - ≤ GOOD: accept
  * - GOOD..MAX: accept only when distance + accuracy <= radius (clearly inside)

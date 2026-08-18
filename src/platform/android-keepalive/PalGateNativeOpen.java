@@ -85,6 +85,7 @@ public final class PalGateNativeOpen {
     }
     if (!GeofenceRegistrar.isAutoEnabled(gate)) {
       Log.i(TAG, "native open skip " + gateId + " — auto-open off (stale fence)");
+      KeepAlivePrefs.setInside(context, gateId, false);
       return;
     }
     long synced = KeepAlivePrefs.lastGeofenceSyncAt(context);
@@ -104,26 +105,55 @@ public final class PalGateNativeOpen {
       );
       return;
     }
+    boolean isExit = "exit".equals(reason);
     Location last = lastLocation(context);
-    if (last == null) {
-      Log.i(TAG, "native open skip " + gateId + " (" + reason + ") — no last location");
-      return;
-    }
-    double factor = "exit".equals(reason) ? EXIT_RADIUS_FACTOR : 1.0;
-    if (!withinFence(gate, last, factor)) {
+    if (isExit) {
+      boolean wasInside = KeepAlivePrefs.isInside(context, gateId);
+      boolean near =
+        last != null && withinFence(gate, last, EXIT_RADIUS_FACTOR);
+      if (!wasInside && !near) {
+        Log.i(
+          TAG,
+          "native open skip "
+            + gateId
+            + " (exit) — no inside mark and last loc "
+            + (last == null
+              ? "missing"
+              : String.format(Locale.US, "%.1fm (far)", distanceMeters(gate, last)))
+            + " (false exit / never ENTER)"
+        );
+        return;
+      }
+      KeepAlivePrefs.setInside(context, gateId, false);
       Log.i(
         TAG,
-        "native open skip "
+        "native exit credible "
           + gateId
-          + " ("
-          + reason
-          + ") — not near pin ("
-          + String.format(Locale.US, "%.1f", distanceMeters(gate, last))
-          + "m, factor "
-          + factor
-          + ")"
+          + " wasInside="
+          + wasInside
+          + " near="
+          + near
       );
-      return;
+    } else {
+      if (last == null) {
+        Log.i(TAG, "native open skip " + gateId + " (" + reason + ") — no last location");
+        return;
+      }
+      if (!withinFence(gate, last, 1.0)) {
+        Log.i(
+          TAG,
+          "native open skip "
+            + gateId
+            + " ("
+            + reason
+            + ") — not near pin ("
+            + String.format(Locale.US, "%.1f", distanceMeters(gate, last))
+            + "m)"
+        );
+        return;
+      }
+      KeepAlivePrefs.setInside(context, gateId, true);
+      Log.i(TAG, "native mark inside " + gateId + " (enter)");
     }
     if (gate.optBoolean("btRequired", false) && !bluetoothMatches(context, gate, null)) {
       Log.i(TAG, "native open skip " + gateId + " — car BT not connected");
@@ -166,6 +196,7 @@ public final class PalGateNativeOpen {
         Log.i(TAG, "native BT skip " + gate.optString("id") + " — not near pin");
         continue;
       }
+      KeepAlivePrefs.setInside(context, gate.optString("id"), true);
       openGateObject(context, gate, "bt");
     }
   }
@@ -190,6 +221,11 @@ public final class PalGateNativeOpen {
       if (gate == null) continue;
       if (!GeofenceRegistrar.isAutoEnabled(gate)) continue;
       if (!withinFence(gate, last, 1.0)) continue;
+      String id = gate.optString("id", "").trim();
+      if (!id.isEmpty() && !KeepAlivePrefs.isInside(context, id)) {
+        Log.i(TAG, "native mark inside " + id + " (poll, already inside — no Play ENTER)");
+      }
+      if (!id.isEmpty()) KeepAlivePrefs.setInside(context, id, true);
       if (gate.optBoolean("btRequired", false)
         && !bluetoothMatches(context, gate, null)) {
         Log.i(

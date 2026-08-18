@@ -85,11 +85,9 @@ public final class GeofenceRegistrar {
   }
 
   /**
-   * Always remove+add Play fences. Samsung / Play drop them after swipe and
-   * Doze; the 9-min alarm and SCREEN_ON recover must rewrite or locked
-   * auto-open dies. Never INITIAL_TRIGGER (Off→On / alarm must not fake EXIT).
-   * The 12s ENTER/EXIT ignore is only armed when enabled geometry actually
-   * changed (or after reboot) — recover re-adds of the same list do not.
+   * Write Play fences only when enabled geometry changed or the device rebooted
+   * (Play drops fences across reboot). Alarm / SCREEN_ON / 8-min refresh must
+   * not remove+add — that emits native_exit / false opens. Never INITIAL_TRIGGER.
    *
    * @return true if Play was asked to rewrite
    */
@@ -97,13 +95,14 @@ public final class GeofenceRegistrar {
     Context app = context.getApplicationContext();
     String json = regionsJson(app);
     String sig = fenceSignature(json);
-    boolean realRewrite = !fenceSigUnchanged(app, sig);
-    if (realRewrite) {
-      // Off→On / Auto-on list / pin / reboot — swallow spurious ENTER/EXIT.
-      KeepAlivePrefs.markGeofenceSync(app);
-    } else {
-      Log.i(TAG, "native geofences recover rewrite — same signature, no ENTER/EXIT suppress");
+    if (fenceSigUnchanged(app, sig)) {
+      Log.i(TAG, "native geofences unchanged — skip unregister+register");
+      return false;
     }
+    // 12s ENTER/EXIT ignore only after a real rewrite (not alarm/recover).
+    KeepAlivePrefs.markGeofenceSync(app);
+    // Inside marks from the old geometry are stale after a pin/list change.
+    KeepAlivePrefs.clearAllInside(app);
     List<Geofence> geofences = parseGeofences(json);
     GeofencingClient client = LocationServices.getGeofencingClient(app);
     PendingIntent pi = pending(app);
@@ -134,11 +133,7 @@ public final class GeofenceRegistrar {
             .addOnSuccessListener(
               unused -> {
                 saveFenceSig(app, sig);
-                Log.i(
-                  TAG,
-                  "native geofences registered: "
-                    + geofences.size()
-                    + (realRewrite ? " (region rewrite)" : " (recover)"));
+                Log.i(TAG, "native geofences registered: " + geofences.size());
               })
             .addOnFailureListener(e -> Log.w(TAG, "addGeofences failed", e));
         } catch (SecurityException e) {
@@ -173,6 +168,7 @@ public final class GeofenceRegistrar {
   /** Drop Play Services fences but keep the gate list (Android Auto still needs it). */
   public static void unregister(Context context) {
     invalidateRegisteredSig(context);
+    KeepAlivePrefs.clearAllInside(context);
     try {
       LocationServices.getGeofencingClient(context.getApplicationContext())
         .removeGeofences(pending(context.getApplicationContext()));
