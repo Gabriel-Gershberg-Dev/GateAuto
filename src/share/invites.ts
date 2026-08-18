@@ -222,7 +222,7 @@ export async function createGateInvites(
   });
   batch.set(doc(db, 'inviteCreds', code), { packs });
   console.warn(
-    `[GateAuto invite] create db=${FIRESTORE_DATABASE_ID} path=invites/${code} gates=${payloads.length} packs=${packs.length}`,
+    `[GateAuto invite] create db=${FIRESTORE_DATABASE_ID} path=invites/${code} gates=${payloads.length} packs=${packs.length} ids=${payloads.map((p) => p.deviceId).join(',')} radius=${payloads.map((p) => p.radiusMeters).join(',')} cooldown=${payloads.map((p) => p.cooldownMs).join(',')} packPhoneFinite=${packs.every((p) => Number.isFinite(p.phoneNumber))} packTokenLen=${packs.map((p) => String(p.sessionToken).length).join(',')}`,
   );
   try {
     await batch.commit();
