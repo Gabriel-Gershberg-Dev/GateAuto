@@ -1,12 +1,15 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../auth/AuthProvider';
 import { promptGoogleIdToken } from '../../auth/googleNative';
 import { accountHeading } from '../../share/inviteLogic';
 import { appendEvent } from '../../data/eventLog';
 import { clearCredentials } from '../../data/credentials';
+import { loadGates } from '../../data/gatesStore';
+import { hasAnySystem } from '../../data/palgateSystems';
 import { tryStopGeofencing } from '../../integrations/optionalNative';
 import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
@@ -46,12 +49,30 @@ export function SettingsScreen({ navigation }: Props) {
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
+  const [hasLinkedSystem, setHasLinkedSystem] = useState(false);
+  const [hasGate, setHasGate] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void Promise.all([hasAnySystem(), loadGates()]).then(([linked, gates]) => {
+        if (cancelled) return;
+        setHasLinkedSystem(linked);
+        setHasGate(gates.length > 0);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const runUnlink = () => {
     setUnlinkOpen(false);
     void (async () => {
       await tryStopGeofencing();
       await clearCredentials();
+      setHasLinkedSystem(false);
+      setHasGate(false);
       await appendEvent({ kind: 'info', message: 'Account unlinked' });
       navigation.reset({
         index: 0,
@@ -101,7 +122,7 @@ export function SettingsScreen({ navigation }: Props) {
         />
       </Group>
 
-      <AutoOpenSettings />
+      {hasGate ? <AutoOpenSettings /> : null}
       <AppearancePicker />
 
       <Group>
@@ -127,15 +148,19 @@ export function SettingsScreen({ navigation }: Props) {
       </Group>
 
       <Group>
-        <SettingsRow
-          icon={<IconUnlink color={colors.danger} />}
-          label="Unlink PalGate"
-          detail="Remove PalGate from this phone"
-          onPress={() => setUnlinkOpen(true)}
-          colors={colors}
-          destructive
-        />
-        <Hairline inset={56} />
+        {hasLinkedSystem ? (
+          <>
+            <SettingsRow
+              icon={<IconUnlink color={colors.danger} />}
+              label="Unlink PalGate"
+              detail="Remove PalGate from this phone"
+              onPress={() => setUnlinkOpen(true)}
+              colors={colors}
+              destructive
+            />
+            <Hairline inset={56} />
+          </>
+        ) : null}
         <SettingsRow
           icon={<IconPerson color={colors.danger} />}
           label="Sign out"

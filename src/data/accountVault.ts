@@ -17,12 +17,73 @@ const STORE_OPTS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
 };
 
-async function copyAsync(from: string, to: string): Promise<void> {
+const ASYNC_LEAVES = [
+  'gates',
+  'systems.v1',
+  'monitoringEnabled',
+  'eventLog',
+  'openSafetyLock',
+  'lastGeofenceSyncAt',
+  'lastMonitoringArmedAt',
+] as const;
+
+async function copyAsync(
+  from: string,
+  to: string,
+  overwrite = false,
+): Promise<void> {
   const raw = await AsyncStorage.getItem(from);
   if (raw == null) return;
-  const dest = await AsyncStorage.getItem(to);
-  if (dest != null && dest !== '' && dest !== '[]' && dest !== '{}') return;
+  if (!overwrite) {
+    const dest = await AsyncStorage.getItem(to);
+    if (dest != null && dest !== '' && dest !== '[]' && dest !== '{}') return;
+  }
   await AsyncStorage.setItem(to, raw);
+}
+
+function parseSystemIds(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Array<{ id?: string; systemId?: string }>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .flatMap((row) => [String(row.id ?? ''), String(row.systemId ?? '')])
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export async function copyUidVault(fromUid: string, toUid: string): Promise<void> {
+  if (!fromUid || !toUid || fromUid === toUid) return;
+  for (const leaf of ASYNC_LEAVES) {
+    const overwrite = leaf === 'gates' || leaf === 'systems.v1';
+    await copyAsync(
+      asyncKeyForUid(fromUid, leaf),
+      asyncKeyForUid(toUid, leaf),
+      overwrite,
+    );
+  }
+  const metaRaw = await AsyncStorage.getItem(asyncKeyForUid(fromUid, 'systems.v1'));
+  const gatesRaw = await AsyncStorage.getItem(asyncKeyForUid(fromUid, 'gates'));
+  const ids = [...new Set([...parseSystemIds(metaRaw), ...parseSystemIds(gatesRaw)])];
+  for (const id of ids) {
+    await copySecure(
+      systemCredSecureKey(id, 's', fromUid),
+      systemCredSecureKey(id, 's', toUid),
+    );
+    await copySecure(
+      systemCredSecureKey(id, 'p', fromUid),
+      systemCredSecureKey(id, 'p', toUid),
+    );
+    await copySecure(
+      systemCredSecureKey(id, 't', fromUid),
+      systemCredSecureKey(id, 't', toUid),
+    );
+  }
+  await copySecure(legacySecureKey('s', fromUid), legacySecureKey('s', toUid));
+  await copySecure(legacySecureKey('p', fromUid), legacySecureKey('p', toUid));
+  await copySecure(legacySecureKey('t', fromUid), legacySecureKey('t', toUid));
 }
 
 async function copySecure(from: string, to: string): Promise<void> {
@@ -131,6 +192,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'>
  */
 export async function maybeAdoptUnscopedVault(input: {
   isRealAccount: boolean;
+  providers?: string[];
 }): Promise<boolean> {
   const uid = getActiveUid();
   if (!uid) return false;
@@ -145,12 +207,14 @@ export async function maybeAdoptUnscopedVault(input: {
     incomingPendingCount = (await listIncomingPendingInvites()).length;
     outgoingCount = (await listOutgoingInvites()).length;
   } catch {
-    return false;
+    incomingPendingCount = 0;
+    outgoingCount = 0;
   }
 
   if (
     !shouldAdoptUnscopedVault({
       isRealAccount: input.isRealAccount,
+      providers: input.providers,
       incomingPendingCount,
       outgoingCount,
     })
@@ -158,7 +222,7 @@ export async function maybeAdoptUnscopedVault(input: {
     return false;
   }
 
-  const result = await withTimeout(moveUnscopedVaultToUid(uid), 2000);
+  const result = await withTimeout(moveUnscopedVaultToUid(uid), 4000);
   return result !== 'timeout';
 }
 

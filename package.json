@@ -7,7 +7,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "tsx --test tests/autoOpenLogic.test.ts tests/configAndSafety.test.ts tests/streetName.test.ts tests/streetViewPin.test.ts tests/inviteLogic.test.ts tests/hubNavigation.test.ts tests/userScope.test.ts",
+    "test": "tsx --test tests/autoOpenLogic.test.ts tests/configAndSafety.test.ts tests/streetName.test.ts tests/streetViewPin.test.ts tests/inviteLogic.test.ts tests/hubNavigation.test.ts tests/userScope.test.ts tests/vaultRecover.test.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package"
   },

@@ -26,6 +26,7 @@ export function AutoOpenSettings() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [armStatus, setArmStatus] = useState<MonitoringArmStatus | null>(null);
   const [lockBanner, setLockBanner] = useState<string | null>(null);
+  const [gateCount, setGateCount] = useState(0);
   const running = useRef(false);
   const pending = useRef<boolean | null>(null);
 
@@ -35,6 +36,7 @@ export function AutoOpenSettings() {
     setArmStatus(status);
     await importNativeOpenEvents();
     const gates = await loadGates();
+    setGateCount(gates.length);
     const labels: Record<string, string> = {};
     for (const g of gates) {
       labels[g.id] = displayGateName(g);
@@ -85,6 +87,8 @@ export function AutoOpenSettings() {
   let status = 'Off';
   if (reallyArmed) status = 'Armed';
   else if (enabled) status = 'On — not fully armed';
+
+  if (gateCount === 0) return null;
 
   return (
     <>

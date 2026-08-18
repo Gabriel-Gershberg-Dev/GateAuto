@@ -10,6 +10,7 @@ type GateAutoKeepAliveNative = {
   setArmed(armed: boolean): Promise<boolean>;
   isArmed?(): Promise<boolean>;
   syncRegions?(json: string): Promise<boolean>;
+  getRegionsJson?(): Promise<string>;
   scheduleCooldownWake?(delayMs: number): Promise<boolean>;
   syncCredentials?(
     sessionToken: string,
@@ -79,6 +80,18 @@ export async function writeNativeGateCredentialsJson(json: string): Promise<void
     await native.syncGateCredentialsJson(json);
   } catch (error) {
     console.warn('[GateAuto] writeNativeGateCredentialsJson failed', error);
+  }
+}
+
+/** Leftover Play-Services pin list. Logout clears tokens, not this JSON. */
+export async function readNativeRegionsJson(): Promise<string | null> {
+  const native = getNative();
+  if (!native?.getRegionsJson) return null;
+  try {
+    const raw = await native.getRegionsJson();
+    return typeof raw === 'string' ? raw : null;
+  } catch {
+    return null;
   }
 }
 

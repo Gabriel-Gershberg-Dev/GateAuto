@@ -3,7 +3,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
-import { hasAnySystem } from '../data/palgateSystems';
+import { loadGates } from '../data/gatesStore';
+import { listSystems } from '../data/palgateSystems';
+import { initialHubRoute } from '../data/vaultRecoverLogic';
 import { useTheme } from '../ui/ThemeProvider';
 import { GateSystemsScreen } from '../ui/screens/GateSystemsScreen';
 import { GatesListScreen } from '../ui/screens/GatesListScreen';
@@ -41,9 +43,14 @@ export function RootNavigator() {
     }
     let cancelled = false;
     (async () => {
-      const linked = await hasAnySystem();
+      const [gates, systems] = await Promise.all([loadGates(), listSystems()]);
       if (!cancelled) {
-        setHubRoute(linked ? 'GatesList' : 'GateSystems');
+        setHubRoute(
+          initialHubRoute({
+            gateCount: gates.length,
+            systemCount: systems.length,
+          }),
+        );
       }
     })();
     return () => {

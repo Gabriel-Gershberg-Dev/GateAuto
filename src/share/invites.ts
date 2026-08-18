@@ -44,6 +44,7 @@ import {
   type InviteStatus,
   type SharedGatePayload,
 } from './inviteLogic';
+import type { PalGateCredentials } from '../palgate/types';
 
 export type InviteDoc = {
   fromUid: string;
@@ -472,4 +473,67 @@ export async function syncRevokedShares(): Promise<string[]> {
     }
   }
   return removed;
+}
+
+/**
+ * Owner-only: rebuild gates + PalGate token from invites this uid created.
+ * Used when the device uid store is empty but share docs still exist.
+ * Does not log session tokens.
+ */
+export async function ownerInviteRestorePayload(): Promise<{
+  gates: GateConfig[];
+  credentials: PalGateCredentials | null;
+  systemLabel: string;
+} | null> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const outgoing = await listOutgoingInvites();
+  const mine = outgoing.filter((inv) => inv.fromUid === uid);
+  if (mine.length === 0) return null;
+
+  const byDevice = new Map<string, GateConfig>();
+  let credentials: PalGateCredentials | null = null;
+  let systemLabel = 'Your PalGate';
+
+  for (const inv of mine) {
+    const payloads = inv.gates.length ? inv.gates : [inv.gate];
+    if (!credentials) {
+      const packs = await readInvitePacks(inv.code);
+      const pack = packs[0];
+      if (pack?.sessionToken && Number.isFinite(pack.phoneNumber) && pack.phoneNumber > 0) {
+        credentials = {
+          sessionToken: pack.sessionToken,
+          phoneNumber: pack.phoneNumber,
+          tokenType: pack.tokenType as 0 | 1 | 2,
+        };
+        systemLabel = payloads[0]?.systemLabel || systemLabel;
+      }
+    }
+    for (const payload of payloads) {
+      const deviceId = String(payload.deviceId ?? '').trim();
+      if (!deviceId || byDevice.has(deviceId)) continue;
+      byDevice.set(deviceId, {
+        id: deviceId,
+        deviceId,
+        systemId: null,
+        origin: 'linked',
+        sharedInviteCode: null,
+        sharedFromName: null,
+        name: payload.name || deviceId,
+        nameOverride: payload.nameOverride,
+        enabled: true,
+        lat: payload.lat,
+        lng: payload.lng,
+        radiusMeters: payload.radiusMeters,
+        cooldownMs: payload.cooldownMs,
+        bluetooth: payload.bluetooth,
+        lastOpenedAt: null,
+        lastResult: null,
+      });
+    }
+  }
+
+  const gates = [...byDevice.values()];
+  if (gates.length === 0 && !credentials) return null;
+  return { gates, credentials, systemLabel: systemLabel.slice(0, 80) };
 }

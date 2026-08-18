@@ -27,8 +27,8 @@ import { isRealFirebaseAccount } from '../share/inviteLogic';
 import {
   activateAccountVault,
   leaveAccountVault,
-  maybeAdoptUnscopedVault,
 } from '../data/accountVault';
+import { hydrateSignedInAccount } from '../data/accountSync';
 import { syncNativeFromSystems } from '../data/palgateSystems';
 
 export type AuthUserView = {
@@ -216,9 +216,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           await activateAccountVault(next.uid);
           await Promise.race([
-            maybeAdoptUnscopedVault({ isRealAccount: isRealUser(next) }),
-            new Promise<boolean>((resolve) => {
-              setTimeout(() => resolve(false), 2000);
+            hydrateSignedInAccount(next),
+            new Promise<void>((resolve) => {
+              setTimeout(() => resolve(), 8000);
             }),
           ]);
           if (epoch !== authEpoch) return;
@@ -226,11 +226,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (epoch !== authEpoch) return;
           if (!auth.currentUser || auth.currentUser.uid !== next.uid) return;
           setFirebaseUser(auth.currentUser ?? settled);
-          void syncNativeFromSystems().then(() =>
-            import('../geo/monitoringResync')
+          void syncNativeFromSystems().then(async () => {
+            const { loadGates } = await import('../data/gatesStore');
+            const gates = await loadGates();
+            if (gates.length === 0) return;
+            await import('../geo/monitoringResync')
               .then((m) => m.resyncMonitoringIfArmed('account-switch'))
-              .catch(() => undefined),
-          );
+              .catch(() => undefined);
+          });
         } catch {
           if (epoch !== authEpoch) return;
           if (auth.currentUser?.uid === next.uid) {

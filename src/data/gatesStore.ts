@@ -194,6 +194,9 @@ export async function loadGates(): Promise<GateConfig[]> {
 export async function saveGates(gates: GateConfig[]): Promise<void> {
   await hydrateUserScope();
   await AsyncStorage.setItem(gatesKey(), JSON.stringify(gates.map(normalizeGate)));
+  void import('./accountSync')
+    .then((m) => m.scheduleCloudPush())
+    .catch(() => undefined);
 }
 
 export async function upsertGate(gate: GateConfig): Promise<GateConfig[]> {

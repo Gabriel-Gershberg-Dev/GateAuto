@@ -96,15 +96,19 @@ export async function hydrateUserScope(): Promise<string | null> {
 }
 
 /**
- * Unscoped pre-isolation data belongs to the original owner, not a brand-new
- * invitee account on the same phone (pending incoming, no outgoing shares).
+ * Leftover owner vault (unscoped / other-uid / native regions) may be adopted
+ * only by the original Google account or a user who has created shares.
+ * Email invitees (pending incoming, or password-only with no outgoing) stay empty.
  */
 export function shouldAdoptUnscopedVault(input: {
   isRealAccount: boolean;
+  providers?: string[];
   incomingPendingCount: number;
   outgoingCount: number;
 }): boolean {
   if (!input.isRealAccount) return false;
   if (input.incomingPendingCount > 0 && input.outgoingCount === 0) return false;
-  return true;
+  if (input.outgoingCount > 0) return true;
+  const providers = input.providers ?? [];
+  return providers.includes('google.com');
 }

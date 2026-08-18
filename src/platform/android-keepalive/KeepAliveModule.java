@@ -229,6 +229,15 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     }
   }
 
+  @ReactMethod
+  public void getRegionsJson(Promise promise) {
+    try {
+      promise.resolve(GeofenceRegistrar.regionsJson(getReactApplicationContext()));
+    } catch (Exception e) {
+      promise.reject("keepalive_regions", e);
+    }
+  }
+
   /**
    * In-process last-location poll. Does not start a location FGS (Samsung
    * rejects background location FGS). {@link PalGateNativeOpen#pollNearby}

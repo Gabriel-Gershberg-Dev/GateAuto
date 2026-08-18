@@ -237,6 +237,9 @@ export async function upsertSystem(
     await writeMeta(nextMeta);
     const updated = { ...match, credentials, label: options?.label?.trim() || match.label };
     await syncNativeFromSystems();
+    void import('./accountSync')
+      .then((m) => m.scheduleCloudPush())
+      .catch(() => undefined);
     return updated;
   }
 
@@ -254,6 +257,9 @@ export async function upsertSystem(
   await writeSystemCreds(id, credentials);
   await writeMeta([...existing.map(({ credentials: _c, ...m }) => m), row]);
   await syncNativeFromSystems();
+  void import('./accountSync')
+    .then((m) => m.scheduleCloudPush())
+    .catch(() => undefined);
   return { ...row, credentials };
 }
 
@@ -261,6 +267,20 @@ export async function removeSystem(systemId: string): Promise<void> {
   const meta = (await readMeta()).filter((row) => row.id !== systemId);
   await deleteSystemCreds(systemId);
   await writeMeta(meta);
+  await syncNativeFromSystems();
+  void import('./accountSync')
+    .then((m) => m.scheduleCloudPush())
+    .catch(() => undefined);
+}
+
+export async function restoreSystems(rows: PalGateSystem[]): Promise<void> {
+  const meta: PalGateSystemMeta[] = rows.map(
+    ({ credentials: _c, ...row }) => row,
+  );
+  await writeMeta(meta);
+  for (const row of rows) {
+    await writeSystemCreds(row.id, row.credentials);
+  }
   await syncNativeFromSystems();
 }
 
@@ -274,6 +294,9 @@ export async function clearAllSystems(): Promise<void> {
     '../platform/keepAliveAlarm'
   );
   await writeNativeGateCredentialsJson('{}');
+  void import('./accountSync')
+    .then((m) => m.scheduleCloudPush())
+    .catch(() => undefined);
 }
 
 export async function loadCredentialsForSystem(

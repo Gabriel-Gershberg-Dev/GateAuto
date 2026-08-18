@@ -35,9 +35,40 @@ service cloud.firestore {
     //   Legacy docs may store a single sessionToken/phoneNumber/tokenType.
     // Never list this collection. Get only with the code or as owner/acceptor.
     //
-    // Gates / PalGate systems are device-local, not in Firestore.
-    // Guest (anonymous) may read/write their own users/{uid} and accept
-    // an invite by code. Creating invites requires a Google/email token.
+    // Collection: users/{uid}/gates
+    // Document ID: gate id (deviceId or share:code:deviceId)
+    // Fields:
+    //   - displayName: string 1-120
+    //   - deviceId: string 1-120
+    //   - systemId: string|null <=80
+    //   - origin: linked|shared
+    //   - sharedInviteCode, sharedFromName: string|null
+    //   - name, nameOverride: string|null
+    //   - enabled: bool (auto-open)
+    //   - lat, lng: number|null
+    //   - radiusMeters: number 25-150
+    //   - cooldownMs: number 0-3600000
+    //   - bluetooth: { required, devices[{name?,address?}] }
+    //   - lastOpenedAt: number|null
+    //   - lastResult: string|null
+    //   - sortIndex: number 0-63
+    //   - createdAt, updatedAt: timestamp
+    // Owner Google/email only (isSharingAccount). Recipients get a copy
+    // under their own uid after accept. Guests stay local-only.
+    //
+    // Collection: users/{uid}/systems
+    // Document ID: systemId
+    // Fields: label, origin, createdAt, updatedAt — no PalGate tokens
+    //
+    // Collection: users/{uid}/secrets
+    // Document ID: same as systemId
+    // Fields: sessionToken, phoneNumber, tokenType, createdAt, updatedAt
+    // Owner-only. Recipients cannot read another user's secrets.
+    //
+    // Gates / PalGate systems for signed-in (non-anonymous) users live
+    // under users/{uid}/... Guest (anonymous) may read/write their own
+    // users/{uid} profile and accept an invite by code. Creating invites
+    // and writing gates/systems/secrets requires a Google/email token.
     //
     // ===============================================================
 
@@ -99,6 +130,91 @@ service cloud.firestore {
         data.updatedAt is timestamp &&
         isRecentTimestamp(data.updatedAt) &&
         (data.emailLower == null || isValidEmail(data.emailLower));
+    }
+
+    function isValidBtDevice(d) {
+      return d is map &&
+        d.keys().hasOnly(['name', 'address']) &&
+        (!('name' in d) || (d.name is string && d.name.size() >= 1 && d.name.size() <= 80)) &&
+        (!('address' in d) || (d.address is string && d.address.size() >= 1 && d.address.size() <= 64)) &&
+        (
+          ('name' in d && d.name.size() >= 1) ||
+          ('address' in d && d.address.size() >= 1)
+        );
+    }
+
+    function isValidBtDeviceList(devices) {
+      return devices is list &&
+        devices.size() <= 12 &&
+        (devices.size() < 1 || isValidBtDevice(devices[0])) &&
+        (devices.size() < 2 || isValidBtDevice(devices[1])) &&
+        (devices.size() < 3 || isValidBtDevice(devices[2])) &&
+        (devices.size() < 4 || isValidBtDevice(devices[3])) &&
+        (devices.size() < 5 || isValidBtDevice(devices[4])) &&
+        (devices.size() < 6 || isValidBtDevice(devices[5])) &&
+        (devices.size() < 7 || isValidBtDevice(devices[6])) &&
+        (devices.size() < 8 || isValidBtDevice(devices[7])) &&
+        (devices.size() < 9 || isValidBtDevice(devices[8])) &&
+        (devices.size() < 10 || isValidBtDevice(devices[9])) &&
+        (devices.size() < 11 || isValidBtDevice(devices[10])) &&
+        (devices.size() < 12 || isValidBtDevice(devices[11]));
+    }
+
+    function isValidUserBluetooth(bt) {
+      return bt is map &&
+        bt.keys().hasOnly(['required', 'devices']) &&
+        bt.required is bool &&
+        isValidBtDeviceList(bt.devices);
+    }
+
+    function isValidUserGate(data) {
+      return data.keys().hasOnly([
+          'displayName', 'deviceId', 'systemId', 'origin',
+          'sharedInviteCode', 'sharedFromName', 'name', 'nameOverride',
+          'enabled', 'lat', 'lng', 'radiusMeters', 'cooldownMs',
+          'bluetooth', 'lastOpenedAt', 'lastResult', 'sortIndex',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+        data.deviceId is string && data.deviceId.size() >= 1 && data.deviceId.size() <= 120 &&
+        (data.systemId == null || (data.systemId is string && data.systemId.size() <= 80)) &&
+        data.origin in ['linked', 'shared'] &&
+        (data.sharedInviteCode == null || (data.sharedInviteCode is string && data.sharedInviteCode.size() <= 16)) &&
+        (data.sharedFromName == null || (data.sharedFromName is string && data.sharedFromName.size() <= 80)) &&
+        data.name is string && data.name.size() <= 120 &&
+        (data.nameOverride == null || (data.nameOverride is string && data.nameOverride.size() <= 120)) &&
+        data.enabled is bool &&
+        (data.lat == null || (data.lat is number && data.lat >= -90 && data.lat <= 90)) &&
+        (data.lng == null || (data.lng is number && data.lng >= -180 && data.lng <= 180)) &&
+        data.radiusMeters is number && data.radiusMeters >= 25 && data.radiusMeters <= 150 &&
+        data.cooldownMs is number && data.cooldownMs >= 0 && data.cooldownMs <= 3600000 &&
+        isValidUserBluetooth(data.bluetooth) &&
+        (data.lastOpenedAt == null || (data.lastOpenedAt is number && data.lastOpenedAt >= 0)) &&
+        (data.lastResult == null || (data.lastResult is string && data.lastResult.size() <= 200)) &&
+        data.sortIndex is number && data.sortIndex >= 0 && data.sortIndex <= 63 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserSystem(data) {
+      return data.keys().hasOnly(['label', 'origin', 'createdAt', 'updatedAt']) &&
+        data.label is string && data.label.size() >= 1 && data.label.size() <= 80 &&
+        data.origin in ['linked', 'shared'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserSecret(data) {
+      return data.keys().hasOnly(['sessionToken', 'phoneNumber', 'tokenType', 'createdAt', 'updatedAt']) &&
+        data.sessionToken is string &&
+        data.sessionToken.size() >= 1 &&
+        data.sessionToken.size() <= 512 &&
+        data.phoneNumber is number &&
+        data.phoneNumber > 0 &&
+        data.tokenType is number &&
+        data.tokenType in [0, 1, 2] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
     }
 
     function isValidGateMap(g) {
@@ -185,6 +301,45 @@ service cloud.firestore {
         isValidUser(request.resource.data) &&
         request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isOwner(userId);
+
+      match /gates/{gateId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isSharingAccount() &&
+          isValidUserGate(request.resource.data) &&
+          isRecentTimestamp(request.resource.data.createdAt) &&
+          isRecentTimestamp(request.resource.data.updatedAt);
+        allow update: if isOwner(userId) && isSharingAccount() &&
+          isValidUserGate(request.resource.data) &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          isRecentTimestamp(request.resource.data.updatedAt);
+        allow delete: if isOwner(userId);
+      }
+
+      match /systems/{systemId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isSharingAccount() &&
+          isValidUserSystem(request.resource.data) &&
+          isRecentTimestamp(request.resource.data.createdAt) &&
+          isRecentTimestamp(request.resource.data.updatedAt);
+        allow update: if isOwner(userId) && isSharingAccount() &&
+          isValidUserSystem(request.resource.data) &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          isRecentTimestamp(request.resource.data.updatedAt);
+        allow delete: if isOwner(userId);
+      }
+
+      match /secrets/{secretId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isSharingAccount() &&
+          isValidUserSecret(request.resource.data) &&
+          isRecentTimestamp(request.resource.data.createdAt) &&
+          isRecentTimestamp(request.resource.data.updatedAt);
+        allow update: if isOwner(userId) && isSharingAccount() &&
+          isValidUserSecret(request.resource.data) &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          isRecentTimestamp(request.resource.data.updatedAt);
+        allow delete: if isOwner(userId);
+      }
     }
 
     match /invites/{code} {

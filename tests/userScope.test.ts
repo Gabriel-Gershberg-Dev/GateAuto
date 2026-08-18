@@ -44,6 +44,7 @@ describe('unscoped vault adopt', () => {
     assert.equal(
       shouldAdoptUnscopedVault({
         isRealAccount: true,
+        providers: ['password'],
         incomingPendingCount: 1,
         outgoingCount: 0,
       }),
@@ -51,20 +52,37 @@ describe('unscoped vault adopt', () => {
     );
   });
 
+  it('does not give a password-only invitee leftover owner gates', () => {
+    assert.equal(
+      shouldAdoptUnscopedVault({
+        isRealAccount: true,
+        providers: ['password'],
+        incomingPendingCount: 0,
+        outgoingCount: 0,
+      }),
+      false,
+    );
+  });
+
+  it('lets the original Google account reclaim leftover data', () => {
+    assert.equal(
+      shouldAdoptUnscopedVault({
+        isRealAccount: true,
+        providers: ['google.com'],
+        incomingPendingCount: 0,
+        outgoingCount: 0,
+      }),
+      true,
+    );
+  });
+
   it('lets the original sharer reclaim unscoped data', () => {
     assert.equal(
       shouldAdoptUnscopedVault({
         isRealAccount: true,
+        providers: ['password'],
         incomingPendingCount: 0,
         outgoingCount: 1,
-      }),
-      true,
-    );
-    assert.equal(
-      shouldAdoptUnscopedVault({
-        isRealAccount: true,
-        incomingPendingCount: 0,
-        outgoingCount: 0,
       }),
       true,
     );
