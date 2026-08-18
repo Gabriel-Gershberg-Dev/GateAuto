@@ -50,7 +50,7 @@ public class MonitoringService extends Service {
           stopSelf();
           return;
         }
-        GeofenceRegistrar.register(MonitoringService.this, false);
+        GeofenceRegistrar.refresh(MonitoringService.this);
         handler.postDelayed(this, REREGISTER_MS);
       }
     };

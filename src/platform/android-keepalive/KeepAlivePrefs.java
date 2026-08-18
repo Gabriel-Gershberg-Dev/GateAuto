@@ -54,9 +54,8 @@ public final class KeepAlivePrefs {
   }
 
   /**
-   * Play never sends ENTER when Auto-open starts (or fences rewrite) while the
-   * user is already inside — INITIAL_TRIGGER stays off. Remember that so a
-   * later real EXIT is not dropped as false.
+   * Optional already-inside mark (ENTER / poll / BT). EXIT no longer requires
+   * this — Play EXIT + 250m city cap is enough. Still useful for logging.
    */
   public static boolean isInside(Context context, String gateId) {
     if (gateId == null || gateId.isEmpty()) return false;

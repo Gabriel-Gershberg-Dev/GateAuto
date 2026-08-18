@@ -69,7 +69,7 @@ describe('assertNearGate — far-away protection', () => {
     assert.equal(far.ok, false);
   });
 
-  it('allows EXIT slightly past the fence (factor 1.1) but not far away', () => {
+  it('allows EXIT slightly past the fence (factor 2) but not far away', () => {
     const justLeft = assertNearGate(
       { ...PIN, radiusMeters: RADIUS },
       fixAt(54),
@@ -77,9 +77,16 @@ describe('assertNearGate — far-away protection', () => {
     );
     assert.equal(justLeft.ok, true);
 
-    const tooFar = assertNearGate(
+    const overshoot = assertNearGate(
       { ...PIN, radiusMeters: RADIUS },
       fixAt(80),
+      'exit',
+    );
+    assert.equal(overshoot.ok, true);
+
+    const tooFar = assertNearGate(
+      { ...PIN, radiusMeters: RADIUS },
+      fixAt(120),
       'exit',
     );
     assert.equal(tooFar.ok, false);
@@ -105,17 +112,17 @@ describe('assertNearGate — far-away protection', () => {
   });
 });
 
-describe('nativeExitOpenAllowed — already-inside without Play ENTER', () => {
-  it('allows EXIT when we marked inside even if last loc is already far', () => {
-    assert.equal(nativeExitOpenAllowed(true, false), true);
+describe('nativeExitOpenAllowed — Play EXIT without requiring ENTER', () => {
+  it('allows EXIT when last loc is missing (Play already decided)', () => {
+    assert.equal(nativeExitOpenAllowed(true, Number.NaN), true);
   });
 
-  it('skips EXIT with no inside mark and last loc far (false exit / Off→On)', () => {
-    assert.equal(nativeExitOpenAllowed(false, false), false);
+  it('allows EXIT when last loc is under the 250m city cap', () => {
+    assert.equal(nativeExitOpenAllowed(false, 180), true);
   });
 
-  it('allows EXIT without an inside mark if last loc still within radius×1.1', () => {
-    assert.equal(nativeExitOpenAllowed(false, true), true);
+  it('skips EXIT when last loc is another city', () => {
+    assert.equal(nativeExitOpenAllowed(false, 400), false);
   });
 });
 

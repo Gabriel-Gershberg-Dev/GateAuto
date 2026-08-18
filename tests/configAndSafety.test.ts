@@ -129,9 +129,15 @@ describe('listedCarIsConnected (native poll BT contract)', () => {
 });
 
 describe('pollAllowsAutoOpen', () => {
-  it('never opens BT-required gates from a location poll', () => {
-    assert.equal(pollAllowsAutoOpen(true), false);
+  it('opens non-BT gates from a location poll', () => {
     assert.equal(pollAllowsAutoOpen(false), true);
+    assert.equal(pollAllowsAutoOpen(false, false), true);
+  });
+
+  it('opens BT-required gates from a poll only when a listed car is connected', () => {
+    assert.equal(pollAllowsAutoOpen(true), false);
+    assert.equal(pollAllowsAutoOpen(true, false), false);
+    assert.equal(pollAllowsAutoOpen(true, true), true);
   });
 });
 

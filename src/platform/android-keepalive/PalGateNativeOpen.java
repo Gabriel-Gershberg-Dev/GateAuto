@@ -40,11 +40,9 @@ public final class PalGateNativeOpen {
   private static final String TAG = "GateAutoKeepAlive";
   private static final String BASE = "https://api1.pal-es.com/v1/bt/";
   private static final double ABSOLUTE_MAX_M = 250.0;
-  /** EXIT: small overshoot past the fence edge (JS EXIT_RADIUS_FACTOR). */
-  private static final double EXIT_RADIUS_FACTOR = 1.1;
   /**
-   * Swallow Play Services ENTER/EXIT that arrive immediately after a real
-   * region rewrite (remove+add). Alarm/recover must not mark this window.
+   * Swallow Play EXIT that arrives immediately after Off→On remove+add.
+   * Alarm/recover refresh must not mark this window (that swallowed real enters).
    */
   private static final long GEOFENCE_SYNC_SUPPRESS_MS = 12_000L;
   private static final String NOTIF_CHANNEL = "gateauto";
@@ -88,69 +86,82 @@ public final class PalGateNativeOpen {
       KeepAlivePrefs.setInside(context, gateId, false);
       return;
     }
-    long synced = KeepAlivePrefs.lastGeofenceSyncAt(context);
-    long age = synced > 0 ? System.currentTimeMillis() - synced : Long.MAX_VALUE;
-    if (age >= 0 && age < GEOFENCE_SYNC_SUPPRESS_MS) {
-      Log.i(
-        TAG,
-        "native open skip "
-          + gateId
-          + " ("
-          + reason
-          + ") — within "
-          + GEOFENCE_SYNC_SUPPRESS_MS
-          + "ms of geofence sync (spurious "
-          + reason
-          + ")"
-      );
-      return;
-    }
     boolean isExit = "exit".equals(reason);
-    Location last = lastLocation(context);
     if (isExit) {
-      boolean wasInside = KeepAlivePrefs.isInside(context, gateId);
-      boolean near =
-        last != null && withinFence(gate, last, EXIT_RADIUS_FACTOR);
-      if (!wasInside && !near) {
+      long synced = KeepAlivePrefs.lastGeofenceSyncAt(context);
+      long age = synced > 0 ? System.currentTimeMillis() - synced : Long.MAX_VALUE;
+      if (age >= 0 && age < GEOFENCE_SYNC_SUPPRESS_MS) {
         Log.i(
           TAG,
           "native open skip "
             + gateId
-            + " (exit) — no inside mark and last loc "
-            + (last == null
-              ? "missing"
-              : String.format(Locale.US, "%.1fm (far)", distanceMeters(gate, last)))
-            + " (false exit / never ENTER)"
+            + " (exit) — within "
+            + GEOFENCE_SYNC_SUPPRESS_MS
+            + "ms of Off→On rewrite (fake EXIT)"
         );
         return;
+      }
+    }
+    Location last = lastLocation(context);
+    if (isExit) {
+      // Play already decided they left. Do not require a prior ENTER mark.
+      // Missing last loc: still allow (fused last is often empty while locked).
+      // Present last loc: only the 250m city cap — not radius×1.1 fail-closed.
+      if (last != null) {
+        double meters = distanceMeters(gate, last);
+        if (Double.isFinite(meters) && meters > ABSOLUTE_MAX_M) {
+          Log.i(
+            TAG,
+            "native open skip "
+              + gateId
+              + " (exit) — last loc "
+              + String.format(Locale.US, "%.1fm", meters)
+              + " beyond "
+              + (int) ABSOLUTE_MAX_M
+              + "m city cap"
+          );
+          return;
+        }
       }
       KeepAlivePrefs.setInside(context, gateId, false);
       Log.i(
         TAG,
-        "native exit credible "
+        "native exit allowed "
           + gateId
-          + " wasInside="
-          + wasInside
-          + " near="
-          + near
+          + " last="
+          + (last == null
+            ? "missing"
+            : String.format(Locale.US, "%.1fm", distanceMeters(gate, last)))
       );
     } else {
-      if (last == null) {
-        Log.i(TAG, "native open skip " + gateId + " (" + reason + ") — no last location");
-        return;
-      }
-      if (!withinFence(gate, last, 1.0)) {
-        Log.i(
-          TAG,
-          "native open skip "
-            + gateId
-            + " ("
-            + reason
-            + ") — not near pin ("
-            + String.format(Locale.US, "%.1f", distanceMeters(gate, last))
-            + "m)"
-        );
-        return;
+      if (last != null) {
+        double meters = distanceMeters(gate, last);
+        if (Double.isFinite(meters) && meters > ABSOLUTE_MAX_M) {
+          Log.i(
+            TAG,
+            "native open skip "
+              + gateId
+              + " ("
+              + reason
+              + ") — last loc "
+              + String.format(Locale.US, "%.1fm", meters)
+              + " beyond city cap"
+          );
+          return;
+        }
+        if (!withinFence(gate, last, 1.0)) {
+          Log.i(
+            TAG,
+            "native open skip "
+              + gateId
+              + " ("
+              + reason
+              + ") — not near pin ("
+              + String.format(Locale.US, "%.1f", meters)
+              + "m)"
+          );
+          return;
+        }
       }
       KeepAlivePrefs.setInside(context, gateId, true);
       Log.i(TAG, "native mark inside " + gateId + " (enter)");
@@ -188,11 +199,7 @@ public final class PalGateNativeOpen {
         );
         continue;
       }
-      if (last == null) {
-        Log.i(TAG, "native BT skip " + gate.optString("id") + " — no last location");
-        continue;
-      }
-      if (!withinFence(gate, last, 1.0)) {
+      if (last != null && !withinFence(gate, last, 1.0)) {
         Log.i(TAG, "native BT skip " + gate.optString("id") + " — not near pin");
         continue;
       }
@@ -202,10 +209,9 @@ public final class PalGateNativeOpen {
   }
 
   /**
-   * After cooldown / alarm: open auto-enabled gates we are still inside.
-   * A location poll is not a car-connect ({@link #openFromBluetooth} is).
-   * BT-required opens only when a listed car is <em>currently</em> connected
-   * and inside the radius (cooldown re-open while still in the car).
+   * Cooldown re-open while still inside. Not used on the 9-min recover alarm
+   * (that only refreshes Play fences — polling every 9 min false-opened).
+   * BT-required: listed car currently connected, not any HID.
    */
   public static void pollNearby(Context context) {
     if (!KeepAlivePrefs.isArmed(context)) return;

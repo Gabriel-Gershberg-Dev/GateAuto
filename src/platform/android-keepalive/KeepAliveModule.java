@@ -1,9 +1,6 @@
 package com.gateauto.app.keepalive;
 
 import android.content.Context;
-import android.os.Handler;
-import android.os.Looper;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -16,10 +13,7 @@ import com.facebook.react.module.annotations.ReactModule;
 @ReactModule(name = KeepAliveModule.NAME)
 public class KeepAliveModule extends ReactContextBaseJavaModule {
   public static final String NAME = "GateAutoKeepAlive";
-  private static final String TAG = "GateAutoKeepAlive";
   private static final long MIN_POLL_GAP_MS = 20_000L;
-  /** Second chance if fused last-location is briefly empty after a region rewrite. */
-  private static final long REGION_POLL_RETRY_MS = 1_500L;
   private static long lastPollAt;
 
   public KeepAliveModule(ReactApplicationContext reactContext) {
@@ -49,17 +43,11 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
    */
   public static void applyArmed(Context context, boolean armed) {
     Context ctx = context.getApplicationContext();
-    boolean wasArmed = KeepAlivePrefs.isArmed(ctx);
     KeepAlivePrefs.setArmed(ctx, armed);
     if (armed) {
       KeepAliveScheduler.start(ctx);
       // Never INITIAL_TRIGGER — already-outside EXIT would open every other pin.
       GeofenceRegistrar.register(ctx, false);
-      if (!wasArmed) {
-        // Already inside: Play will not re-fire ENTER (no INITIAL_TRIGGER).
-        // Poll marks inside so a later real leave is not dropped as false EXIT.
-        pollNearbySoon(ctx, "arm");
-      }
     } else {
       KeepAliveScheduler.stop(ctx);
       MonitoringService.stop(ctx);
@@ -217,11 +205,9 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       ReactApplicationContext ctx = getReactApplicationContext();
       GeofenceRegistrar.saveRegionsJson(ctx, json);
       if (KeepAlivePrefs.isArmed(ctx)) {
-        // List update (BT check off, pin, rename). Do not INITIAL_TRIGGER —
-        // ENTER would not fire until Samsung's ~2–3 min GPS batch anyway, and
-        // EXIT would open far-away pins. Poll non-BT gates with last location.
+        // Geometry change rewrites (no INITIAL_TRIGGER). Rename / BT-check
+        // leaves Play fences in place. Do not poll-open from a list update.
         GeofenceRegistrar.register(ctx, false);
-        pollNearbySoon(ctx, "regions");
       }
       promise.resolve(true);
     } catch (Exception e) {
@@ -236,27 +222,5 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     } catch (Exception e) {
       promise.reject("keepalive_regions", e);
     }
-  }
-
-  /**
-   * In-process last-location poll. Does not start a location FGS (Samsung
-   * rejects background location FGS). {@link PalGateNativeOpen#pollNearby}
-   * skips BT-required unless a listed car is currently connected, and fails
-   * closed when fused last location is null.
-   */
-  private static void pollNearbySoon(Context context, String reason) {
-    final Context app = context.getApplicationContext();
-    Log.i(TAG, "native poll after " + reason + " (already-inside; BT-required needs listed car)");
-    new Thread(() -> PalGateNativeOpen.pollNearby(app), "gateauto-" + reason).start();
-    new Handler(Looper.getMainLooper())
-      .postDelayed(
-        () ->
-          new Thread(
-            () -> PalGateNativeOpen.pollNearby(app),
-            "gateauto-" + reason + "-retry"
-          )
-            .start(),
-        REGION_POLL_RETRY_MS
-      );
   }
 }

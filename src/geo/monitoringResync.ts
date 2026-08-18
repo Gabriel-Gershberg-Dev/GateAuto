@@ -62,7 +62,7 @@ export async function resyncMonitoringIfArmed(reason: string): Promise<void> {
         const status = await getMonitoringArmStatus();
         await appendEvent({
           kind: 'info',
-          message: `Resync (${reason}): flag ON, ${status.geofenceCount} geofence(s), OS geo ${status.geofencingActive ? 'ON' : 'OFF'}, BT watch ${status.btWatchOn ? 'ON' : 'OFF'}, FGS ${status.keepAliveOn ? 'ON' : 'OFF'}. Already inside? ENTER will not re-fire — running eligible-now; ~30s poll also covers background.`,
+          message: `Resync (${reason}): flag ON, ${status.geofenceCount} geofence(s), OS geo ${status.geofencingActive ? 'ON' : 'OFF'}, BT watch ${status.btWatchOn ? 'ON' : 'OFF'}, FGS ${status.keepAliveOn ? 'ON' : 'OFF'}. Already inside? ENTER will not re-fire — running eligible-now.`,
         });
       }
 

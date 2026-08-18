@@ -85,10 +85,12 @@ public final class GeofenceRegistrar {
   }
 
   /**
-   * Write Play fences only when enabled geometry changed or the device rebooted
-   * (Play drops fences across reboot). Alarm / SCREEN_ON / 8-min refresh must
-   * not remove+add — that emits native_exit / false opens. Never INITIAL_TRIGGER.
+   * Off→On / pin-list rewrite: remove+add so disabled IDs cannot linger.
+   * Never INITIAL_TRIGGER (EXIT would open every other pin). Marks the 12s
+   * EXIT-only suppress window. Alarm / SCREEN_ON must call {@link #refresh}
+   * instead — skipping Play here is how Samsung drops fences in the background.
    *
+   * @param initialTrigger ignored; always 0
    * @return true if Play was asked to rewrite
    */
   public static boolean register(Context context, boolean initialTrigger) {
@@ -99,7 +101,7 @@ public final class GeofenceRegistrar {
       Log.i(TAG, "native geofences unchanged — skip unregister+register");
       return false;
     }
-    // 12s ENTER/EXIT ignore only after a real rewrite (not alarm/recover).
+    // 12s EXIT ignore only after Off→On / geometry rewrite (fake EXIT).
     KeepAlivePrefs.markGeofenceSync(app);
     // Inside marks from the old geometry are stale after a pin/list change.
     KeepAlivePrefs.clearAllInside(app);
@@ -158,6 +160,44 @@ public final class GeofenceRegistrar {
       add.run();
     }
     return true;
+  }
+
+  /**
+   * Keep Play fences alive without tearing them down. addGeofences replaces
+   * same request IDs; INITIAL_TRIGGER stays 0 so this is not an ENTER/EXIT.
+   * Does not mark the 12s Off→On suppress window (that swallowed real enters).
+   */
+  public static void refresh(Context context) {
+    Context app = context.getApplicationContext();
+    String json = regionsJson(app);
+    List<Geofence> geofences = parseGeofences(json);
+    if (geofences.isEmpty()) {
+      Log.i(TAG, "native geofence refresh — no enabled fences");
+      return;
+    }
+    GeofencingClient client = LocationServices.getGeofencingClient(app);
+    GeofencingRequest request =
+      new GeofencingRequest.Builder()
+        .setInitialTrigger(0)
+        .addGeofences(geofences)
+        .build();
+    try {
+      client
+        .addGeofences(request, pending(app))
+        .addOnSuccessListener(
+          unused -> {
+            saveFenceSig(app, fenceSignature(json));
+            Log.i(
+              TAG,
+              "native geofences refreshed: " + geofences.size() + " (no initial trigger)"
+            );
+          })
+        .addOnFailureListener(e -> Log.w(TAG, "refresh addGeofences failed", e));
+    } catch (SecurityException e) {
+      Log.w(TAG, "refresh addGeofences denied", e);
+    } catch (Exception e) {
+      Log.w(TAG, "refresh addGeofences error", e);
+    }
   }
 
   /** Forget last Play write so the next {@link #register} actually remove+adds. */

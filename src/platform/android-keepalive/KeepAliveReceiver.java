@@ -8,10 +8,9 @@ import android.os.Looper;
 import android.util.Log;
 
 /**
- * Alarm / SCREEN_ON / cooldown: poll/open in this process. Register Play
- * fences only when the enabled region list changed (or after reboot).
- * Do not start a location FGS from here — Samsung strips location access
- * from a service started in the background.
+ * Alarm / SCREEN_ON: refresh Play fences (no INITIAL_TRIGGER, no poll-open).
+ * Cooldown: poll/open in this process so ~20s gate cooldown is honored.
+ * Never start a location FGS from here — Android 14 blocks it from background.
  */
 public class KeepAliveReceiver extends BroadcastReceiver {
   private static final String TAG = "GateAutoKeepAlive";
@@ -53,10 +52,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
     Log.i(TAG, "native recover (" + reason + ")");
     final Context app = context.getApplicationContext();
     new Thread(
-      () -> {
-        GeofenceRegistrar.register(app, false);
-        PalGateNativeOpen.pollNearby(app);
-      },
+      () -> GeofenceRegistrar.refresh(app),
       "gateauto-screen"
     ).start();
   }
@@ -73,9 +69,10 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       () -> {
         try {
           if (reregister) {
-            GeofenceRegistrar.register(app, false);
+            GeofenceRegistrar.refresh(app);
+          } else {
+            PalGateNativeOpen.pollNearby(app);
           }
-          PalGateNativeOpen.pollNearby(app);
         } finally {
           new Handler(Looper.getMainLooper()).post(pending::finish);
         }

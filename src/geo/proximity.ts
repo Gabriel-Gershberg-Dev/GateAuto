@@ -10,10 +10,11 @@ export const REFINE_RADIUS_FACTOR = 1.15;
 export const OPEN_RADIUS_FACTOR = 1.0;
 
 /**
- * EXIT: allow a small overshoot past the fence edge (just left the circle).
+ * EXIT (JS fresh GPS): allow overshoot past the fence edge. Native EXIT uses
+ * the 250m city cap instead of this factor (last loc while locked is stale).
  * Far-away protection still comes from ABSOLUTE_MAX_OPEN_DISTANCE_M.
  */
-export const EXIT_RADIUS_FACTOR = 1.1;
+export const EXIT_RADIUS_FACTOR = 2.0;
 
 /** Always reject fixes worse than this (meters). */
 export const MAX_REFINE_ACCURACY_M = 60;
@@ -85,16 +86,16 @@ export function maxOpenDistanceM(
 }
 
 /**
- * Native EXIT (Play, INITIAL_TRIGGER off): a later leave is credible if we
- * already marked the user inside (Off→On / poll / ENTER), or last location
- * still sits within radius×1.1 (cap 250m). No inside mark and last loc
- * already far is the Off→On fake EXIT.
+ * Native EXIT (Play, INITIAL_TRIGGER off). Play already decided they left —
+ * do not require a prior ENTER mark. Missing last loc is allowed. If last loc
+ * exists, only the 250m city cap applies (not radius×1.1 fail-closed).
  */
 export function nativeExitOpenAllowed(
-  markedInside: boolean,
-  lastLocWithinExitRadius: boolean,
+  lastLocMissing: boolean,
+  lastLocMeters: number,
 ): boolean {
-  return markedInside || lastLocWithinExitRadius;
+  if (lastLocMissing || !Number.isFinite(lastLocMeters)) return true;
+  return lastLocMeters <= ABSOLUTE_MAX_OPEN_DISTANCE_M;
 }
 
 /**

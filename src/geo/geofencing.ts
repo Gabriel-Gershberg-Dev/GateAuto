@@ -1,19 +1,20 @@
 /**
  * Geofence monitoring + open pipeline.
  *
- * Triggers while monitoring is ON (every path requires a fresh high-accuracy
- * proximity refine before open — fail closed on stale / poor / far GPS):
+ * Triggers while monitoring is ON:
+ *   Native (locked / swipe-away — JS often does not run):
+ *     Play ENTER/EXIT + BT connect open PalGate in Java. Recover alarm
+ *     refreshes Play fences with INITIAL_TRIGGER 0 (no poll-open).
+ *   JS (foreground / Expo keep-alive when the process is actually alive):
  *   1) OS geofence ENTER → refine (≤ radius) → BT (retry) → open
- *   2) OS geofence EXIT → refine (≤ radius×1.1, absolute ≤250m) → BT (retry) → open
- *      (sync debounce does not apply — residents live inside the circle)
+ *   2) OS geofence EXIT → refine (≤ radius×2, absolute ≤250m) → BT (retry) → open
  *   3) Car Bluetooth connect → same proximity refine (≤ radius, ≤250m) → open
  *   4) Eligible-now on arm / app foreground → refine + currently-connected BT → open
- *   5) Low-rate eligibility poll (~30s FGS wake) while keep-alive is running →
- *      one high-accuracy fix + currently-connected BT → open (poll_open)
- *      Covers already-inside + BT already connected with app in background.
+ *   5) Eligibility poll (~30s FGS wake, or native cooldown wake) →
+ *      inside radius + listed car if BT-required → open (poll_open)
  *      After a successful open, next auto-open is gated only by gate.cooldownMs.
- *   Already inside home? ENTER will not re-fire — rely on poll, eligible-now,
- *   BT-connect, or EXIT/re-ENTER.
+ *   Already inside home? ENTER will not re-fire (no INITIAL_TRIGGER) — wait
+ *   for EXIT, car BT connect, eligible-now, or cooldown poll while still inside.
  *
  * Silent low-importance FGS keep-alive on Android while armed (Lowest accuracy
  * wake only; poll takes a one-shot High fix). Force Stop still fully disables
@@ -112,8 +113,8 @@ function geofenceSyncAtKey(): string {
 function monitoringArmedAtKey(): string {
   return scopedAsyncKey('lastMonitoringArmedAt');
 }
-/** Ignore ENTER only shortly after re-register (already-inside spam). Never blocks EXIT or BT-connect. */
-const ENTER_DEBOUNCE_AFTER_SYNC_MS = 60_000;
+/** Ignore ENTER only shortly after Off→On rewrite (already-inside spam). Never blocks EXIT or BT-connect. */
+const ENTER_DEBOUNCE_AFTER_SYNC_MS = 12_000;
 /** Retry car BT on ENTER/EXIT while head unit finishes connecting. */
 const BT_RETRY_INTERVAL_MS = 3_000;
 const BT_RETRY_WINDOW_MS = 45_000;
@@ -427,7 +428,7 @@ async function logMonitoringArmed(reason: string): Promise<void> {
     : 'now';
   await appendEvent({
     kind: 'monitoring_armed',
-    message: `Auto-open armed (${reason}): ${status.geofenceCount} geofence(s), OS geofencing ${status.geofencingActive ? 'ON' : 'OFF'}, BT watch ${status.btWatchOn ? 'ON' : 'OFF'}, FGS ${status.keepAliveOn ? 'ON' : 'OFF'}. Last arm ${when}. Already inside? ENTER will not re-fire — eligible-now + ~30s poll (GPS + currently-connected BT), or wait for a new car BT connect / EXIT.`,
+    message: `Auto-open armed (${reason}): ${status.geofenceCount} geofence(s), OS geofencing ${status.geofencingActive ? 'ON' : 'OFF'}, BT watch ${status.btWatchOn ? 'ON' : 'OFF'}, FGS ${status.keepAliveOn ? 'ON' : 'OFF'}. Last arm ${when}. Already inside? ENTER will not re-fire — eligible-now, car BT connect, or EXIT. Native recover refreshes Play fences (no INITIAL_TRIGGER).`,
   });
 }
 
@@ -473,7 +474,6 @@ export async function syncGeofences(): Promise<void> {
       await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
     }
     await startBackgroundHelpers();
-    await markGeofenceSynced();
     return;
   }
 
@@ -482,7 +482,6 @@ export async function syncGeofences(): Promise<void> {
     regionsFromGates(enabled),
   );
   await startBackgroundHelpers();
-  await markGeofenceSynced();
 }
 
 export async function startMonitoring(): Promise<void> {
@@ -491,6 +490,7 @@ export async function startMonitoring(): Promise<void> {
   try {
     await syncGeofences();
     await persistArmedAt();
+    await markGeofenceSynced();
     await logMonitoringArmed('startMonitoring');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -799,12 +799,12 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
     Date.now() - syncedAt < ENTER_DEBOUNCE_AFTER_SYNC_MS
   ) {
     console.log(
-      `[GateAuto] ignoring ENTER for ${label} — within ${ENTER_DEBOUNCE_AFTER_SYNC_MS}ms of geofence sync`,
+      `[GateAuto] ignoring ENTER for ${label} — within ${ENTER_DEBOUNCE_AFTER_SYNC_MS}ms of Off→On rewrite`,
     );
     await appendEvent({
       kind: 'info',
       gateId: gate.id,
-      message: `${label}: ignored ENTER after geofence sync (already-inside spam). If you are home, poll / eligible-now / car BT connect will still open when eligible.`,
+      message: `${label}: ignored ENTER after Off→On rewrite (already-inside spam). EXIT / car BT connect / eligible-now still open when eligible.`,
       trigger: 'enter',
     });
     return;
@@ -847,7 +847,8 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
 /**
  * Open pipeline for a single geofence EXIT (leaving home toward the gate):
  * safety lock → cooldown → proximity refine → BT (retry) → open.
- * False OS EXIT while kilometers away must not open — refine is mandatory.
+ * Native EXIT is the locked path (250m city cap; missing last loc allowed).
+ * JS refine still runs when the process is alive so a far-away OS EXIT cannot open.
  */
 export async function handleGeofenceExit(regionIdentifier: string): Promise<void> {
   if (!(await isMonitoringLive())) return;
@@ -1112,9 +1113,10 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
       const label = displayGateName(gate);
 
       if (gate.bluetooth?.required) {
-        // Location poll is not a car-connect. BT-required gates open from
-        // ACL/A2DP/HEADSET of a listed car while inside the radius.
-        continue;
+        const bt = await checkCarBluetooth(gate);
+        if (bt === 'skipped_bt') {
+          continue;
+        }
       }
 
       const safety = await assertCanOpen(gate.id, label);
@@ -1184,7 +1186,9 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
       await performOpen(
         gate,
         label,
-        `poll — accuracy ${refine.accuracy.toFixed(1)}m, distance ${refine.distanceM.toFixed(1)}m, BT not required`,
+        `poll — accuracy ${refine.accuracy.toFixed(1)}m, distance ${refine.distanceM.toFixed(1)}m${
+          gate.bluetooth?.required ? ', listed car connected' : ', BT not required'
+        }`,
         'poll_open',
         geo,
       );
