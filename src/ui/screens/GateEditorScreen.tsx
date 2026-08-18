@@ -633,7 +633,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
 
       <Pressable
         style={styles.buttonSecondary}
-        onPress={() => navigation.navigate('ShareGate', { gateId: gate.id })}
+        onPress={() => navigation.navigate('ShareGate', { gateIds: [gate.id] })}
       >
         <Text style={styles.buttonSecondaryText}>Share this gate</Text>
       </Pressable>

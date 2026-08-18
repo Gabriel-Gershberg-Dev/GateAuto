@@ -16,9 +16,9 @@ export function gateMapStyle(
 ): MapStyleElement[] {
   if (scheme === 'dark') {
     return [
-      { elementType: 'geometry', stylers: [{ color: '#102426' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#D2E6E2' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#071314' }] },
+      { elementType: 'geometry', stylers: [{ color: '#0C1213' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#E8F4F1' }] },
+      { elementType: 'labels.text.stroke', stylers: [{ color: '#030607' }] },
       {
         featureType: 'administrative',
         elementType: 'geometry',
@@ -27,7 +27,7 @@ export function gateMapStyle(
       {
         featureType: 'administrative.locality',
         elementType: 'labels.text.fill',
-        stylers: [{ color: '#8BA8A4' }],
+        stylers: [{ color: '#C5D6D2' }],
       },
       {
         featureType: 'poi',
@@ -40,22 +40,22 @@ export function gateMapStyle(
       {
         featureType: 'road',
         elementType: 'geometry',
-        stylers: [{ color: '#3A5554' }],
+        stylers: [{ color: '#4A6864' }],
       },
       {
         featureType: 'road.local',
         elementType: 'geometry',
-        stylers: [{ color: '#2E4848' }],
+        stylers: [{ color: '#2A3C3C' }],
       },
       {
         featureType: 'road.arterial',
         elementType: 'geometry',
-        stylers: [{ color: '#4A6C68' }],
+        stylers: [{ color: '#5A7A74' }],
       },
       {
         featureType: 'road.highway',
         elementType: 'geometry',
-        stylers: [{ color: '#5A8078' }],
+        stylers: [{ color: '#6A9188' }],
       },
       {
         featureType: 'road',
@@ -65,7 +65,7 @@ export function gateMapStyle(
       {
         featureType: 'road',
         elementType: 'labels.text.fill',
-        stylers: [{ color: '#E7F3F0' }],
+        stylers: [{ color: '#F4FBF9' }],
       },
       {
         featureType: 'road',
@@ -75,12 +75,12 @@ export function gateMapStyle(
       {
         featureType: 'water',
         elementType: 'geometry',
-        stylers: [{ color: '#143836' }],
+        stylers: [{ color: '#0A1C1C' }],
       },
       {
         featureType: 'landscape.man_made',
         elementType: 'geometry',
-        stylers: [{ color: '#122A2C' }],
+        stylers: [{ color: '#121A1C' }],
       },
     ];
   }

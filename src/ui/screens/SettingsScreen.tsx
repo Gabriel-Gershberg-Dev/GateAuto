@@ -7,6 +7,7 @@ import { promptGoogleIdToken } from '../../auth/googleNative';
 import { appendEvent } from '../../data/eventLog';
 import { clearCredentials } from '../../data/credentials';
 import { tryStopGeofencing } from '../../integrations/optionalNative';
+import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { SHOW_EXPORT_UI } from '../flags';
 import { AppearancePicker } from '../components/AppearancePicker';
@@ -95,7 +96,7 @@ export function SettingsScreen({ navigation }: Props) {
           icon={<IconQr color={colors.primary} />}
           label="Gate systems"
           detail="Scan PalGate or enter an invite"
-          onPress={() => navigation.navigate('GateSystems')}
+          onPress={() => goToGateSystems(navigation)}
           colors={colors}
         />
       </Group>
@@ -215,10 +216,12 @@ export function SettingsScreen({ navigation }: Props) {
             void promptGoogleIdToken()
               .then((idToken) => {
                 if (!idToken) return;
-                return auth.upgradeWithGoogle(idToken).then(() =>
+                return auth.upgradeWithGoogle(idToken).then((result) =>
                   setInfo({
                     title: 'Account upgraded',
-                    message: 'You can share gates now. Local PalGate stays.',
+                    message: result.switchedAccount
+                      ? 'That Google login already had an account. You are signed into it. PalGate and gates on this phone stay.'
+                      : 'You can share gates now. Local PalGate stays.',
                   }),
                 );
               })
@@ -247,11 +250,13 @@ export function SettingsScreen({ navigation }: Props) {
         setBusy(true);
         void auth
           .upgradeWithEmail(name, email, password)
-          .then(() => {
+          .then((result) => {
             setUpgradeOpen(false);
             setInfo({
               title: 'Account upgraded',
-              message: 'You can share gates now. Local PalGate stays.',
+              message: result.switchedAccount
+                ? 'That email already had an account. You are signed into it. PalGate and gates on this phone stay.'
+                : 'You can share gates now. Local PalGate stays.',
             });
           })
           .catch((e) =>

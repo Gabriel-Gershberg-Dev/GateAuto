@@ -257,7 +257,7 @@ function createStyles(c: ThemeColors) {
       ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(7, 19, 20, 0.28)',
+      backgroundColor: 'rgba(3, 6, 7, 0.4)',
     },
     fallback: {
       flex: 1,

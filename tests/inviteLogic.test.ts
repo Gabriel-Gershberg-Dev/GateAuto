@@ -3,6 +3,9 @@ import { describe, it } from 'node:test';
 import {
   bytesToInviteCode,
   canTransitionInvite,
+  clampInviteCooldownMs,
+  clampInviteRadiusMeters,
+  inviteGateList,
   INVITE_CODE_LENGTH,
   isRealFirebaseAccount,
   isValidInviteCode,
@@ -15,6 +18,30 @@ describe('invite codes', () => {
     assert.equal(normalizeInviteCode(' 7k3mnp2q '), '7K3MNP2Q');
     assert.equal(isValidInviteCode('7K3MNP2Q'), true);
     assert.equal(isValidInviteCode('OOOOOOOO'), false);
+  });
+
+  it('clamps invite radius and cooldown to Firestore bounds', () => {
+    assert.equal(clampInviteRadiusMeters(10), 25);
+    assert.equal(clampInviteRadiusMeters(50), 50);
+    assert.equal(clampInviteRadiusMeters(400), 250);
+    assert.equal(clampInviteCooldownMs(-1), 30_000);
+    assert.equal(clampInviteCooldownMs(5_000_000), 3_600_000);
+  });
+
+  it('reads a multi-gate invite payload or a legacy single gate', () => {
+    const one = inviteGateList({
+      gate: { deviceId: 'a', name: 'A', credIndex: 0, radiusMeters: 50, cooldownMs: 30000, bluetooth: { required: false, devices: [] }, systemLabel: 'Home' },
+    });
+    assert.equal(one.length, 1);
+    assert.equal(one[0].deviceId, 'a');
+    const many = inviteGateList({
+      gates: [
+        { deviceId: 'a', name: 'A', credIndex: 0 },
+        { deviceId: 'b', name: 'B', credIndex: 0 },
+      ],
+    });
+    assert.equal(many.length, 2);
+    assert.equal(many[1].deviceId, 'b');
   });
 
   it('builds a shared gate id from code + device', () => {

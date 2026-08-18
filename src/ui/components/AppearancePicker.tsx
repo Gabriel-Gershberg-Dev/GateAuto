@@ -43,6 +43,8 @@ function createStyles(c: ThemeColors) {
       borderRadius: radii.md,
       padding: spacing.md,
       gap: 12,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     title: {
       fontSize: 16,

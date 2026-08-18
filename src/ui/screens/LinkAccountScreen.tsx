@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { parseAccountExport } from '../../data/accountTransfer';
 import { hasCredentials, saveCredentials } from '../../data/credentials';
-import { upsertSystem } from '../../data/palgateSystems';
+import { hasAnySystem, upsertSystem } from '../../data/palgateSystems';
 import { SHOW_EXPORT_UI } from '../flags';
 import {
   startLinkingForegroundWatch,
@@ -64,7 +64,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
   navigationRef.current = navigation;
 
   const purpose = route.params?.purpose ?? 'primary';
-  const addingAnother = purpose === 'additional';
+  const [addingAnother, setAddingAnother] = useState(purpose === 'additional');
   const [alreadyLinked, setAlreadyLinked] = useState<boolean | null>(null);
   const [session, setSession] = useState<LinkingProgress | null>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -77,6 +77,12 @@ export function LinkAccountScreen({ navigation, route }: Props) {
   const [pasteToken, setPasteToken] = useState('');
   const [pasteType, setPasteType] = useState('2');
   const [pasteError, setPasteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: addingAnother ? 'Link another PalGate' : 'Link PalGate',
+    });
+  }, [addingAnother, navigation]);
 
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<LinkingProgress | null>(null);
@@ -210,7 +216,15 @@ export function LinkAccountScreen({ navigation, route }: Props) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const linked = addingAnother ? false : await hasCredentials();
+      const has = await hasAnySystem();
+      if (cancelled) return;
+      setAddingAnother(has);
+      if (has) {
+        setAlreadyLinked(false);
+        startNewQr();
+        return;
+      }
+      const linked = await hasCredentials();
       if (cancelled) return;
       setAlreadyLinked(linked);
       if (linked) {

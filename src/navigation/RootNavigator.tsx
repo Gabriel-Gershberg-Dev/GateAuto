@@ -20,7 +20,7 @@ export type RootStackParamList = {
   Permissions: undefined;
   GatesList: undefined;
   GateEditor: { gateId: string };
-  ShareGate: { gateId: string };
+  ShareGate: { gateId?: string; gateIds?: string[] };
   Monitoring: undefined;
   Settings: undefined;
 };

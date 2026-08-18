@@ -34,6 +34,11 @@ export type AuthUserView = {
   providers: string[];
 };
 
+export type UpgradeResult = {
+  /** True when we signed into an existing Google/email user instead of linking. */
+  switchedAccount: boolean;
+};
+
 type AuthContextValue = {
   user: AuthUserView | null;
   firebaseUser: User | null;
@@ -47,8 +52,8 @@ type AuthContextValue = {
     name: string,
     email: string,
     password: string,
-  ) => Promise<void>;
-  upgradeWithGoogle: (idToken: string) => Promise<void>;
+  ) => Promise<UpgradeResult>;
+  upgradeWithGoogle: (idToken: string) => Promise<UpgradeResult>;
   signOut: () => Promise<void>;
   googleClientConfigured: boolean;
 };
@@ -70,12 +75,23 @@ function viewOf(user: User): AuthUserView {
   };
 }
 
+function errorCode(error: unknown): string {
+  return error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: string }).code)
+    : '';
+}
+
+function isCredentialTaken(error: unknown): boolean {
+  const code = errorCode(error);
+  return (
+    code === 'auth/credential-already-in-use' ||
+    code === 'auth/email-already-in-use' ||
+    code === 'auth/account-exists-with-different-credential'
+  );
+}
+
 function authMessage(error: unknown): string {
-  const code =
-    error && typeof error === 'object' && 'code' in error
-      ? String((error as { code?: string }).code)
-      : '';
-  switch (code) {
+  switch (errorCode(error)) {
     case 'auth/email-already-in-use':
       return 'That email already has an account. Sign in instead.';
     case 'auth/invalid-email':
@@ -90,6 +106,8 @@ function authMessage(error: unknown): string {
       return 'That Google or email login is already used on another account.';
     case 'auth/network-request-failed':
       return 'Network error. Check the connection and try again.';
+    case 'permission-denied':
+      return 'Cloud permissions blocked this. Try again after the app updates.';
     default: {
       const message = error instanceof Error ? error.message : 'Sign-in failed.';
       return message.replace(/^Firebase:\s*/i, '').replace(/\s*\(.*\)\s*$/, '');
@@ -97,7 +115,8 @@ function authMessage(error: unknown): string {
   }
 }
 
-async function upsertProfile(user: User, name?: string): Promise<void> {
+async function persistProfile(user: User, name?: string): Promise<void> {
+  await user.getIdToken(true);
   const displayName =
     name?.trim() || user.displayName?.trim() || (user.isAnonymous ? 'Guest' : '');
   if (displayName && user.displayName !== displayName) {
@@ -129,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setFirebaseUser(next);
       setReady(true);
       if (next) {
-        void upsertProfile(next).catch(() => undefined);
+        void persistProfile(next).catch(() => undefined);
       }
     });
     return unsub;
@@ -148,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(null);
         try {
           const cred = await signInAnonymously(auth);
-          await upsertProfile(cred.user);
+          await persistProfile(cred.user);
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -165,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email.trim(),
             password,
           );
-          await upsertProfile(cred.user, trimmed);
+          await persistProfile(cred.user, trimmed);
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -180,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email.trim(),
             password,
           );
-          await upsertProfile(cred.user);
+          await persistProfile(cred.user);
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -192,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const credential = GoogleAuthProvider.credential(idToken);
           const cred = await signInWithCredential(auth, credential);
-          await upsertProfile(cred.user);
+          await persistProfile(cred.user);
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -207,8 +226,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!trimmed) throw new Error('Enter your name.');
         try {
           const credential = EmailAuthProvider.credential(email.trim(), password);
-          const cred = await linkWithCredential(current, credential);
-          await upsertProfile(cred.user, trimmed);
+          try {
+            const cred = await linkWithCredential(current, credential);
+            await persistProfile(cred.user, trimmed);
+            return { switchedAccount: false };
+          } catch (e) {
+            if (!current.isAnonymous || !isCredentialTaken(e)) throw e;
+            const cred = await signInWithEmailAndPassword(
+              auth,
+              email.trim(),
+              password,
+            );
+            await persistProfile(cred.user, trimmed);
+            return { switchedAccount: true };
+          }
         } catch (e) {
           const message = authMessage(e);
           setError(message);
@@ -221,8 +252,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!current) throw new Error('Sign in first.');
         try {
           const credential = GoogleAuthProvider.credential(idToken);
-          const cred = await linkWithCredential(current, credential);
-          await upsertProfile(cred.user);
+          try {
+            const cred = await linkWithCredential(current, credential);
+            await persistProfile(cred.user);
+            return { switchedAccount: false };
+          } catch (e) {
+            if (!current.isAnonymous || !isCredentialTaken(e)) throw e;
+            // Same Google account already exists — adopt it. PalGate/gates
+            // stay on this phone (local storage is not keyed by Firebase uid).
+            const cred = await signInWithCredential(auth, credential);
+            await persistProfile(cred.user);
+            return { switchedAccount: true };
+          }
         } catch (e) {
           const message = authMessage(e);
           setError(message);

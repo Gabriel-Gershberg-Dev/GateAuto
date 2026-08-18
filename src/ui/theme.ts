@@ -31,11 +31,12 @@ export type ThemeColors = {
   mapFill: string;
   surfacePressed: string;
   divider: string;
+  overlay: string;
 };
 
 /**
- * Light: cool mist over white cards — night-drive HUD, not rustic metal.
- * Accent: deep teal from the GateAuto mark (barrier at dusk).
+ * Light: cool mist over white cards — night-drive HUD.
+ * Accent: deep cabin teal from the GateAuto mark (`#1A4A47`).
  */
 export const lightColors: ThemeColors = {
   background: '#F3F6F5',
@@ -65,40 +66,42 @@ export const lightColors: ThemeColors = {
   mapFill: 'rgba(26, 74, 71, 0.16)',
   surfacePressed: '#E6EEEC',
   divider: 'rgba(16, 20, 26, 0.08)',
+  overlay: 'rgba(16, 20, 26, 0.42)',
 };
 
 /**
- * Dark: cabin teal from the app icon (#0D3D42), not dull charcoal-grey.
- * Open uses a lifted pine green so it reads on the dark field.
+ * Dark: ink field, lifted cards, cabin-teal as a lamp — not a washed room.
+ * Icon teal (#0D3D42) stays the identity; #2FBFB3 is that same cabin, lit.
  */
 export const darkColors: ThemeColors = {
-  background: '#071314',
-  surface: '#122426',
-  text: '#E7F3F0',
-  muted: '#8BA8A4',
-  primary: '#3D9A78',
-  primaryMuted: '#1A3D38',
-  primaryOn: '#041210',
-  border: '#1E3A3A',
-  danger: '#FB7185',
-  dangerBg: '#3F1D2A',
-  warning: '#FBBF24',
-  warningBg: '#3F3214',
-  success: '#4ADE80',
-  successBg: '#163328',
-  successBorder: '#27664C',
-  successBadge: '#A7F3D0',
-  successBadgeBg: '#1C4A3A',
-  fail: '#FB7185',
-  failBg: '#3F1D2A',
-  failBorder: '#6B3040',
-  failBadge: '#FECDD3',
-  failBadgeBg: '#4A2430',
-  switchThumbOff: '#6B7280',
+  background: '#030607',
+  surface: '#171F21',
+  text: '#F4FBF9',
+  muted: '#C5D6D2',
+  primary: '#2FBFB3',
+  primaryMuted: '#0E2F2C',
+  primaryOn: '#031614',
+  border: '#4A6864',
+  danger: '#FF7A8A',
+  dangerBg: '#3A1520',
+  warning: '#F5C84B',
+  warningBg: '#3A2E0E',
+  success: '#3EE89A',
+  successBg: '#0F2E22',
+  successBorder: '#2A7A58',
+  successBadge: '#B6F5D4',
+  successBadgeBg: '#164A36',
+  fail: '#FF7A8A',
+  failBg: '#3A1520',
+  failBorder: '#7A3544',
+  failBadge: '#FFD0D6',
+  failBadgeBg: '#4A1C28',
+  switchThumbOff: '#8A9B98',
   shadow: '#000000',
-  mapFill: 'rgba(61, 154, 120, 0.22)',
-  surfacePressed: '#1A3334',
-  divider: 'rgba(231, 243, 240, 0.1)',
+  mapFill: 'rgba(47, 191, 179, 0.28)',
+  surfacePressed: '#222C2E',
+  divider: 'rgba(244, 251, 249, 0.16)',
+  overlay: 'rgba(0, 0, 0, 0.72)',
 };
 
 /** Light palette — prefer `useTheme().colors` in UI. */
@@ -122,6 +125,8 @@ export function groupStyle(c: ThemeColors) {
     backgroundColor: c.surface,
     borderRadius: radii.md,
     overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: c.border,
     ...Platform.select({
       ios: {
         shadowColor: c.shadow,

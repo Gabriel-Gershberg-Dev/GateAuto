@@ -10,11 +10,11 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../../auth/AuthProvider';
-import { displayGateName, getGate, type GateConfig } from '../../data/gatesStore';
+import { displayGateName, loadGates, type GateConfig } from '../../data/gatesStore';
 import { ClipboardApi } from '../../platform/optionalExpo';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import {
-  createGateInvite,
+  createGateInvites,
   listOutgoingInvites,
   revokeInvite,
   type InviteDoc,
@@ -31,8 +31,12 @@ export function ShareGateScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
-  const { gateId } = route.params;
-  const [gate, setGate] = useState<GateConfig | null>(null);
+  const ids = useMemo(() => {
+    const fromList = route.params?.gateIds?.filter(Boolean) ?? [];
+    if (fromList.length) return fromList;
+    return route.params?.gateId ? [route.params.gateId] : [];
+  }, [route.params?.gateId, route.params?.gateIds]);
+  const [gates, setGates] = useState<GateConfig[]>([]);
   const [code, setCode] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [emailOpen, setEmailOpen] = useState(false);
@@ -47,21 +51,25 @@ export function ShareGateScreen({ navigation, route }: Props) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const reload = useCallback(async () => {
-    const g = await getGate(gateId);
-    setGate(g);
+    const allGates = await loadGates();
+    const selected = ids
+      .map((id) => allGates.find((g) => g.id === id))
+      .filter((g): g is GateConfig => Boolean(g));
+    setGates(selected);
+    const deviceIds = new Set(selected.map((g) => g.deviceId));
     try {
       const all = await listOutgoingInvites();
       setOutgoing(
         all.filter(
           (inv) =>
-            inv.gate.deviceId === g?.deviceId &&
-            (inv.status === 'pending' || inv.status === 'accepted'),
+            (inv.status === 'pending' || inv.status === 'accepted') &&
+            inv.gates.some((g) => deviceIds.has(g.deviceId)),
         ),
       );
     } catch {
       setOutgoing([]);
     }
-  }, [gateId]);
+  }, [ids]);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,11 +84,11 @@ export function ShareGateScreen({ navigation, route }: Props) {
   };
 
   const makeCode = async (toEmail?: string) => {
-    if (!gate) return;
+    if (gates.length === 0) return;
     if (!ensureRealAccount()) return;
     setBusy(true);
     try {
-      const created = await createGateInvite(gate, { toEmail });
+      const created = await createGateInvites(gates, { toEmail });
       setCode(created.code);
       setEmailOpen(false);
       setEmail('');
@@ -101,19 +109,31 @@ export function ShareGateScreen({ navigation, route }: Props) {
     setInfo({ title: 'Copied', message: 'Invite code is on the clipboard.' });
   };
 
-  if (!gate) {
+  if (gates.length === 0) {
     return <View style={styles.page} />;
   }
+
+  const many = gates.length > 1;
+  const title = many
+    ? `${gates.length} gates`
+    : displayGateName(gates[0]);
 
   return (
     <>
       <ScrollView contentContainerStyle={styles.page}>
-        <Text style={styles.title}>{displayGateName(gate)}</Text>
+        <Text style={styles.title}>{title}</Text>
         <Text style={styles.body}>
-          They type this code in GateAuto. The pin, radius, Bluetooth list, and
-          PalGate open details copy to their phone. Only you and people who
-          accept can read them.
+          {many
+            ? 'One code copies every selected gate — names, pins, radius, Bluetooth, and PalGate open details. They type it in GateAuto.'
+            : 'They type this code in GateAuto. The pin, radius, Bluetooth list, and PalGate open details copy to their phone. Only you and people who accept can read them.'}
         </Text>
+        {many
+          ? gates.map((g) => (
+              <Text key={g.id} style={styles.gateName}>
+                {displayGateName(g)}
+              </Text>
+            ))
+          : null}
 
         {code ? (
           <View style={styles.codeCard}>
@@ -251,12 +271,19 @@ function createStyles(c: ThemeColors) {
       lineHeight: 22,
       color: c.muted,
     },
+    gateName: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: c.text,
+    },
     codeCard: {
       backgroundColor: c.surface,
       borderRadius: radii.md,
       padding: spacing.md,
       gap: 10,
       alignItems: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
     },
     codeLabel: {
       fontSize: 11,

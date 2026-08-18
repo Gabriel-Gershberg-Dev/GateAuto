@@ -143,7 +143,7 @@ function createStyles(c: ThemeColors) {
     },
     scrim: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: 'rgba(7, 19, 20, 0.55)',
+      backgroundColor: c.overlay,
     },
     sheet: {
       marginHorizontal: spacing.md,
@@ -153,6 +153,8 @@ function createStyles(c: ThemeColors) {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.lg,
       gap: 10,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     iconWrap: {
       width: 44,

@@ -40,6 +40,8 @@ type Props = {
   onReorderGrant?: () => void;
   onReorderMove?: (dy: number) => void;
   onReorderRelease?: () => void;
+  selecting?: boolean;
+  selected?: boolean;
 };
 
 export function GateRow({
@@ -57,6 +59,8 @@ export function GateRow({
   onReorderGrant,
   onReorderMove,
   onReorderRelease,
+  selecting = false,
+  selected = false,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -187,8 +191,16 @@ export function GateRow({
           opening={opening || openKind === 'success'}
           pinned={hasPin}
         />
+        {selecting ? (
+          <View
+            style={[styles.check, selected && styles.checkOn]}
+            accessibilityLabel={selected ? 'Selected' : 'Not selected'}
+          >
+            {selected ? <View style={styles.checkDot} /> : null}
+          </View>
+        ) : null}
         <View style={styles.main}>
-          <Text style={styles.name} numberOfLines={1}>
+          <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail">
             {displayGateName(gate)}
           </Text>
           <Text
@@ -207,7 +219,7 @@ export function GateRow({
             {status}
           </Text>
         </View>
-        {onShare ? (
+        {onShare && !selecting ? (
           <Pressable
             onPress={onShare}
             hitSlop={8}
@@ -289,12 +301,14 @@ function createStyles(c: ThemeColors) {
       backgroundColor: c.surface,
       overflow: 'hidden',
       borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     rowBody: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 18,
+      paddingVertical: 12,
       paddingLeft: 4,
       gap: 10,
       minWidth: 0,
@@ -329,13 +343,13 @@ function createStyles(c: ThemeColors) {
     main: {
       flex: 1,
       minWidth: 0,
-      gap: 4,
+      gap: 2,
     },
     name: {
-      fontSize: 18,
+      fontSize: 16,
+      lineHeight: 21,
       fontWeight: '600',
       color: c.text,
-      letterSpacing: -0.2,
     },
     meta: {
       fontSize: 14,
@@ -386,7 +400,7 @@ function createStyles(c: ThemeColors) {
       fontSize: 15,
     },
     openTextOk: {
-      color: '#041210',
+      color: c.primaryOn,
     },
     openTextFail: {
       color: '#FFFFFF',
@@ -405,6 +419,25 @@ function createStyles(c: ThemeColors) {
     },
     toggleLabelLocked: {
       color: c.muted,
+    },
+    check: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 2,
+      borderColor: c.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkOn: {
+      borderColor: c.primary,
+      backgroundColor: c.primaryMuted,
+    },
+    checkDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: c.primary,
     },
   });
 }

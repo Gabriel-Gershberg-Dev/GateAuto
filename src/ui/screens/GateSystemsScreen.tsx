@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../auth/AuthProvider';
 import { hasAnySystem, listSystems, type PalGateSystem } from '../../data/palgateSystems';
+import { goToGatesList } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import {
   acceptInvite,
@@ -83,8 +84,10 @@ export function GateSystemsScreen({ navigation }: Props) {
       setCode('');
       const linked = await hasAnySystem();
       navigation.reset({
-        index: 0,
-        routes: [{ name: linked ? 'GatesList' : 'GateSystems' }],
+        index: linked ? 1 : 0,
+        routes: linked
+          ? [{ name: 'GateSystems' }, { name: 'GatesList' }]
+          : [{ name: 'GateSystems' }],
       });
     } catch (e) {
       setCodeError(e instanceof Error ? e.message : 'Could not accept invite');
@@ -100,7 +103,10 @@ export function GateSystemsScreen({ navigation }: Props) {
     setBusy(true);
     try {
       await acceptInvite(inv.code);
-      navigation.reset({ index: 0, routes: [{ name: 'GatesList' }] });
+      navigation.reset({
+        index: 1,
+        routes: [{ name: 'GateSystems' }, { name: 'GatesList' }],
+      });
     } catch (e) {
       setInfo({
         title: 'Invite',
@@ -121,9 +127,8 @@ export function GateSystemsScreen({ navigation }: Props) {
             <Text style={styles.title}>Scan your PalGate first</Text>
             <Text style={styles.body}>
               Open PalGate on this phone, add a Linked Device, and scan the QR
-              GateAuto shows next. That is your neighborhood. You can link
-              another PalGate account after that — a second street, a second
-              home.
+              GateAuto shows next. That is your neighborhood. The same button
+              later links another PalGate — a second street, a second home.
             </Text>
           </View>
         ) : (
@@ -147,15 +152,8 @@ export function GateSystemsScreen({ navigation }: Props) {
         >
           <IconQr color={colors.primaryOn} />
           <Text style={styles.primaryText}>
-            {empty ? 'Scan your PalGate QR' : 'Scan your PalGate QR'}
+            {empty ? 'Scan your PalGate QR' : 'Link another PalGate'}
           </Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
-          onPress={() => goScan('additional')}
-        >
-          <Text style={styles.secondaryText}>Link other gate system</Text>
         </Pressable>
 
         <Pressable
@@ -184,8 +182,10 @@ export function GateSystemsScreen({ navigation }: Props) {
                   >
                     <IconShare color={colors.primary} />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.inviteTitle}>
-                        {inv.gate.nameOverride || inv.gate.name || 'Shared gate'}
+                      <Text style={styles.inviteTitle} numberOfLines={2}>
+                        {inv.gates.length > 1
+                          ? `${inv.gates.length} gates`
+                          : inv.gate.nameOverride || inv.gate.name || 'Shared gate'}
                       </Text>
                       <Text style={styles.inviteMeta}>
                         From {inv.fromName || 'someone'} · {inv.code}
@@ -202,7 +202,7 @@ export function GateSystemsScreen({ navigation }: Props) {
         {!empty ? (
           <Pressable
             style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed]}
-            onPress={() => navigation.navigate('GatesList')}
+            onPress={() => goToGatesList(navigation)}
           >
             <Text style={styles.ghostText}>Go to gates</Text>
           </Pressable>
@@ -241,7 +241,9 @@ export function GateSystemsScreen({ navigation }: Props) {
         title="Accept this gate?"
         message={
           confirmIncoming
-            ? `${confirmIncoming.gate.nameOverride || confirmIncoming.gate.name} from ${confirmIncoming.fromName || 'someone'}. Pin and PalGate details copy here. Auto-open stays off until you turn it on.`
+            ? confirmIncoming.gates.length > 1
+              ? `${confirmIncoming.gates.length} gates from ${confirmIncoming.fromName || 'someone'}. Pins and PalGate details copy here. Auto-open stays off until you turn it on.`
+              : `${confirmIncoming.gate.nameOverride || confirmIncoming.gate.name} from ${confirmIncoming.fromName || 'someone'}. Pin and PalGate details copy here. Auto-open stays off until you turn it on.`
             : ''
         }
         cancelLabel="Decline"
@@ -315,6 +317,8 @@ function createStyles(c: ThemeColors) {
       paddingVertical: 14,
       paddingHorizontal: 16,
       gap: 2,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     systemLabel: {
       fontSize: 17,

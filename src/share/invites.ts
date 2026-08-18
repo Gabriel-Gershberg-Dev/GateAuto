@@ -8,7 +8,6 @@ import {
   getDocs,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
   writeBatch,
@@ -31,6 +30,11 @@ import { normalizeBluetooth } from '../data/gateBluetooth';
 import { normalizeCooldownMs } from '../data/cooldownNormalize';
 import {
   bytesToInviteCode,
+  clampInviteCooldownMs,
+  clampInviteRadiusMeters,
+  INVITE_MAX_GATES,
+  INVITE_MAX_PACKS,
+  inviteGateList,
   isValidInviteCode,
   normalizeInviteCode,
   sharedGateId,
@@ -48,6 +52,7 @@ export type InviteDoc = {
   acceptedByUid: string | null;
   acceptedAt: Timestamp | null;
   gate: SharedGatePayload;
+  gates: SharedGatePayload[];
 };
 
 function requireUid(): string {
@@ -65,8 +70,21 @@ async function newInviteCode(): Promise<string> {
   for (let i = 0; i < 8; i++) {
     const bytes = await Crypto.getRandomBytesAsync(16);
     const code = bytesToInviteCode(bytes);
-    const snap = await getDoc(doc(db, 'invites', code));
-    if (!snap.exists()) return code;
+    try {
+      const snap = await getDoc(doc(db, 'invites', code));
+      if (!snap.exists()) return code;
+    } catch (error) {
+      const codeName =
+        error && typeof error === 'object' && 'code' in error
+          ? String((error as { code?: string }).code)
+          : '';
+      if (codeName === 'permission-denied') {
+        throw new Error(
+          'Cloud permissions blocked this invite. Sign in with Google or email and try again.',
+        );
+      }
+      throw error;
+    }
   }
   throw new Error('Could not allocate an invite code. Try again.');
 }
@@ -78,8 +96,8 @@ function gatePayload(gate: GateConfig, systemLabel: string): SharedGatePayload {
     nameOverride: gate.nameOverride,
     lat: gate.lat,
     lng: gate.lng,
-    radiusMeters: gate.radiusMeters,
-    cooldownMs: gate.cooldownMs,
+    radiusMeters: clampInviteRadiusMeters(gate.radiusMeters),
+    cooldownMs: clampInviteCooldownMs(gate.cooldownMs),
     bluetooth: {
       required: Boolean(gate.bluetooth?.required),
       devices: (gate.bluetooth?.devices ?? []).map((d) => ({
@@ -88,6 +106,7 @@ function gatePayload(gate: GateConfig, systemLabel: string): SharedGatePayload {
       })),
     },
     systemLabel,
+    credIndex: 0,
   };
 }
 
@@ -95,20 +114,63 @@ export async function createGateInvite(
   gate: GateConfig,
   options?: { toEmail?: string },
 ): Promise<{ code: string }> {
-  const uid = requireUid();
-  const creds = await loadCredentialsForGate(gate);
-  if (!creds) throw new Error('This gate has no PalGate credentials to share.');
+  return createGateInvites([gate], options);
+}
 
-  const system = gate.systemId ? await getSystem(gate.systemId) : null;
-  const linked = await listLinkedSystems();
-  const label =
-    system?.label ||
-    linked[0]?.label ||
-    displayGateName(gate);
+export async function createGateInvites(
+  gates: GateConfig[],
+  options?: { toEmail?: string },
+): Promise<{ code: string }> {
+  const uid = requireUid();
+  if (gates.length === 0) throw new Error('Select at least one gate.');
+  if (gates.length > INVITE_MAX_GATES) {
+    throw new Error(`Share up to ${INVITE_MAX_GATES} gates in one code.`);
+  }
 
   const toEmailLower = options?.toEmail?.trim().toLowerCase() || null;
   if (toEmailLower && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmailLower)) {
     throw new Error('That email does not look valid.');
+  }
+
+  const linked = await listLinkedSystems();
+  const packs: Array<{
+    sessionToken: string;
+    phoneNumber: number;
+    tokenType: number;
+  }> = [];
+  const payloads: SharedGatePayload[] = [];
+
+  for (const gate of gates) {
+    const creds = await loadCredentialsForGate(gate);
+    if (!creds) {
+      throw new Error(
+        `${displayGateName(gate)} has no PalGate credentials to share.`,
+      );
+    }
+    const fp = `${creds.phoneNumber}:${creds.sessionToken.toLowerCase()}`;
+    let credIndex = packs.findIndex(
+      (p) => `${p.phoneNumber}:${p.sessionToken.toLowerCase()}` === fp,
+    );
+    if (credIndex < 0) {
+      if (packs.length >= INVITE_MAX_PACKS) {
+        throw new Error('Too many PalGate systems in this share.');
+      }
+      packs.push({
+        sessionToken: creds.sessionToken,
+        phoneNumber: creds.phoneNumber,
+        tokenType: creds.tokenType,
+      });
+      credIndex = packs.length - 1;
+    }
+    const system = gate.systemId ? await getSystem(gate.systemId) : null;
+    const label =
+      system?.label ||
+      linked[0]?.label ||
+      displayGateName(gate);
+    payloads.push({
+      ...gatePayload(gate, label.slice(0, 80)),
+      credIndex,
+    });
   }
 
   const code = await newInviteCode();
@@ -123,22 +185,46 @@ export async function createGateInvite(
     expiresAt: expires,
     acceptedByUid: null,
     acceptedAt: null,
-    gate: gatePayload(gate, label.slice(0, 80)),
+    gate: payloads[0],
+    gates: payloads,
   });
-  batch.set(doc(db, 'inviteCreds', code), {
-    sessionToken: creds.sessionToken,
-    phoneNumber: creds.phoneNumber,
-    tokenType: creds.tokenType,
-  });
-  await batch.commit();
+  batch.set(doc(db, 'inviteCreds', code), { packs });
+  try {
+    await batch.commit();
+  } catch (error) {
+    throw new Error(inviteWriteMessage(error));
+  }
   return { code };
 }
 
+function inviteWriteMessage(error: unknown): string {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+  if (code === 'permission-denied') {
+    return 'Cloud permissions blocked this invite. Sign in with Google or email and try again.';
+  }
+  return error instanceof Error ? error.message : 'Could not create invite.';
+}
+
 function parseInvite(id: string, data: Record<string, unknown>): InviteDoc & { code: string } {
-  const gateRaw = (data.gate ?? {}) as Record<string, unknown>;
-  const btRaw = (gateRaw.bluetooth ?? {}) as {
-    required?: unknown;
-    devices?: unknown;
+  const gates = inviteGateList(data).map((g) => ({
+    ...g,
+    bluetooth: normalizeBluetooth(g.bluetooth),
+    cooldownMs: normalizeCooldownMs(g.cooldownMs),
+  }));
+  const fallback: SharedGatePayload = {
+    deviceId: '',
+    name: '',
+    nameOverride: null,
+    lat: null,
+    lng: null,
+    radiusMeters: 50,
+    cooldownMs: 30_000,
+    bluetooth: { required: false, devices: [] },
+    systemLabel: 'Shared',
+    credIndex: 0,
   };
   return {
     code: id,
@@ -152,21 +238,8 @@ function parseInvite(id: string, data: Record<string, unknown>): InviteDoc & { c
     acceptedByUid:
       typeof data.acceptedByUid === 'string' ? data.acceptedByUid : null,
     acceptedAt: (data.acceptedAt as Timestamp) ?? null,
-    gate: {
-      deviceId: String(gateRaw.deviceId ?? ''),
-      name: String(gateRaw.name ?? ''),
-      nameOverride:
-        typeof gateRaw.nameOverride === 'string' ? gateRaw.nameOverride : null,
-      lat: typeof gateRaw.lat === 'number' ? gateRaw.lat : null,
-      lng: typeof gateRaw.lng === 'number' ? gateRaw.lng : null,
-      radiusMeters: Number(gateRaw.radiusMeters) || 50,
-      cooldownMs: normalizeCooldownMs(gateRaw.cooldownMs),
-      bluetooth: normalizeBluetooth({
-        required: btRaw.required,
-        devices: btRaw.devices,
-      }),
-      systemLabel: String(gateRaw.systemLabel ?? 'Shared'),
-    },
+    gate: gates[0] ?? fallback,
+    gates,
   };
 }
 
@@ -221,19 +294,33 @@ export async function listAcceptedInvites(): Promise<
   );
 }
 
-async function readInviteCreds(code: string): Promise<{
-  sessionToken: string;
-  phoneNumber: number;
-  tokenType: number;
-} | null> {
+async function readInvitePacks(code: string): Promise<
+  Array<{
+    sessionToken: string;
+    phoneNumber: number;
+    tokenType: number;
+  }>
+> {
   const snap = await getDoc(doc(db, 'inviteCreds', code));
-  if (!snap.exists()) return null;
+  if (!snap.exists()) return [];
   const d = snap.data();
-  return {
-    sessionToken: String(d.sessionToken ?? ''),
-    phoneNumber: Number(d.phoneNumber),
-    tokenType: Number(d.tokenType),
-  };
+  if (Array.isArray(d.packs) && d.packs.length > 0) {
+    return d.packs.map((p: Record<string, unknown>) => ({
+      sessionToken: String(p.sessionToken ?? ''),
+      phoneNumber: Number(p.phoneNumber),
+      tokenType: Number(p.tokenType),
+    }));
+  }
+  if (d.sessionToken) {
+    return [
+      {
+        sessionToken: String(d.sessionToken ?? ''),
+        phoneNumber: Number(d.phoneNumber),
+        tokenType: Number(d.tokenType),
+      },
+    ];
+  }
+  return [];
 }
 
 export async function acceptInvite(rawCode: string): Promise<GateConfig> {
@@ -255,45 +342,60 @@ export async function acceptInvite(rawCode: string): Promise<GateConfig> {
     }
   }
 
-  const creds = await readInviteCreds(invite.code);
-  if (!creds || !creds.sessionToken) {
+  const packs = await readInvitePacks(invite.code);
+  if (packs.length === 0 || !packs[0]?.sessionToken) {
     throw new Error('Invite credentials are no longer available.');
   }
 
-  const system = await upsertSystem(
-    {
-      sessionToken: creds.sessionToken,
-      phoneNumber: creds.phoneNumber,
-      tokenType: creds.tokenType as 0 | 1 | 2,
-    },
-    { origin: 'shared', label: invite.gate.systemLabel || 'Shared' },
-  );
+  const systemByIndex: string[] = [];
+  for (let i = 0; i < packs.length; i++) {
+    const pack = packs[i];
+    const label =
+      invite.gates.find((g) => g.credIndex === i)?.systemLabel ||
+      invite.gate.systemLabel ||
+      'Shared';
+    const system = await upsertSystem(
+      {
+        sessionToken: pack.sessionToken,
+        phoneNumber: pack.phoneNumber,
+        tokenType: pack.tokenType as 0 | 1 | 2,
+      },
+      { origin: 'shared', label },
+    );
+    systemByIndex[i] = system.id;
+  }
 
-  const id = sharedGateId(invite.code, invite.gate.deviceId);
-  const gate: GateConfig = {
-    id,
-    deviceId: invite.gate.deviceId,
-    systemId: system.id,
-    origin: 'shared',
-    sharedInviteCode: invite.code,
-    sharedFromName: invite.fromName || null,
-    name: invite.gate.name || invite.gate.deviceId,
-    nameOverride: invite.gate.nameOverride,
-    enabled: false,
-    lat: invite.gate.lat,
-    lng: invite.gate.lng,
-    radiusMeters: invite.gate.radiusMeters,
-    cooldownMs: invite.gate.cooldownMs,
-    bluetooth: invite.gate.bluetooth,
-    lastOpenedAt: null,
-    lastResult: null,
-  };
-
-  const gates = await loadGates();
-  const idx = gates.findIndex((g) => g.id === id);
-  if (idx >= 0) gates[idx] = { ...gates[idx], ...gate, enabled: gates[idx].enabled };
-  else gates.push(gate);
-  await saveGates(gates);
+  const stored = await loadGates();
+  let next = [...stored];
+  let first: GateConfig | null = null;
+  for (const payload of invite.gates.length ? invite.gates : [invite.gate]) {
+    const credIndex = payload.credIndex ?? 0;
+    const systemId = systemByIndex[credIndex] ?? systemByIndex[0];
+    const id = sharedGateId(invite.code, payload.deviceId);
+    const gate: GateConfig = {
+      id,
+      deviceId: payload.deviceId,
+      systemId,
+      origin: 'shared',
+      sharedInviteCode: invite.code,
+      sharedFromName: invite.fromName || null,
+      name: payload.name || payload.deviceId,
+      nameOverride: payload.nameOverride,
+      enabled: false,
+      lat: payload.lat,
+      lng: payload.lng,
+      radiusMeters: payload.radiusMeters,
+      cooldownMs: payload.cooldownMs,
+      bluetooth: payload.bluetooth,
+      lastOpenedAt: null,
+      lastResult: null,
+    };
+    const idx = next.findIndex((g) => g.id === id);
+    if (idx >= 0) next[idx] = { ...next[idx], ...gate, enabled: next[idx].enabled };
+    else next.push(gate);
+    if (!first) first = gate;
+  }
+  await saveGates(next);
 
   if (invite.status === 'pending') {
     await updateDoc(doc(db, 'invites', invite.code), {
@@ -303,7 +405,7 @@ export async function acceptInvite(rawCode: string): Promise<GateConfig> {
     });
   }
 
-  return gate;
+  return first!;
 }
 
 export async function declineInvite(rawCode: string): Promise<void> {
@@ -336,11 +438,14 @@ export async function syncRevokedShares(): Promise<string[]> {
   const revoked = accepted.filter((i) => i.status === 'revoked');
   const removed: string[] = [];
   for (const inv of revoked) {
-    const id = sharedGateId(inv.code, inv.gate.deviceId);
-    const before = await loadGates();
-    if (!before.some((g) => g.id === id)) continue;
-    await removeGate(id);
-    removed.push(id);
+    const payloads = inv.gates.length ? inv.gates : [inv.gate];
+    for (const payload of payloads) {
+      const id = sharedGateId(inv.code, payload.deviceId);
+      const before = await loadGates();
+      if (!before.some((g) => g.id === id)) continue;
+      await removeGate(id);
+      removed.push(id);
+    }
   }
   return removed;
 }

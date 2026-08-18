@@ -146,6 +146,8 @@ function createStyles(c: ThemeColors) {
       borderRadius: radii.md,
       padding: spacing.md,
       gap: 8,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     row: {
       flexDirection: 'row',

@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../../auth/AuthProvider';
 import { loadCredentials, loadCredentialsForGate } from '../../data/credentials';
 import { appendEvent } from '../../data/eventLog';
 import { moveToIndex } from '../../data/gateOrder';
@@ -33,12 +34,13 @@ import {
 } from '../../data/openSafetyLock';
 import { trySyncGeofences } from '../../integrations/optionalNative';
 import { importNativeOpenEvents } from '../../platform/keepAliveAlarm';
+import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { getDevices, openGate, PalGateApiError } from '../../palgate/api';
 import { BarrierMark } from '../components/BarrierMark';
 import { ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { GateRow, type GateOpenFlash } from '../components/GateRow';
-import { IconLog, IconRefresh, IconSettings } from '../icons';
+import { IconLog, IconRefresh, IconSettings, IconShare } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 
@@ -55,6 +57,7 @@ function errorMessage(e: unknown): string {
 export function GatesListScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { user } = useAuth();
   const [gates, setGates] = useState<GateConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +73,9 @@ export function GatesListScreen({ navigation }: Props) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [autoOpenMaster, setAutoOpenMaster] = useState(true);
   const [autoOpenBlockedOpen, setAutoOpenBlockedOpen] = useState(false);
+  const [shareMode, setShareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
@@ -129,7 +135,7 @@ export function GatesListScreen({ navigation }: Props) {
     if (systems.length === 0) {
       const creds = await loadCredentials();
       if (!creds) {
-        navigation.navigate('GateSystems');
+        goToGateSystems(navigation);
         return;
       }
     }
@@ -199,50 +205,75 @@ export function GatesListScreen({ navigation }: Props) {
       headerTitle: () => (
         <View style={styles.headerTitle}>
           <BarrierMark brand size={22} />
-          <Text style={styles.headerTitleText}>Gates</Text>
+          <Text style={styles.headerTitleText}>
+            {shareMode ? 'Select gates' : 'Gates'}
+          </Text>
         </View>
       ),
-      headerRight: () => (
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => navigation.navigate('Monitoring')}
-            hitSlop={10}
-            accessibilityLabel="Log"
-            style={styles.headerIcon}
-          >
-            <IconLog color={colors.primary} />
-          </Pressable>
+      headerRight: () =>
+        shareMode ? (
           <Pressable
             onPress={() => {
-              if (refreshing || draggingRef.current) return;
-              void (async () => {
-                setRefreshing(true);
-                await refreshDevices();
-                setRefreshing(false);
-              })();
+              setShareMode(false);
+              setSelectedIds(new Set());
             }}
             hitSlop={10}
-            accessibilityLabel="Refresh"
             style={styles.headerIcon}
           >
-            {refreshing ? (
-              <ActivityIndicator color={colors.primary} size="small" />
-            ) : (
-              <IconRefresh color={colors.primary} />
-            )}
+            <Text style={styles.headerActionText}>Done</Text>
           </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate('Settings')}
-            hitSlop={10}
-            accessibilityLabel="Settings"
-            style={styles.headerIcon}
-          >
-            <IconSettings color={colors.primary} />
-          </Pressable>
-        </View>
-      ),
+        ) : (
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => {
+                setShareMode(true);
+                setSelectedIds(new Set());
+              }}
+              hitSlop={10}
+              accessibilityLabel="Share gates"
+              style={styles.headerIcon}
+            >
+              <IconShare color={colors.primary} />
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('Monitoring')}
+              hitSlop={10}
+              accessibilityLabel="Log"
+              style={styles.headerIcon}
+            >
+              <IconLog color={colors.primary} />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (refreshing || draggingRef.current) return;
+                void (async () => {
+                  setRefreshing(true);
+                  await refreshDevices();
+                  setRefreshing(false);
+                })();
+              }}
+              hitSlop={10}
+              accessibilityLabel="Refresh"
+              style={styles.headerIcon}
+            >
+              {refreshing ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <IconRefresh color={colors.primary} />
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('Settings')}
+              hitSlop={10}
+              accessibilityLabel="Settings"
+              style={styles.headerIcon}
+            >
+              <IconSettings color={colors.primary} />
+            </Pressable>
+          </View>
+        ),
     });
-  }, [colors.primary, navigation, refreshDevices, refreshing, styles]);
+  }, [colors.primary, navigation, refreshDevices, refreshing, shareMode, styles]);
 
   const flashOpen = useCallback(
     (gateId: string, success: boolean, message: string) => {
@@ -496,11 +527,22 @@ export function GatesListScreen({ navigation }: Props) {
                   dragging={draggingId === item.id}
                   autoOpenMaster={autoOpenMaster}
                   onAutoOpenBlocked={() => setAutoOpenBlockedOpen(true)}
-                  onPress={() =>
-                    navigation.navigate('GateEditor', { gateId: item.id })
-                  }
+                  selecting={shareMode}
+                  selected={selectedIds.has(item.id)}
+                  onPress={() => {
+                    if (shareMode) {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                      return;
+                    }
+                    navigation.navigate('GateEditor', { gateId: item.id });
+                  }}
                   onShare={() =>
-                    navigation.navigate('ShareGate', { gateId: item.id })
+                    navigation.navigate('ShareGate', { gateIds: [item.id] })
                   }
                   onToggleEnabled={(enabled) => void onToggle(item, enabled)}
                   onOpen={() => void onOpen(item)}
@@ -516,6 +558,37 @@ export function GatesListScreen({ navigation }: Props) {
           </View>
         )}
       </ScrollView>
+      {shareMode && selectedIds.size > 0 ? (
+        <Pressable
+          style={({ pressed }) => [styles.shareBar, pressed && { opacity: 0.9 }]}
+          onPress={() => {
+            if (!user?.isRealAccount) {
+              setUpgradeOpen(true);
+              return;
+            }
+            const ids = [...selectedIds];
+            setShareMode(false);
+            setSelectedIds(new Set());
+            navigation.navigate('ShareGate', { gateIds: ids });
+          }}
+        >
+          <Text style={styles.shareBarText}>
+            Share {selectedIds.size} {selectedIds.size === 1 ? 'gate' : 'gates'}
+          </Text>
+        </Pressable>
+      ) : null}
+      <ConfirmSheet
+        visible={upgradeOpen}
+        title="Sharing needs an account"
+        message="Guest can open gates on this phone. To share, sign in with Google or email."
+        cancelLabel="Not now"
+        confirmLabel="Upgrade"
+        onCancel={() => setUpgradeOpen(false)}
+        onConfirm={() => {
+          setUpgradeOpen(false);
+          navigation.navigate('Settings');
+        }}
+      />
       <ConfirmSheet
         visible={autoOpenBlockedOpen}
         title="Auto-open is off"
@@ -561,6 +634,8 @@ function createStyles(c: ThemeColors) {
     card: {
       borderRadius: radii.md,
       backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
       ...Platform.select({
         ios: {
           shadowColor: c.shadow,
@@ -629,6 +704,25 @@ function createStyles(c: ThemeColors) {
       height: 36,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    headerActionText: {
+      color: c.primary,
+      fontWeight: '700',
+      fontSize: 15,
+    },
+    shareBar: {
+      marginHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      height: 48,
+      borderRadius: radii.pill,
+      backgroundColor: c.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    shareBarText: {
+      color: c.primaryOn,
+      fontWeight: '700',
+      fontSize: 15,
     },
   });
 }

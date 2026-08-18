@@ -15,25 +15,29 @@ service cloud.firestore {
     //   - updatedAt: timestamp (required)
     //
     // Collection: invites
-    // Document ID: 8-char invite code
+    // Document ID: 8-char invite code (alphabet 23456789ABCDEFGHJKLMNPQRSTUVWXYZ)
     // Fields:
-    //   - fromUid: string (required, immutable)
+    //   - fromUid: string (required, immutable, == creator auth.uid)
     //   - fromName: string (required, 1-80)
     //   - toEmailLower: string|null
     //   - status: pending|accepted|declined|revoked
-    //   - createdAt, expiresAt: timestamp
+    //   - createdAt, expiresAt: timestamp (immutable after create)
     //   - acceptedByUid: string|null
     //   - acceptedAt: timestamp|null
-    //   - gate: map (deviceId, name, nameOverride, lat, lng, radiusMeters,
-    //     cooldownMs, bluetooth, systemLabel) — no PalGate tokens
+    //   - gate: first gate map (compat)
+    //   - gates: list of 1-12 gate maps (name, pin, radius, cooldown, BT,
+    //     systemLabel, credIndex) — no PalGate tokens
     //
     // Collection: inviteCreds
     // Document ID: same invite code
     // Fields:
-    //   - sessionToken: string (hex)
-    //   - phoneNumber: number
-    //   - tokenType: 0|1|2
+    //   - packs: list of { sessionToken, phoneNumber, tokenType } (1-8)
+    //   Legacy docs may store a single sessionToken/phoneNumber/tokenType.
     // Never list this collection. Get only with the code or as owner/acceptor.
+    //
+    // Gates / PalGate systems are device-local, not in Firestore.
+    // Guest (anonymous) may read/write their own users/{uid} and accept
+    // an invite by code. Creating invites requires a Google/email token.
     //
     // ===============================================================
 
@@ -45,9 +49,42 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    // Sharing (create invite) needs Google or email on the ID token.
+    // Anonymous Auth has no email. Do not use sign_in_provider alone —
+    // after linkWithCredential it can lag behind user.isAnonymous.
+    function isSharingAccount() {
+      return isAuthenticated() &&
+        request.auth.token.email is string &&
+        request.auth.token.email.size() >= 3 &&
+        request.auth.token.email.size() <= 320;
+    }
+
+    function isRecentTimestamp(time) {
+      return time is timestamp &&
+        time > request.time - duration.value(10, 'm') &&
+        time <= request.time + duration.value(1, 'm');
+    }
+
+    // .rules string: '\\.' → regex \.  (not '\\\\.' which demands a backslash)
     function isValidEmail(email) {
       return email is string &&
-        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$');
+        email.size() >= 3 &&
+        email.size() <= 320 &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,24}$');
     }
 
     function isValidUser(data) {
@@ -58,45 +95,77 @@ service cloud.firestore {
         data.isAnonymous is bool &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp &&
+        isRecentTimestamp(data.updatedAt) &&
         (data.emailLower == null || isValidEmail(data.emailLower));
     }
 
     function isValidBtDevice(item) {
       return item is map &&
         item.keys().hasOnly(['name', 'address']) &&
-        (!('name' in item) || (item.name is string && item.name.size() <= 80)) &&
-        (!('address' in item) || (item.address is string && item.address.size() <= 64));
+        (!('name' in item) || (item.name is string && item.name.size() >= 1 && item.name.size() <= 80)) &&
+        (!('address' in item) || (item.address is string && item.address.size() >= 1 && item.address.size() <= 64));
+    }
+
+    function isValidBtDeviceList(devices) {
+      return devices is list &&
+        devices.size() <= 12 &&
+        (devices.size() == 0 || isValidBtDevice(devices[0])) &&
+        (devices.size() < 2 || isValidBtDevice(devices[1])) &&
+        (devices.size() < 3 || isValidBtDevice(devices[2])) &&
+        (devices.size() < 4 || isValidBtDevice(devices[3])) &&
+        (devices.size() < 5 || isValidBtDevice(devices[4])) &&
+        (devices.size() < 6 || isValidBtDevice(devices[5])) &&
+        (devices.size() < 7 || isValidBtDevice(devices[6])) &&
+        (devices.size() < 8 || isValidBtDevice(devices[7])) &&
+        (devices.size() < 9 || isValidBtDevice(devices[8])) &&
+        (devices.size() < 10 || isValidBtDevice(devices[9])) &&
+        (devices.size() < 11 || isValidBtDevice(devices[10])) &&
+        (devices.size() < 12 || isValidBtDevice(devices[11]));
     }
 
     function isValidGateMap(g) {
       return g is map &&
         g.keys().hasOnly([
           'deviceId', 'name', 'nameOverride', 'lat', 'lng',
-          'radiusMeters', 'cooldownMs', 'bluetooth', 'systemLabel'
+          'radiusMeters', 'cooldownMs', 'bluetooth', 'systemLabel', 'credIndex'
         ]) &&
         g.deviceId is string && g.deviceId.size() >= 1 && g.deviceId.size() <= 120 &&
         g.name is string && g.name.size() <= 120 &&
         (g.nameOverride == null || (g.nameOverride is string && g.nameOverride.size() <= 120)) &&
-        (g.lat == null || g.lat is number) &&
-        (g.lng == null || g.lng is number) &&
+        (g.lat == null || (g.lat is number && g.lat >= -90 && g.lat <= 90)) &&
+        (g.lng == null || (g.lng is number && g.lng >= -180 && g.lng <= 180)) &&
         g.radiusMeters is number && g.radiusMeters >= 25 && g.radiusMeters <= 250 &&
         g.cooldownMs is number && g.cooldownMs >= 0 && g.cooldownMs <= 3600000 &&
         g.systemLabel is string && g.systemLabel.size() <= 80 &&
         g.bluetooth is map &&
         g.bluetooth.keys().hasOnly(['required', 'devices']) &&
         g.bluetooth.required is bool &&
-        g.bluetooth.devices is list &&
-        g.bluetooth.devices.size() <= 12 &&
-        (g.bluetooth.devices.size() == 0 || isValidBtDevice(g.bluetooth.devices[0])) &&
-        (g.bluetooth.devices.size() < 2 || isValidBtDevice(g.bluetooth.devices[1])) &&
-        (g.bluetooth.devices.size() < 3 || isValidBtDevice(g.bluetooth.devices[2])) &&
-        (g.bluetooth.devices.size() < 4 || isValidBtDevice(g.bluetooth.devices[3]));
+        isValidBtDeviceList(g.bluetooth.devices) &&
+        (!('credIndex' in g) || (g.credIndex is int && g.credIndex >= 0 && g.credIndex <= 7));
+    }
+
+    function isValidGateList(gates) {
+      return gates is list &&
+        gates.size() >= 1 &&
+        gates.size() <= 12 &&
+        isValidGateMap(gates[0]) &&
+        (gates.size() < 2 || isValidGateMap(gates[1])) &&
+        (gates.size() < 3 || isValidGateMap(gates[2])) &&
+        (gates.size() < 4 || isValidGateMap(gates[3])) &&
+        (gates.size() < 5 || isValidGateMap(gates[4])) &&
+        (gates.size() < 6 || isValidGateMap(gates[5])) &&
+        (gates.size() < 7 || isValidGateMap(gates[6])) &&
+        (gates.size() < 8 || isValidGateMap(gates[7])) &&
+        (gates.size() < 9 || isValidGateMap(gates[8])) &&
+        (gates.size() < 10 || isValidGateMap(gates[9])) &&
+        (gates.size() < 11 || isValidGateMap(gates[10])) &&
+        (gates.size() < 12 || isValidGateMap(gates[11]));
     }
 
     function isValidInvite(data) {
       return data.keys().hasOnly([
           'fromUid', 'fromName', 'toEmailLower', 'status',
-          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedAt', 'gate'
+          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedAt', 'gate', 'gates'
         ]) &&
         data.fromUid is string && data.fromUid.size() > 0 && data.fromUid.size() <= 128 &&
         data.fromName is string && data.fromName.size() >= 1 && data.fromName.size() <= 80 &&
@@ -104,19 +173,47 @@ service cloud.firestore {
         data.status in ['pending', 'accepted', 'declined', 'revoked'] &&
         data.createdAt is timestamp &&
         data.expiresAt is timestamp &&
+        data.expiresAt > data.createdAt &&
+        data.expiresAt <= data.createdAt + duration.value(30, 'd') &&
         (data.acceptedByUid == null || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128)) &&
         (data.acceptedAt == null || data.acceptedAt is timestamp) &&
-        isValidGateMap(data.gate);
+        isValidGateMap(data.gate) &&
+        (!('gates' in data) || isValidGateList(data.gates));
+    }
+
+    function isValidCredPack(p) {
+      return p is map &&
+        p.keys().hasOnly(['sessionToken', 'phoneNumber', 'tokenType']) &&
+        p.sessionToken is string &&
+        p.sessionToken.size() >= 32 &&
+        p.sessionToken.size() <= 512 &&
+        p.phoneNumber is number &&
+        p.phoneNumber > 0 &&
+        p.phoneNumber < 100000000000000 &&
+        p.tokenType in [0, 1, 2];
     }
 
     function isValidInviteCreds(data) {
-      return data.keys().hasOnly(['sessionToken', 'phoneNumber', 'tokenType']) &&
-        data.sessionToken is string &&
-        data.sessionToken.size() >= 32 &&
-        data.sessionToken.size() <= 128 &&
-        data.phoneNumber is number &&
-        data.phoneNumber > 0 &&
-        data.tokenType in [0, 1, 2];
+      return (
+        (
+          data.keys().hasOnly(['sessionToken', 'phoneNumber', 'tokenType']) &&
+          isValidCredPack(data)
+        ) ||
+        (
+          data.keys().hasOnly(['packs']) &&
+          data.packs is list &&
+          data.packs.size() >= 1 &&
+          data.packs.size() <= 8 &&
+          isValidCredPack(data.packs[0]) &&
+          (data.packs.size() < 2 || isValidCredPack(data.packs[1])) &&
+          (data.packs.size() < 3 || isValidCredPack(data.packs[2])) &&
+          (data.packs.size() < 4 || isValidCredPack(data.packs[3])) &&
+          (data.packs.size() < 5 || isValidCredPack(data.packs[4])) &&
+          (data.packs.size() < 6 || isValidCredPack(data.packs[5])) &&
+          (data.packs.size() < 7 || isValidCredPack(data.packs[6])) &&
+          (data.packs.size() < 8 || isValidCredPack(data.packs[7]))
+        )
+      );
     }
 
     function inviteMeta(code) {
@@ -125,7 +222,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow create: if isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        isRecentTimestamp(request.resource.data.createdAt);
       allow update: if isOwner(userId) &&
         isValidUser(request.resource.data) &&
         request.resource.data.createdAt == resource.data.createdAt;
@@ -133,7 +232,10 @@ service cloud.firestore {
     }
 
     match /invites/{code} {
+      // Missing docs must be gettable so the app can allocate a free code
+      // (getDoc on a new id) and so a wrong code returns not-found, not denied.
       allow get: if isAuthenticated() && (
+        resource == null ||
         resource.data.fromUid == request.auth.uid ||
         resource.data.acceptedByUid == request.auth.uid ||
         (resource.data.toEmailLower is string &&
@@ -150,8 +252,11 @@ service cloud.firestore {
           resource.data.toEmailLower == request.auth.token.email.lower())
       );
 
-      allow create: if isAuthenticated() &&
+      allow create: if isSharingAccount() &&
         isValidInvite(request.resource.data) &&
+        isValidGateList(request.resource.data.gates) &&
+        request.resource.data.gate.deviceId == request.resource.data.gates[0].deviceId &&
+        isRecentTimestamp(request.resource.data.createdAt) &&
         request.resource.data.fromUid == request.auth.uid &&
         request.resource.data.status == 'pending' &&
         request.resource.data.acceptedByUid == null &&
@@ -162,6 +267,10 @@ service cloud.firestore {
         isValidInvite(request.resource.data) &&
         request.resource.data.fromUid == resource.data.fromUid &&
         request.resource.data.gate == resource.data.gate &&
+        (
+          (!('gates' in resource.data) && !('gates' in request.resource.data)) ||
+          request.resource.data.gates == resource.data.gates
+        ) &&
         request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.expiresAt == resource.data.expiresAt &&
         request.resource.data.fromName == resource.data.fromName &&
@@ -204,7 +313,7 @@ service cloud.firestore {
 
       allow list: if false;
 
-      allow create: if isAuthenticated() &&
+      allow create: if isSharingAccount() &&
         isValidInviteCreds(request.resource.data) &&
         existsAfter(/databases/$(database)/documents/invites/$(code)) &&
         getAfter(/databases/$(database)/documents/invites/$(code)).data.fromUid == request.auth.uid &&
