@@ -127,6 +127,11 @@ function withStreetViewPackage(config) {
           'add(GateAutoCarBluetoothPackage())',
           'add(GateAutoCarBluetoothPackage())\n              add(StreetViewPackage())',
         );
+      } else if (contents.includes('PackageList(this).packages.apply')) {
+        contents = contents.replace(
+          /PackageList\(this\)\.packages\.apply\s*\{/,
+          (match) => `${match}\n              add(StreetViewPackage())`,
+        );
       }
     }
     cfg.modResults.contents = contents;
@@ -154,4 +159,4 @@ function withGoogleMaps(config) {
   return config;
 }
 
-module.exports = createRunOncePlugin(withGoogleMaps, 'gateauto-google-maps', '1.0.0');
+module.exports = createRunOncePlugin(withGoogleMaps, 'gateauto-google-maps', '1.1.0');
