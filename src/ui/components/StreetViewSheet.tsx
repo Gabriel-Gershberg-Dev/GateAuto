@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeProvider';
+import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 import {
   hasNativeStreetView,
   openExternalStreetView,
@@ -20,10 +22,8 @@ import {
 import { formatCoordPair } from '../streetName';
 import {
   resolveStreetViewPin,
-  STREET_VIEW_FALLBACK_HINT,
   type StreetViewPin,
 } from '../streetViewPin';
-import { radii, spacing, type ThemeColors } from '../theme';
 
 type CoverageEvent = {
   available: boolean;
@@ -63,10 +63,11 @@ export function StreetViewSheet({
   lat,
   lng,
   streetName,
-  confirmLabel = 'Pin this place',
+  confirmLabel,
   onConfirm,
   onBack,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -108,15 +109,15 @@ export function StreetViewSheet({
     >
       <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topBar}>
-          <Text style={styles.kicker}>Street sightline</Text>
+          <Text style={styles.kicker}>{t('editor.lookStreet')}</Text>
           <Text style={styles.title} numberOfLines={2}>
-            {streetName?.trim() || 'Look at this pin'}
+            {streetName?.trim() || t('map.lookPin')}
           </Text>
           <Text style={styles.coords}>
             {formatCoordPair(pin.lat, pin.lng)}
           </Text>
           {showFallbackHint ? (
-            <Text style={styles.hint}>{STREET_VIEW_FALLBACK_HINT}</Text>
+            <Text style={styles.hint}>{t('map.fallbackHint')}</Text>
           ) : null}
         </View>
 
@@ -148,11 +149,8 @@ export function StreetViewSheet({
             </>
           ) : (
             <View style={styles.fallback}>
-              <Text style={styles.fallbackTitle}>Open Street View in Maps</Text>
-              <Text style={styles.fallbackBody}>
-                In-app panorama isn’t in this build. Check the street in Google
-                Maps, then come back and use the pin.
-              </Text>
+              <Text style={styles.fallbackTitle}>{t('map.openStreet')}</Text>
+              <Text style={styles.fallbackBody}>{t('map.externalMaps')}</Text>
               <Pressable
                 onPress={() => void openMaps()}
                 style={({ pressed }) => [
@@ -162,7 +160,7 @@ export function StreetViewSheet({
                 disabled={openingMaps}
               >
                 <Text style={styles.mapsBtnText}>
-                  {openingMaps ? 'Opening…' : 'Open Street View'}
+                  {openingMaps ? t('map.opening') : t('map.openStreet')}
                 </Text>
               </Pressable>
             </View>
@@ -171,7 +169,7 @@ export function StreetViewSheet({
           {NativeView && coverage === 'no' ? (
             <View style={styles.noCoverage}>
               <Text style={styles.noCoverageText}>
-                No street imagery here — you can still use the pin.
+                {t('map.noImagery')}
               </Text>
             </View>
           ) : null}
@@ -191,7 +189,7 @@ export function StreetViewSheet({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.btnGhostText}>Back to the map</Text>
+            <Text style={styles.btnGhostText}>{t('common.back')}</Text>
           </Pressable>
           <Pressable
             onPress={() => onConfirm(pin)}
@@ -201,7 +199,9 @@ export function StreetViewSheet({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.btnPrimaryText}>{confirmLabel}</Text>
+            <Text style={styles.btnPrimaryText}>
+              {confirmLabel || t('editor.pinPlace')}
+            </Text>
           </Pressable>
         </View>
       </View>

@@ -89,8 +89,10 @@ export function gateToCloud(gate: GateConfig, sortIndex: number): Record<string,
     enabled: Boolean(gate.enabled),
     lat: finiteOrNull(gate.lat, -90, 90),
     lng: finiteOrNull(gate.lng, -180, 180),
-    radiusMeters: Math.min(150, Math.max(25, Math.round(Number(gate.radiusMeters) || 50))),
+    radiusMeters: Math.min(150, Math.max(10, Math.round(Number(gate.radiusMeters) || 50))),
     cooldownMs: Math.min(3_600_000, Math.max(0, Math.round(Number(gate.cooldownMs) || 0))),
+    holdEnabled: Boolean(gate.holdEnabled),
+    holdMs: Math.min(90_000, Math.max(0, Math.round(Number(gate.holdMs) || 0))),
     bluetooth: {
       required: Boolean(gate.bluetooth?.required),
       devices: (gate.bluetooth?.devices ?? [])
@@ -106,6 +108,7 @@ export function gateToCloud(gate: GateConfig, sortIndex: number): Record<string,
         ? gate.lastOpenedAt
         : null,
     lastResult: gate.lastResult ? clip(String(gate.lastResult), 200) : null,
+    shareDisabled: Boolean(gate.shareDisabled),
     sortIndex: Math.min(63, Math.max(0, Math.round(sortIndex))),
     updatedAt: serverTimestamp(),
   };
@@ -134,12 +137,15 @@ export function gateFromCloud(id: string, data: DocumentData): GateConfig {
     lng: finiteOrNull(data.lng, -180, 180),
     radiusMeters: Number(data.radiusMeters) || 50,
     cooldownMs: Number(data.cooldownMs) || 30_000,
+    holdEnabled: Boolean(data.holdEnabled),
+    holdMs: Math.min(90_000, Math.max(0, Math.round(Number(data.holdMs) || 0))),
     bluetooth: btFromCloud(data.bluetooth),
     lastOpenedAt:
       typeof data.lastOpenedAt === 'number' && Number.isFinite(data.lastOpenedAt)
         ? data.lastOpenedAt
         : null,
     lastResult: data.lastResult != null ? String(data.lastResult) : null,
+    shareDisabled: Boolean(data.shareDisabled),
   };
 }
 

@@ -9,37 +9,52 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../../auth/AuthProvider';
-import { hasAnySystem, listSystems, type PalGateSystem } from '../../data/palgateSystems';
-import { goToGatesList } from '../../navigation/hubNavigation';
+import { listSystems, type PalGateSystem } from '../../data/palgateSystems';
+import { loadGates, type GateConfig } from '../../data/gatesStore';
+import { unlinkLinkedSystem } from '../../data/unlinkSystem';
+import { appendEvent } from '../../data/eventLog';
+import {
+  goToGatesList,
+  resetToHubAfterInvite,
+} from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import {
   acceptInvite,
   declineInvite,
-  listIncomingPendingInvites,
+  getInviteByCode,
   syncRevokedShares,
   type InviteDoc,
 } from '../../share/invites';
-import { isValidInviteCode, normalizeInviteCode } from '../../share/inviteLogic';
+import {
+  inviteDisplayName,
+  isValidInviteCode,
+  normalizeInviteCode,
+  partitionInviteGates,
+  type SharedGatePayload,
+} from '../../share/inviteLogic';
 import { BarrierMark } from '../components/BarrierMark';
 import { BusySheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { FormSheet } from '../components/FormSheet';
-import { Group, Hairline } from '../components/Group';
-import { IconChevronRight, IconQr, IconSettings, IconShare } from '../icons';
+import { HeaderIconButton, NavHeader } from '../components/NavHeader';
+import { IconQr, IconSettings, IconUnlink } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
+import { isolateBidiText } from '../../i18n/bidi';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GateSystems'>;
 
 export function GateSystemsScreen({ navigation }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
+  const { isRtl, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const auth = useAuth();
   const { user } = auth;
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [systems, setSystems] = useState<PalGateSystem[]>([]);
-  const [incoming, setIncoming] = useState<Array<InviteDoc & { code: string }>>(
-    [],
-  );
+  const [gates, setGates] = useState<GateConfig[]>([]);
   const [codeOpen, setCodeOpen] = useState(false);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -47,17 +62,22 @@ export function GateSystemsScreen({ navigation }: Props) {
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
-  const [confirmIncoming, setConfirmIncoming] = useState<
-    (InviteDoc & { code: string }) | null
-  >(null);
+  const [unlinkId, setUnlinkId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    invite: InviteDoc & { code: string };
+    declineOnCancel: boolean;
+  } | null>(null);
 
   const reload = useCallback(async () => {
-    setSystems(await listSystems());
+    const [sys, local] = await Promise.all([listSystems(), loadGates()]);
+    setSystems(sys);
+    setGates(local);
     try {
       await syncRevokedShares();
-      setIncoming(await listIncomingPendingInvites());
+      const after = await loadGates();
+      setGates(after);
     } catch {
-      setIncoming([]);
+      // Offline is fine — local list still shows.
     }
   }, []);
 
@@ -71,28 +91,33 @@ export function GateSystemsScreen({ navigation }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => navigation.navigate('Settings')}
-            hitSlop={10}
-            accessibilityLabel="Settings"
-            style={styles.headerIcon}
-          >
-            <IconSettings color={colors.primary} />
-          </Pressable>
-          <Pressable
-            onPress={() => setSignOutOpen(true)}
-            hitSlop={10}
-            accessibilityLabel="Log out"
-            style={styles.headerLogout}
-          >
-            <Text style={styles.headerActionText}>Log out</Text>
-          </Pressable>
-        </View>
+      header: (props) => (
+        <NavHeader
+          title={t('nav.gateSystems')}
+          onBack={
+            props.back ? () => props.navigation.goBack() : undefined
+          }
+          actions={
+            <>
+              <HeaderIconButton
+                onPress={() => navigation.navigate('Settings')}
+                accessibilityLabel={t('common.settings')}
+              >
+                <IconSettings color={colors.primary} />
+              </HeaderIconButton>
+              <HeaderIconButton
+                wide
+                onPress={() => setSignOutOpen(true)}
+                accessibilityLabel={t('common.logOut')}
+              >
+                <Text style={styles.headerActionText}>{t('common.logOut')}</Text>
+              </HeaderIconButton>
+            </>
+          }
+        />
       ),
     });
-  }, [colors.primary, navigation, styles]);
+  }, [colors.primary, navigation, styles, t]);
 
   const goScan = (purpose: 'primary' | 'additional') => {
     navigation.navigate('LinkAccount', { purpose });
@@ -102,44 +127,66 @@ export function GateSystemsScreen({ navigation }: Props) {
     setCodeError(null);
     const normalized = normalizeInviteCode(code);
     if (!isValidInviteCode(normalized)) {
-      setCodeError('Enter the 8-character code from the owner.');
+      setCodeError(t('systems.codeInvalid'));
       return;
     }
     setBusy(true);
     try {
-      await acceptInvite(normalized);
+      const invite = await getInviteByCode(normalized);
+      if (!invite) {
+        setCodeError(t('share.errNoInvite'));
+        return;
+      }
       setCodeOpen(false);
       setCode('');
-      const linked = await hasAnySystem();
-      navigation.reset({
-        index: linked ? 1 : 0,
-        routes: linked
-          ? [{ name: 'GateSystems' }, { name: 'GatesList' }]
-          : [{ name: 'GateSystems' }],
-      });
+      setPreview({ invite, declineOnCancel: false });
     } catch (e) {
-      setCodeError(e instanceof Error ? e.message : 'Could not accept invite');
+      setCodeError(e instanceof Error ? e.message : t('systems.acceptFail'));
     } finally {
       setBusy(false);
     }
   };
 
-  const acceptIncoming = async () => {
-    const inv = confirmIncoming;
-    if (!inv) return;
-    setConfirmIncoming(null);
+  const invitedList = preview
+    ? preview.invite.gates.length
+      ? preview.invite.gates
+      : [preview.invite.gate]
+    : [];
+  const partition = preview
+    ? partitionInviteGates(invitedList, gates)
+    : null;
+  const allOwned = Boolean(partition && partition.toAdd.length === 0);
+
+  const finishInviteHub = async () => {
+    const [sys, local] = await Promise.all([listSystems(), loadGates()]);
+    setSystems(sys);
+    setGates(local);
+    resetToHubAfterInvite(navigation, {
+      gateCount: local.length,
+      systemCount: sys.length,
+    });
+  };
+
+  const acceptPreview = async () => {
+    const pending = preview;
+    if (!pending) return;
+    setPreview(null);
     setBusy(true);
     try {
-      await acceptInvite(inv.code);
-      navigation.reset({
-        index: 1,
-        routes: [{ name: 'GateSystems' }, { name: 'GatesList' }],
-      });
+      await acceptInvite(pending.invite.code);
     } catch (e) {
-      setInfo({
-        title: 'Invite',
-        message: e instanceof Error ? e.message : 'Could not accept',
-      });
+      const local = await loadGates();
+      if (local.length === 0) {
+        setInfo({
+          title: t('systems.invite'),
+          message: e instanceof Error ? e.message : t('systems.couldNotAccept'),
+        });
+        setBusy(false);
+        return;
+      }
+    }
+    try {
+      await finishInviteHub();
     } finally {
       setBusy(false);
     }
@@ -151,26 +198,51 @@ export function GateSystemsScreen({ navigation }: Props) {
         {empty ? (
           <View style={styles.emptyHero}>
             <BarrierMark brand size={56} />
-            <Text style={styles.kicker}>Your gate systems</Text>
-            <Text style={styles.title}>Scan your PalGate first</Text>
-            <Text style={styles.body}>
-              Open PalGate on this phone, add a Linked Device, and scan the QR
-              GateAuto shows next. That is your neighborhood. The same button
-              later links another PalGate — a second street, a second home.
-            </Text>
+            <Text style={styles.kicker}>{t('systems.kicker')}</Text>
+            <Text style={styles.title}>{t('systems.scanFirst')}</Text>
+            <Text style={styles.body}>{t('systems.emptyBody')}</Text>
           </View>
         ) : (
-          <Text style={styles.sectionTitle}>Linked PalGate</Text>
+          <Text
+            style={[styles.sectionTitle, { writingDirection, textAlign }]}
+          >
+            {t('systems.linked')}
+          </Text>
         )}
 
         {systems.map((sys) => (
           <View key={sys.id} style={styles.systemCard}>
-            <Text style={styles.systemLabel}>{sys.label}</Text>
-            <Text style={styles.systemMeta}>
-              {sys.origin === 'shared' ? 'From an invite' : 'Scanned on this phone'}
+            <Text
+              style={[styles.systemLabel, { writingDirection, textAlign }]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {isolateBidiText(sys.label, isRtl)}
+            </Text>
+            <Text
+              style={[styles.systemMeta, { writingDirection, textAlign }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {sys.origin === 'shared' ? t('systems.fromInvite') : t('systems.scannedHere')}
               {' · '}
               {String(sys.credentials.phoneNumber).slice(-4)}
             </Text>
+            {sys.origin === 'linked' ? (
+              <Pressable
+                onPress={() => setUnlinkId(sys.id)}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.unlinkBtn,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={t('systems.unlink')}
+              >
+                <IconUnlink color={colors.danger} size={16} />
+                <Text style={styles.unlinkText}>{t('systems.unlink')}</Text>
+              </Pressable>
+            ) : null}
           </View>
         ))}
 
@@ -180,7 +252,7 @@ export function GateSystemsScreen({ navigation }: Props) {
         >
           <IconQr color={colors.primaryOn} />
           <Text style={styles.primaryText}>
-            {empty ? 'Scan your PalGate QR' : 'Link another PalGate'}
+            {empty ? t('systems.scanQr') : t('systems.linkAnother')}
           </Text>
         </Pressable>
 
@@ -191,82 +263,49 @@ export function GateSystemsScreen({ navigation }: Props) {
             setCodeOpen(true);
           }}
         >
-          <Text style={styles.secondaryText}>Enter invite code</Text>
+          <Text style={styles.secondaryText}>{t('systems.enterCode')}</Text>
         </Pressable>
 
-        {incoming.length > 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>Waiting for you</Text>
-            <Group>
-              {incoming.map((inv, i) => (
-                <View key={inv.code}>
-                  {i > 0 ? <Hairline /> : null}
-                  <Pressable
-                    onPress={() => setConfirmIncoming(inv)}
-                    style={({ pressed }) => [
-                      styles.inviteRow,
-                      pressed && { backgroundColor: colors.surfacePressed },
-                    ]}
-                  >
-                    <IconShare color={colors.primary} />
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.inviteTitle} numberOfLines={2}>
-                        {inv.gates.length > 1
-                          ? `${inv.gates.length} gates`
-                          : inv.gate.nameOverride || inv.gate.name || 'Shared gate'}
-                      </Text>
-                      <Text style={styles.inviteMeta}>
-                        From {inv.fromName || 'someone'} · {inv.code}
-                      </Text>
-                    </View>
-                    <IconChevronRight color={colors.muted} />
-                  </Pressable>
-                </View>
-              ))}
-            </Group>
-          </>
-        ) : null}
-
-        {!empty ? (
+        {gates.length > 0 || !empty ? (
           <Pressable
             style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed]}
             onPress={() => goToGatesList(navigation)}
           >
-            <Text style={styles.ghostText}>Go to gates</Text>
+            <Text style={styles.ghostText}>{t('systems.goToGates')}</Text>
           </Pressable>
         ) : (
           <Pressable
             style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed]}
             onPress={() => setSignOutOpen(true)}
-            accessibilityLabel="Log out"
+            accessibilityLabel={t('common.logOut')}
           >
-            <Text style={styles.headerActionText}>Log out</Text>
+            <Text style={styles.headerActionText}>{t('common.logOut')}</Text>
           </Pressable>
         )}
 
         <Text style={styles.footnote}>
           {user?.isRealAccount
-            ? 'Signed in — you can share gates and accept invites.'
-            : 'Guest on this phone. Upgrade in Settings when you want to share a gate.'}
+            ? t('systems.signedInNote')
+            : t('systems.guestNote')}
         </Text>
       </ScrollView>
 
       <FormSheet
         visible={codeOpen}
-        title="Invite code"
-        message="Type the 8-character code the owner showed you. The gate pin and open credentials copy to this phone."
+        title={t('systems.codeTitle')}
+        message={t('systems.codeMsg')}
         fields={[
           {
             key: 'code',
-            label: 'Code',
+            label: t('common.code'),
             value: code,
             onChange: setCode,
-            placeholder: 'e.g. 7K3MNP2Q',
+            placeholder: t('systems.codePlaceholder'),
             autoCapitalize: 'none',
           },
         ]}
-        cancelLabel="Cancel"
-        confirmLabel="Accept"
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.accept')}
         error={codeError}
         busy={busy}
         onCancel={() => setCodeOpen(false)}
@@ -274,10 +313,10 @@ export function GateSystemsScreen({ navigation }: Props) {
       />
       <ConfirmSheet
         visible={signOutOpen}
-        title="Log out?"
-        message="Gates stay with this account on this phone. The next sign-in will not see them unless it is this same account."
-        cancelLabel="Stay signed in"
-        confirmLabel="Log out"
+        title={t('account.logOutTitle')}
+        message={t('account.signOutMsg')}
+        cancelLabel={t('common.staySignedIn')}
+        confirmLabel={t('common.logOut')}
         destructive
         onCancel={() => setSignOutOpen(false)}
         onConfirm={() => {
@@ -286,28 +325,85 @@ export function GateSystemsScreen({ navigation }: Props) {
         }}
       />
       <ConfirmSheet
-        visible={confirmIncoming != null}
-        title="Accept this gate?"
-        message={
-          confirmIncoming
-            ? confirmIncoming.gates.length > 1
-              ? `${confirmIncoming.gates.length} gates from ${confirmIncoming.fromName || 'someone'}. Pins and PalGate details copy here. Auto-open stays off until you turn it on.`
-              : `${confirmIncoming.gate.nameOverride || confirmIncoming.gate.name} from ${confirmIncoming.fromName || 'someone'}. Pin and PalGate details copy here. Auto-open stays off until you turn it on.`
-            : ''
-        }
-        cancelLabel="Decline"
-        confirmLabel="Accept"
-        onCancel={() => {
-          const inv = confirmIncoming;
-          setConfirmIncoming(null);
-          if (inv) void declineInvite(inv.code).then(() => reload());
+        visible={unlinkId != null}
+        icon={<IconUnlink color={colors.danger} />}
+        title={t('systems.unlinkTitle')}
+        message={t('systems.unlinkMsg')}
+        cancelLabel={t('settings.keepLinked')}
+        confirmLabel={t('systems.unlink')}
+        destructive
+        onCancel={() => setUnlinkId(null)}
+        onConfirm={() => {
+          const id = unlinkId;
+          setUnlinkId(null);
+          if (!id) return;
+          void (async () => {
+            await unlinkLinkedSystem(id);
+            await appendEvent({
+              kind: 'info',
+              message: t('systems.unlinkedEvent'),
+            });
+            await reload();
+          })();
         }}
-        onConfirm={() => void acceptIncoming()}
       />
+      <ConfirmSheet
+        visible={preview != null}
+        title={
+          allOwned ? t('systems.allOwnedTitle') : t('systems.acceptTitle')
+        }
+        message={
+          allOwned
+            ? t('systems.allOwnedMsg')
+            : preview
+              ? preview.invite.gates.length > 1
+                ? t('systems.acceptMany', {
+                    count: preview.invite.gates.length,
+                    name: preview.invite.fromName || t('systems.someone'),
+                  })
+                : t('systems.acceptOne', {
+                    gate:
+                      preview.invite.gate.nameOverride ||
+                      preview.invite.gate.name,
+                    name: preview.invite.fromName || t('systems.someone'),
+                  })
+              : ''
+        }
+        cancelLabel={
+          preview?.declineOnCancel ? t('common.decline') : t('common.cancel')
+        }
+        confirmLabel={
+          allOwned
+            ? t('common.done')
+            : partition && partition.alreadyHave.length > 0
+              ? t('systems.acceptNew', { count: partition.toAdd.length })
+              : t('common.accept')
+        }
+        onCancel={() => {
+          const pending = preview;
+          setPreview(null);
+          if (pending?.declineOnCancel) {
+            void declineInvite(pending.invite.code).then(() => reload());
+          }
+        }}
+        onConfirm={() => void acceptPreview()}
+      >
+        {partition ? (
+          <InviteGateList
+            toAdd={partition.toAdd}
+            alreadyHave={partition.alreadyHave}
+            isRtl={isRtl}
+            writingDirection={writingDirection}
+            textAlign={textAlign}
+            colors={colors}
+            t={t}
+          />
+        ) : null}
+      </ConfirmSheet>
       <BusySheet
         visible={busy && !codeOpen}
-        title="Invite"
-        message="Copying gate details to this phone…"
+        title={t('systems.invite')}
+        message={t('systems.copying')}
       />
       <InfoSheet
         visible={info != null}
@@ -316,6 +412,92 @@ export function GateSystemsScreen({ navigation }: Props) {
         onDismiss={() => setInfo(null)}
       />
     </>
+  );
+}
+
+function InviteGateList({
+  toAdd,
+  alreadyHave,
+  isRtl,
+  writingDirection,
+  textAlign,
+  colors,
+  t,
+}: {
+  toAdd: SharedGatePayload[];
+  alreadyHave: SharedGatePayload[];
+  isRtl: boolean;
+  writingDirection: 'rtl' | 'ltr';
+  textAlign: 'right' | 'left';
+  colors: ThemeColors;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  if (toAdd.length === 0 && alreadyHave.length === 0) return null;
+  return (
+    <View style={{ gap: 10 }}>
+      {toAdd.length > 0 ? (
+        <View style={{ gap: 4 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: colors.primary,
+              letterSpacing: 0.3,
+              writingDirection,
+              textAlign,
+            }}
+          >
+            {t('systems.toAdd')}
+          </Text>
+          {toAdd.map((g) => (
+            <Text
+              key={`add:${g.deviceId}`}
+              style={{
+                fontSize: 15,
+                fontWeight: '600',
+                color: colors.text,
+                writingDirection,
+                textAlign,
+              }}
+              numberOfLines={1}
+            >
+              {isolateBidiText(inviteDisplayName(g), isRtl)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {alreadyHave.length > 0 ? (
+        <View style={{ gap: 4 }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '700',
+              color: colors.muted,
+              letterSpacing: 0.3,
+              writingDirection,
+              textAlign,
+            }}
+          >
+            {t('systems.alreadyHave')}
+          </Text>
+          {alreadyHave.map((g) => (
+            <Text
+              key={`have:${g.deviceId}`}
+              style={{
+                fontSize: 15,
+                fontWeight: '600',
+                color: colors.muted,
+                writingDirection,
+                textAlign,
+              }}
+              numberOfLines={1}
+            >
+              {isolateBidiText(inviteDisplayName(g), isRtl)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -373,10 +555,25 @@ function createStyles(c: ThemeColors) {
       fontSize: 17,
       fontWeight: '600',
       color: c.text,
+      flexShrink: 1,
     },
     systemMeta: {
       fontSize: 13,
       color: c.muted,
+      flexShrink: 1,
+    },
+    unlinkBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      marginTop: 8,
+      paddingVertical: 4,
+    },
+    unlinkText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.danger,
     },
     primaryBtn: {
       flexDirection: 'row',
@@ -416,7 +613,6 @@ function createStyles(c: ThemeColors) {
       fontSize: 15,
     },
     inviteRow: {
-      flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
       paddingHorizontal: 16,
@@ -426,10 +622,12 @@ function createStyles(c: ThemeColors) {
       fontSize: 16,
       fontWeight: '600',
       color: c.text,
+      flexShrink: 1,
     },
     inviteMeta: {
       fontSize: 13,
       color: c.muted,
+      flexShrink: 1,
     },
     footnote: {
       fontSize: 12,
@@ -440,23 +638,6 @@ function createStyles(c: ThemeColors) {
     },
     pressed: {
       opacity: 0.88,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    headerIcon: {
-      width: 36,
-      height: 36,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerLogout: {
-      height: 36,
-      paddingHorizontal: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     headerActionText: {
       color: c.primary,

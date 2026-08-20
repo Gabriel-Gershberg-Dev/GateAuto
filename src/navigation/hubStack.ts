@@ -19,3 +19,22 @@ export function compactSystemsGatesStack<T extends HubRouteSnap>(routes: T[]): T
   }
   return out;
 }
+
+/**
+ * After an invite Done / accept: land on the gates list when any gates exist.
+ * Gates as root, or Systems under Gates so back returns once — never the empty
+ * “Add gate system” hub while loadGates() is non-empty.
+ */
+export function hubRoutesAfterInvite(input: {
+  gateCount: number;
+  systemCount: number;
+}): HubRouteSnap[] {
+  if (input.gateCount > 0) {
+    return compactSystemsGatesStack(
+      input.systemCount > 0
+        ? [{ name: 'GateSystems' }, { name: 'GatesList' }]
+        : [{ name: 'GatesList' }],
+    );
+  }
+  return [{ name: 'GateSystems' }];
+}

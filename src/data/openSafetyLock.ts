@@ -2,13 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appendEvent } from './eventLog';
 import {
   applyBurstOpen,
-  BURST_COUNT,
   BURST_WINDOW_MS,
   formatSafetyLockMessage,
-  GATE_LOCK_MS,
   normalizeGateState,
   type GateSafetyState,
 } from './safetyBurst';
+import {
+  burstConfigFromSettings,
+  loadSafetyLockSettings,
+} from './safetyLockSettings';
 import { hydrateUserScope, scopedAsyncKey } from './userScope';
 
 export {
@@ -225,9 +227,13 @@ export async function logBlockedOpen(
   gateLabel?: string,
 ): Promise<string> {
   const status = await getLockStatus(gateId, gateLabel);
+  const settings = await loadSafetyLockSettings();
   const message =
     status.message ??
-    formatSafetyLockMessage(status.remainingMs || GATE_LOCK_MS, gateLabel);
+    formatSafetyLockMessage(
+      status.remainingMs || burstConfigFromSettings(settings).lockMs,
+      gateLabel,
+    );
   await appendEvent({
     kind: 'safety_lock',
     gateId,
@@ -281,18 +287,20 @@ export async function recordSuccessfulOpen(
   return enqueueWrite(async () => {
     const now = Date.now();
     const state = await loadState();
-    const applied = applyBurstOpen(state.byGateId[gateId], now);
+    const settings = await loadSafetyLockSettings();
+    const burst = burstConfigFromSettings(settings);
+    const applied = applyBurstOpen(state.byGateId[gateId], now, burst);
     state.byGateId[gateId] = applied.next;
     await saveState(state);
 
     if (applied.lockEngaged) {
-      const lockMins = Math.round(GATE_LOCK_MS / 60_000);
+      const lockMins = Math.round(burst.lockMs / 60_000);
       const windowMins = Math.round(BURST_WINDOW_MS / 60_000);
       const who = gateLabel?.trim() ? `${gateLabel.trim()}: ` : '';
       await appendEvent({
         kind: 'safety_lock',
         gateId,
-        message: `${who}Safety lock engaged for ${lockMins}m (${BURST_COUNT} auto-opens in ${windowMins}m)`,
+        message: `${who}Safety lock engaged for ${lockMins}m (${burst.burstCount} auto-opens in ${windowMins}m)`,
       });
     }
 

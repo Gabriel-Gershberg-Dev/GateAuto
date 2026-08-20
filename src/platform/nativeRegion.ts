@@ -1,4 +1,5 @@
 import { displayGateName, type GateConfig } from '../data/gatesStore';
+import { normalizeHoldMs } from '../data/holdNormalize';
 
 export type NativeGeofenceRegion = {
   id: string;
@@ -11,6 +12,8 @@ export type NativeGeofenceRegion = {
   /** User display name — native notifications/AA must prefer this over PalGate `name`. */
   displayName?: string;
   cooldownMs?: number;
+  holdEnabled?: boolean;
+  holdMs?: number;
   btRequired?: boolean;
   btAddresses?: string[];
   btNames?: string[];
@@ -31,11 +34,13 @@ export function nativeRegionFromGate(g: GateConfig): NativeGeofenceRegion {
     name: label,
     displayName: label,
     cooldownMs: g.cooldownMs > 0 ? g.cooldownMs : 0,
+    holdEnabled: Boolean(g.holdEnabled),
+    holdMs: normalizeHoldMs(g.holdMs),
     btRequired: Boolean(g.bluetooth?.required),
     btAddresses: devices
       .map((d) => String(d.address ?? '').trim())
       .filter(Boolean),
     btNames: devices.map((d) => String(d.name ?? '').trim()).filter(Boolean),
-    enabled: g.enabled,
+    enabled: Boolean(g.enabled) && !g.shareDisabled,
   };
 }

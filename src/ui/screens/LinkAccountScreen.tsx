@@ -36,6 +36,7 @@ import { ClipboardApi, KeepAwakeApi } from '../../platform/optionalExpo';
 import { QrCard } from '../components/QrCard';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'LinkAccount'>;
 
@@ -58,6 +59,7 @@ const EMPTY_DEBUG: PollInfo = {
 };
 
 export function LinkAccountScreen({ navigation, route }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const navigationRef = useRef(navigation);
@@ -80,9 +82,9 @@ export function LinkAccountScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     navigation.setOptions({
-      title: addingAnother ? 'Link another PalGate' : 'Link PalGate',
+      title: addingAnother ? t('link.another') : t('nav.linkPalGate'),
     });
-  }, [addingAnother, navigation]);
+  }, [addingAnother, navigation, t]);
 
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<LinkingProgress | null>(null);
@@ -173,6 +175,9 @@ export function LinkAccountScreen({ navigation, route }: Props) {
             if (generation !== generationRef.current) return;
             setDebug(info);
             setStatus({ kind: 'waiting' });
+            console.log(
+              `[GateAuto:link] poll #${info.attempt} phase=${info.phase} http=${info.lastHttpStatus ?? '-'} ${info.lastError ?? info.lastSnippet ?? ''}`,
+            );
           },
         });
 
@@ -184,7 +189,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
         if (controller.signal.aborted) return;
         if (generation !== generationRef.current) return;
         const message =
-          error instanceof Error ? error.message : 'Linking failed. Try again.';
+          error instanceof Error ? error.message : t('link.linkFailed');
         console.log(`[GateAuto:link] failed: ${message}`);
         setStatus({ kind: 'error', message });
         await stopLinkingGuards();
@@ -292,7 +297,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
     const credentials = parseAccountExport(importJson);
     if (!credentials) {
       setImportError(
-        'Need JSON: {"phoneNumber", "sessionToken" (hex), "tokenType"}.',
+        t('link.needJson'),
       );
       return;
     }
@@ -302,14 +307,14 @@ export function LinkAccountScreen({ navigation, route }: Props) {
       await finishWithCredentials(credentials);
     } catch (error) {
       setImportError(
-        error instanceof Error ? error.message : 'Import failed',
+        error instanceof Error ? error.message : t('link.importFailed'),
       );
     }
-  }, [finishWithCredentials, importJson]);
+  }, [finishWithCredentials, importJson, t]);
 
   const pasteFromClipboard = useCallback(async () => {
     if (!ClipboardApi) {
-      setImportError('Long-press the field and choose Paste.');
+      setImportError(t('link.longPressPaste'));
       return;
     }
     const text = await ClipboardApi.getStringAsync();
@@ -317,9 +322,9 @@ export function LinkAccountScreen({ navigation, route }: Props) {
       setImportJson(text.trim());
       setImportError(null);
     } else {
-      setImportError('Clipboard is empty.');
+      setImportError(t('link.clipboardEmpty'));
     }
-  }, []);
+  }, [t]);
 
   const submitPaste = useCallback(async () => {
     setPasteError(null);
@@ -329,7 +334,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
       tokenType: pasteType,
     });
     if (!credentials) {
-      setPasteError('Need phone number, hex session token, and type 0/1/2.');
+      setPasteError(t('link.needFields'));
       return;
     }
     try {
@@ -338,23 +343,10 @@ export function LinkAccountScreen({ navigation, route }: Props) {
       await finishWithCredentials(credentials);
     } catch (error) {
       setPasteError(
-        error instanceof Error ? error.message : 'Paste login failed',
+        error instanceof Error ? error.message : t('link.pasteFailed'),
       );
     }
-  }, [finishWithCredentials, pastePhone, pasteToken, pasteType]);
-
-  const phaseLabel =
-    debug.phase === 'ready'
-      ? 'Ready to scan'
-      : debug.phase === 'polling'
-        ? 'Long-poll in flight'
-        : debug.phase === 'timeout'
-          ? 'Reconnect after hold timeout'
-          : debug.phase === 'linked'
-            ? 'Credentials received'
-            : debug.phase === 'incomplete'
-              ? 'Incomplete body — retrying'
-              : 'Waiting / error';
+  }, [finishWithCredentials, pastePhone, pasteToken, pasteType, t]);
 
   if (alreadyLinked === null) {
     return (
@@ -371,32 +363,26 @@ export function LinkAccountScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Account already linked</Text>
-        <Text style={styles.body}>
-          This phone already has PalGate credentials. Add another system from
-          Gate systems, or import a replacement payload below.
-        </Text>
+        <Text style={styles.title}>{t('link.alreadyTitle')}</Text>
+        <Text style={styles.body}>{t('link.alreadyBody')}</Text>
         {SHOW_EXPORT_UI ? (
           <Pressable
             style={styles.button}
             onPress={() => navigation.navigate('ExportAccount')}
           >
-            <Text style={styles.buttonText}>Export account</Text>
+            <Text style={styles.buttonText}>{t('link.exportAccount')}</Text>
           </Pressable>
         ) : null}
         <Pressable
           style={styles.buttonSecondary}
           onPress={() => navigation.replace('GatesList')}
         >
-          <Text style={styles.buttonSecondaryText}>Go to Gates</Text>
+          <Text style={styles.buttonSecondaryText}>{t('link.goToGates')}</Text>
         </Pressable>
 
         <View style={styles.pasteBox}>
-          <Text style={styles.debugTitle}>Import account (JSON)</Text>
-          <Text style={styles.footnote}>
-            Paste the export JSON from another GateAuto device. Do not share
-            publicly.
-          </Text>
+          <Text style={styles.debugTitle}>{t('link.importJson')}</Text>
+          <Text style={styles.footnote}>{t('link.importFoot')}</Text>
           <TextInput
             style={[styles.input, styles.importInput]}
             placeholder='{"phoneNumber":…,"sessionToken":"…","tokenType":2}'
@@ -414,10 +400,10 @@ export function LinkAccountScreen({ navigation, route }: Props) {
             style={styles.buttonSecondary}
             onPress={() => void pasteFromClipboard()}
           >
-            <Text style={styles.buttonSecondaryText}>Paste from clipboard</Text>
+            <Text style={styles.buttonSecondaryText}>{t('link.pasteClipboard')}</Text>
           </Pressable>
           <Pressable style={styles.button} onPress={() => void submitImport()}>
-            <Text style={styles.buttonText}>Import account</Text>
+            <Text style={styles.buttonText}>{t('link.showImport')}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -431,18 +417,12 @@ export function LinkAccountScreen({ navigation, route }: Props) {
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.title}>
-        {addingAnother ? 'Link another PalGate' : 'Link PalGate account'}
+        {addingAnother ? t('link.another') : t('link.title')}
       </Text>
       <Text style={styles.body}>
-        {addingAnother
-          ? 'Scan a Linked Device QR from a different PalGate account (another neighborhood or home). Keep this screen’s notification, switch to PalGate, scan, then return.'
-          : 'Scan with PalGate on this phone: keep this screen’s notification (“GateAuto linking…”), switch to PalGate, scan the QR, then return. GateAuto runs a short foreground keep-alive so the long-poll can continue (or auto-restarts within ~1s when you come back).'}
+        {addingAnother ? t('link.bodyAnother') : t('link.bodyPrimary')}
       </Text>
-      <Text style={styles.body}>
-        Why emulator used to be required: fully switching apps often killed the
-        waiting GET. This path is the no-emulator workaround. Emulator → Export
-        → Import on this phone still works if you prefer it.
-      </Text>
+      <Text style={styles.body}>{t('link.emulatorNote')}</Text>
 
       {session ? (
         <QrCard value={session.qrPayload} size={320} showValue={false} />
@@ -452,61 +432,40 @@ export function LinkAccountScreen({ navigation, route }: Props) {
 
       {status.kind === 'waiting' && debug.phase === 'polling' ? (
         <Text style={styles.minimizeHint}>
-          Long-poll in flight — you can minimize now and open PalGate to scan.
+          {t('link.minimize')}
         </Text>
       ) : status.kind === 'waiting' ? (
         <Text style={styles.footnote}>
-          Wait until status says “Long-poll in flight”, then minimize and scan
-          in PalGate.
+          {t('link.waitPoll')}
         </Text>
       ) : null}
 
       <View style={styles.statusBox}>
         {status.kind === 'waiting' && (
           <Text style={styles.statusOk}>
-            {phaseLabel} — poll #{debug.attempt || 0}
+            {debug.phase === 'polling'
+              ? t('link.phasePolling')
+              : t('link.phaseReady')}
           </Text>
         )}
         {status.kind === 'verifying' && (
-          <Text style={styles.statusOk}>Linked! Verifying token…</Text>
+          <Text style={styles.statusOk}>{t('link.verifying')}</Text>
         )}
         {status.kind === 'success' && (
-          <Text style={styles.statusOk}>Linked! Continuing…</Text>
+          <Text style={styles.statusOk}>{t('link.success')}</Text>
         )}
         {status.kind === 'error' && (
           <Text style={styles.statusErr}>{status.message}</Text>
         )}
       </View>
 
-      <View style={styles.debugBox}>
-        <Text style={styles.debugTitle}>Debug (live)</Text>
-        <Text style={styles.debugLine}>UUID: {session?.uuid ?? '—'}</Text>
-        <Text style={styles.debugLine}>
-          QR: {session?.qrPayload ?? '—'}
-        </Text>
-        <Text style={styles.debugLine}>Phase: {debug.phase}</Text>
-        <Text style={styles.debugLine}>Poll #: {debug.attempt}</Text>
-        <Text style={styles.debugLine}>
-          HTTP: {debug.lastHttpStatus ?? '— (holding)'}
-        </Text>
-        <Text style={styles.debugLine}>
-          Elapsed: {debug.elapsedMs != null ? `${debug.elapsedMs}ms` : '—'}
-        </Text>
-        <Text style={styles.debugLine}>
-          Last error: {debug.lastError ?? '—'}
-        </Text>
-        <Text style={styles.debugLine}>
-          Last body: {debug.lastSnippet ?? '—'}
-        </Text>
-      </View>
-
       <View style={styles.actions}>
         <Pressable style={styles.button} onPress={startNewQr}>
-          <Text style={styles.buttonText}>New QR</Text>
+          <Text style={styles.buttonText}>{t('link.newQr')}</Text>
         </Pressable>
         <Pressable style={styles.buttonSecondary} onPress={retrySameUuid}>
           <Text style={styles.buttonSecondaryText}>
-            I already scanned — retry poll
+            {t('link.retryPoll')}
           </Text>
         </Pressable>
         <Pressable
@@ -514,7 +473,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
           onPress={() => setShowImport((v) => !v)}
         >
           <Text style={styles.buttonSecondaryText}>
-            {showImport ? 'Hide import account' : 'Import account'}
+            {showImport ? t('link.hideImport') : t('link.showImport')}
           </Text>
         </Pressable>
         <Pressable
@@ -522,19 +481,15 @@ export function LinkAccountScreen({ navigation, route }: Props) {
           onPress={() => setShowPaste((v) => !v)}
         >
           <Text style={styles.buttonSecondaryText}>
-            {showPaste ? 'Hide paste token' : 'Paste token (fields)'}
+            {showPaste ? t('link.hidePaste') : t('link.showPaste')}
           </Text>
         </Pressable>
       </View>
 
       {showImport && (
         <View style={styles.pasteBox}>
-          <Text style={styles.debugTitle}>Import account</Text>
-          <Text style={styles.footnote}>
-            Scan the Export QR with any QR reader (or copy from the other
-            device), then paste the JSON here. Payload is not written to the
-            event log.
-          </Text>
+          <Text style={styles.debugTitle}>{t('link.importTitle')}</Text>
+          <Text style={styles.footnote}>{t('link.importHelp')}</Text>
           <TextInput
             style={[styles.input, styles.importInput]}
             placeholder='{"phoneNumber":…,"sessionToken":"…","tokenType":2}'
@@ -552,10 +507,10 @@ export function LinkAccountScreen({ navigation, route }: Props) {
             style={styles.buttonSecondary}
             onPress={() => void pasteFromClipboard()}
           >
-            <Text style={styles.buttonSecondaryText}>Paste from clipboard</Text>
+            <Text style={styles.buttonSecondaryText}>{t('link.pasteClipboard')}</Text>
           </Pressable>
           <Pressable style={styles.button} onPress={() => void submitImport()}>
-            <Text style={styles.buttonText}>Import & continue</Text>
+            <Text style={styles.buttonText}>{t('link.importContinue')}</Text>
           </Pressable>
         </View>
       )}
@@ -563,11 +518,11 @@ export function LinkAccountScreen({ navigation, route }: Props) {
       {showPaste && (
         <View style={styles.pasteBox}>
           <Text style={styles.debugTitle}>
-            Paste from pylgate / homebridge-cli
+            {t('link.pasteTitle')}
           </Text>
           <TextInput
             style={styles.input}
-            placeholder="Phone number (e.g. 9725…)"
+            placeholder={t('link.phonePlaceholder')}
             placeholderTextColor={colors.muted}
             keyboardType="number-pad"
             value={pastePhone}
@@ -576,7 +531,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
           />
           <TextInput
             style={styles.input}
-            placeholder="Session token (hex)"
+            placeholder={t('link.tokenPlaceholder')}
             placeholderTextColor={colors.muted}
             autoCapitalize="none"
             autoCorrect={false}
@@ -585,7 +540,7 @@ export function LinkAccountScreen({ navigation, route }: Props) {
           />
           <TextInput
             style={styles.input}
-            placeholder="Token type (0/1/2, default 2)"
+            placeholder={t('link.typePlaceholder')}
             placeholderTextColor={colors.muted}
             keyboardType="number-pad"
             value={pasteType}
@@ -595,16 +550,13 @@ export function LinkAccountScreen({ navigation, route }: Props) {
             <Text style={styles.statusErr}>{pasteError}</Text>
           ) : null}
           <Pressable style={styles.button} onPress={submitPaste}>
-            <Text style={styles.buttonText}>Save pasted credentials</Text>
+            <Text style={styles.buttonText}>{t('link.savePaste')}</Text>
           </Pressable>
         </View>
       )}
 
       <Text style={styles.footnote}>
-        If PalGate already shows a linked device for a previous scan, remove it
-        there, tap New QR here, wait for “Long-poll in flight”, then scan.
-        Allow location while linking — Android uses it only for the keep-alive
-        notification (not for gate opens).
+        {t('link.footnote')}
       </Text>
     </ScrollView>
   );

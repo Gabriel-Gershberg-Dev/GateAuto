@@ -8,14 +8,10 @@ import {
   type LogEvent,
 } from '../../data/eventLog';
 import { importNativeOpenEvents } from '../../platform/keepAliveAlarm';
-import { displayGateName, loadGates } from '../../data/gatesStore';
-import {
-  clearAllSafetyLocks,
-  getActiveLocksBanner,
-} from '../../data/openSafetyLock';
 import { BarrierMark } from '../components/BarrierMark';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 function formatTs(ts: number): string {
   try {
@@ -51,22 +47,15 @@ function kindColor(kind: LogEvent['kind'], c: ThemeColors): string {
 }
 
 export function MonitoringScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [events, setEvents] = useState<LogEvent[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [safetyBanner, setSafetyBanner] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     await importNativeOpenEvents();
     const all = await loadEvents();
     setEvents(all.filter(isMainMonitoringEvent));
-    const gates = await loadGates();
-    const labels: Record<string, string> = {};
-    for (const g of gates) {
-      labels[g.id] = displayGateName(g);
-    }
-    setSafetyBanner(await getActiveLocksBanner(labels));
   }, []);
 
   useFocusEffect(
@@ -75,32 +64,10 @@ export function MonitoringScreen() {
     }, [refresh]),
   );
 
-  const onClearSafetyLocks = async () => {
-    setBusy(true);
-    try {
-      await clearAllSafetyLocks();
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
-      {safetyBanner ? (
-        <View style={styles.lockBox}>
-          <Text style={styles.lockText}>{safetyBanner}</Text>
-          <Pressable
-            onPress={() => void onClearSafetyLocks()}
-            disabled={busy}
-          >
-            <Text style={styles.clear}>Clear safety locks</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
       <View style={styles.logHeader}>
-        <Text style={styles.section}>What happened</Text>
+        <Text style={styles.section}>{t('log.whatHappened')}</Text>
         <Pressable
           onPress={() => {
             void (async () => {
@@ -109,7 +76,7 @@ export function MonitoringScreen() {
             })();
           }}
         >
-          <Text style={styles.clear}>Clear</Text>
+          <Text style={styles.clear}>{t('log.clear')}</Text>
         </Pressable>
       </View>
 
@@ -121,8 +88,7 @@ export function MonitoringScreen() {
           <View style={styles.empty}>
             <BarrierMark size={48} color={colors.muted} />
             <Text style={styles.meta}>
-              No auto-open events yet. Turn Auto-open on in Settings, then
-              arrive at a gate.
+              {t('log.empty')}
             </Text>
           </View>
         }
@@ -133,7 +99,7 @@ export function MonitoringScreen() {
             typeof item.distanceM === 'number' &&
             Number.isFinite(item.distanceM)
           ) {
-            geoBits.push(`${item.distanceM.toFixed(0)}m away`);
+            geoBits.push(t('log.away', { meters: item.distanceM.toFixed(0) }));
           }
           if (
             typeof item.accuracyM === 'number' &&
@@ -183,17 +149,6 @@ function createStyles(c: ThemeColors) {
       alignItems: 'center',
       gap: spacing.md,
       paddingTop: spacing.lg,
-    },
-    lockBox: {
-      backgroundColor: c.warningBg,
-      padding: spacing.sm,
-      borderRadius: radii.sm,
-      gap: spacing.sm,
-    },
-    lockText: {
-      fontSize: 13,
-      color: c.warning,
-      fontWeight: '600',
     },
     logHeader: {
       flexDirection: 'row',

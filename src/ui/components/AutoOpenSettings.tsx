@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { displayGateName, loadGates, setMonitoringEnabled } from '../../data/gatesStore';
-import { getActiveLocksBanner } from '../../data/openSafetyLock';
+import { getActiveLocks } from '../../data/openSafetyLock';
 import {
   getMonitoringArmStatus,
   type MonitoringArmStatus,
@@ -17,9 +17,11 @@ import { BarrierMark } from './BarrierMark';
 import { InfoSheet } from './ConfirmSheet';
 import { IconInfo } from '../icons';
 import { useTheme } from '../ThemeProvider';
-import { radii, spacing, type ThemeColors } from '../theme';
+import { paddedCardStyle, radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 export function AutoOpenSettings() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [enabled, setEnabled] = useState(false);
@@ -41,8 +43,26 @@ export function AutoOpenSettings() {
     for (const g of gates) {
       labels[g.id] = displayGateName(g);
     }
-    setLockBanner(await getActiveLocksBanner(labels));
-  }, []);
+    const locks = await getActiveLocks(labels);
+    if (locks.length === 0) {
+      setLockBanner(null);
+    } else if (locks.length === 1) {
+      const lock = locks[0];
+      const name = labels[lock.gateId]?.trim() ?? '';
+      const who = name ? `${name}: ` : '';
+      const mins = Math.max(1, Math.ceil(lock.remainingMs / 60_000));
+      setLockBanner(t('safety.lockBanner', { who, mins }));
+    } else {
+      const list = locks
+        .map((lock) => {
+          const mins = Math.max(1, Math.ceil(lock.remainingMs / 60_000));
+          const label = labels[lock.gateId]?.trim() || lock.gateId;
+          return t('safety.minsItem', { label, mins });
+        })
+        .join(' · ');
+      setLockBanner(t('safety.lockBannerMulti', { list }));
+    }
+  }, [t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,9 +104,9 @@ export function AutoOpenSettings() {
     armStatus.geofencingActive &&
     armStatus.btWatchOn;
 
-  let status = 'Off';
-  if (reallyArmed) status = 'Armed';
-  else if (enabled) status = 'On — not fully armed';
+  let status = t('autoOpen.off');
+  if (reallyArmed) status = t('autoOpen.armed');
+  else if (enabled) status = t('autoOpen.onNotArmed');
 
   if (gateCount === 0) return null;
 
@@ -97,17 +117,17 @@ export function AutoOpenSettings() {
           <BarrierMark watching={enabled} size={28} />
           <View style={styles.copy}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>Auto-open</Text>
+              <Text style={styles.title}>{t('autoOpen.title')}</Text>
               <Pressable
                 onPress={() => setInfoOpen(true)}
                 hitSlop={10}
-                accessibilityLabel="How auto-open works"
+                accessibilityLabel={t('autoOpen.how')}
                 style={styles.infoBtn}
               >
                 <IconInfo color={colors.muted} size={18} />
               </Pressable>
             </View>
-            <Text style={styles.meta}>Opens when you arrive</Text>
+            <Text style={styles.meta}>{t('autoOpen.meta')}</Text>
           </View>
           <Switch
             value={enabled}
@@ -124,9 +144,7 @@ export function AutoOpenSettings() {
             ]}
           >
             {status}
-            {getGeofencingApi() == null
-              ? ' · geofencing not wired in this build'
-              : ''}
+            {getGeofencingApi() == null ? t('autoOpen.notWired') : ''}
           </Text>
         ) : null}
         {lockBanner ? (
@@ -135,8 +153,8 @@ export function AutoOpenSettings() {
       </View>
       <InfoSheet
         visible={infoOpen}
-        title="Auto-open"
-        message="Opens the gate when you arrive, leave, or connect the car. While Auto-open is on, Android keeps a pinned “Searching for nearby gates” notice (same idea as PalGate — it cannot be swiped away). After an open, the next check is at that gate’s cooldown — not a 2-minute GPS batch."
+        title={t('autoOpen.title')}
+        message={t('autoOpen.info')}
         onDismiss={() => setInfoOpen(false)}
       />
     </>
@@ -146,12 +164,8 @@ export function AutoOpenSettings() {
 function createStyles(c: ThemeColors) {
   return StyleSheet.create({
     card: {
-      backgroundColor: c.surface,
-      borderRadius: radii.md,
-      padding: spacing.md,
+      ...paddedCardStyle(c),
       gap: 8,
-      borderWidth: 1,
-      borderColor: c.border,
     },
     row: {
       flexDirection: 'row',

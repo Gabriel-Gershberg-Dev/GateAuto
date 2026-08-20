@@ -23,6 +23,8 @@ function gate(id: string, origin: 'linked' | 'shared' = 'linked'): RecoveredGate
     lng: 34.85,
     radiusMeters: 25,
     cooldownMs: 20_000,
+    holdEnabled: false,
+    holdMs: 0,
     bluetooth: { required: true, devices: [{ name: 'car', address: 'AA:BB' }] },
     lastOpenedAt: null,
     lastResult: null,

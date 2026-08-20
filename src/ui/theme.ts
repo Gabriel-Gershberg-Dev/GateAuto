@@ -35,18 +35,18 @@ export type ThemeColors = {
 };
 
 /**
- * Light: cool mist over white cards — night-drive HUD.
- * Accent: deep cabin teal from the GateAuto mark (`#1A4A47`).
+ * Light: cool mist, white cards with real shade — cabin teal from the mark.
+ * Default appearance. Cards sit above `#E7EEEC` so they read as surfaces.
  */
 export const lightColors: ThemeColors = {
-  background: '#F3F6F5',
+  background: '#E7EEEC',
   surface: '#FFFFFF',
   text: '#10141A',
-  muted: '#5A6B68',
+  muted: '#4E5F5C',
   primary: '#1A4A47',
   primaryMuted: '#D4E4E2',
   primaryOn: '#FFFFFF',
-  border: '#E2E8E6',
+  border: '#D5E0DD',
   danger: '#E11D48',
   dangerBg: '#FDE8EE',
   warning: '#B45309',
@@ -62,45 +62,45 @@ export const lightColors: ThemeColors = {
   failBadge: '#BE123C',
   failBadgeBg: '#FECDD3',
   switchThumbOff: '#F8FAFC',
-  shadow: '#10141A',
+  shadow: '#0B1210',
   mapFill: 'rgba(26, 74, 71, 0.16)',
-  surfacePressed: '#E6EEEC',
+  surfacePressed: '#DCE6E3',
   divider: 'rgba(16, 20, 26, 0.08)',
   overlay: 'rgba(16, 20, 26, 0.42)',
 };
 
 /**
- * Dark: ink field, lifted cards, cabin-teal as a lamp — not a washed room.
- * Icon teal (#0D3D42) stays the identity; #2FBFB3 is that same cabin, lit.
+ * Dark: ink field, lifted charcoal cards, cabin teal as a lamp.
+ * Not electric blue, not a muddy wash — high contrast, readable type.
  */
 export const darkColors: ThemeColors = {
-  background: '#030607',
-  surface: '#171F21',
-  text: '#F4FBF9',
-  muted: '#C5D6D2',
-  primary: '#2FBFB3',
-  primaryMuted: '#0E2F2C',
-  primaryOn: '#031614',
-  border: '#4A6864',
-  danger: '#FF7A8A',
+  background: '#050808',
+  surface: '#1C2628',
+  text: '#F6FFFC',
+  muted: '#9BB0AB',
+  primary: '#3AA99C',
+  primaryMuted: '#14302E',
+  primaryOn: '#041210',
+  border: '#3E5854',
+  danger: '#FF8A96',
   dangerBg: '#3A1520',
   warning: '#F5C84B',
   warningBg: '#3A2E0E',
-  success: '#3EE89A',
+  success: '#4AD89A',
   successBg: '#0F2E22',
   successBorder: '#2A7A58',
   successBadge: '#B6F5D4',
   successBadgeBg: '#164A36',
-  fail: '#FF7A8A',
+  fail: '#FF8A96',
   failBg: '#3A1520',
   failBorder: '#7A3544',
   failBadge: '#FFD0D6',
   failBadgeBg: '#4A1C28',
   switchThumbOff: '#8A9B98',
   shadow: '#000000',
-  mapFill: 'rgba(47, 191, 179, 0.28)',
-  surfacePressed: '#222C2E',
-  divider: 'rgba(244, 251, 249, 0.16)',
+  mapFill: 'rgba(58, 169, 156, 0.28)',
+  surfacePressed: '#273234',
+  divider: 'rgba(246, 255, 252, 0.12)',
   overlay: 'rgba(0, 0, 0, 0.72)',
 };
 
@@ -130,13 +130,22 @@ export function groupStyle(c: ThemeColors) {
     ...Platform.select({
       ios: {
         shadowColor: c.shadow,
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 8 },
       },
-      android: { elevation: 3 },
+      android: { elevation: 5 },
       default: {},
     }),
+  };
+}
+
+/** Settings middle cards — same shade as Group, chips may overflow. */
+export function paddedCardStyle(c: ThemeColors) {
+  return {
+    ...groupStyle(c),
+    overflow: 'visible' as const,
+    padding: spacing.md,
   };
 }
 

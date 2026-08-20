@@ -13,6 +13,8 @@ export type SharedGatePayload = {
   lng: number | null;
   radiusMeters: number;
   cooldownMs: number;
+  holdEnabled: boolean;
+  holdMs: number;
   bluetooth: {
     required: boolean;
     devices: Array<{ name?: string; address?: string }>;
@@ -50,9 +52,10 @@ export function isValidInviteCode(code: string): boolean {
 }
 
 /** Firestore invite payload bounds (must match firestore.rules). */
-export const INVITE_RADIUS_MIN_M = 25;
+export const INVITE_RADIUS_MIN_M = 10;
 export const INVITE_RADIUS_MAX_M = 250;
 export const INVITE_COOLDOWN_MAX_MS = 3_600_000;
+export const INVITE_HOLD_MAX_MS = 90_000;
 
 export function clampInviteRadiusMeters(raw: unknown): number {
   const n = Number(raw);
@@ -66,8 +69,82 @@ export function clampInviteCooldownMs(raw: unknown): number {
   return Math.min(INVITE_COOLDOWN_MAX_MS, Math.max(0, Math.round(n)));
 }
 
+export function clampInviteHoldMs(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(INVITE_HOLD_MAX_MS, Math.max(0, Math.round(n)));
+}
+
 export function sharedGateId(code: string, deviceId: string): string {
   return `share:${code}:${deviceId}`;
+}
+
+/** PalGate device id — never a local row id like `share:CODE:…`. */
+export function palGateDeviceKey(row: {
+  deviceId?: string | null;
+  id?: string | null;
+}): string {
+  const deviceId = String(row.deviceId ?? '').trim();
+  if (deviceId) return deviceId;
+  const id = String(row.id ?? '').trim();
+  if (id && !id.startsWith('share:')) return id;
+  return '';
+}
+
+export function existingPalGateDeviceIds(
+  gates: Array<{ deviceId?: string | null; id?: string | null }>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const gate of gates) {
+    const key = palGateDeviceKey(gate);
+    if (key) out.add(key);
+  }
+  return out;
+}
+
+export type InviteGatePartition = {
+  alreadyHave: SharedGatePayload[];
+  toAdd: SharedGatePayload[];
+};
+
+export function partitionInviteGates(
+  invited: SharedGatePayload[],
+  existing: Array<{ deviceId?: string | null; id?: string | null }>,
+): InviteGatePartition {
+  const owned = existingPalGateDeviceIds(existing);
+  const alreadyHave: SharedGatePayload[] = [];
+  const toAdd: SharedGatePayload[] = [];
+  const seen = new Set<string>();
+  for (const gate of invited) {
+    const key = palGateDeviceKey(gate);
+    if (!key || seen.has(key)) {
+      if (key && owned.has(key)) alreadyHave.push(gate);
+      continue;
+    }
+    seen.add(key);
+    if (owned.has(key)) alreadyHave.push(gate);
+    else toAdd.push(gate);
+  }
+  return { alreadyHave, toAdd };
+}
+
+export function inviteDisplayName(gate: SharedGatePayload): string {
+  return (
+    gate.nameOverride?.trim() || gate.name?.trim() || gate.deviceId || 'Gate'
+  );
+}
+
+/** Recipients never inherit the sender’s car Bluetooth require list. */
+export function shareBluetoothOff(): SharedGatePayload['bluetooth'] {
+  return { required: false, devices: [] };
+}
+
+/** Clamp a gate for Firestore, stripping Bluetooth-required from the share. */
+export function toShareGateMap(gate: SharedGatePayload): SharedGatePayload {
+  return {
+    ...toInviteGateMap(gate),
+    bluetooth: shareBluetoothOff(),
+  };
 }
 
 export function parseSharedGate(raw: unknown): SharedGatePayload {
@@ -83,6 +160,8 @@ export function parseSharedGate(raw: unknown): SharedGatePayload {
     cooldownMs: clampInviteCooldownMs(
       typeof g.cooldownMs === 'number' ? g.cooldownMs : 30_000,
     ),
+    holdEnabled: Boolean(g.holdEnabled),
+    holdMs: clampInviteHoldMs(g.holdMs),
     bluetooth: {
       required: Boolean(
         g.bluetooth &&
@@ -135,6 +214,44 @@ export function isRealFirebaseAccount(input: {
   return false;
 }
 
+const PLACEHOLDER_NAMES = new Set(['guest', 'signed in']);
+
+function usablePersonName(raw?: string | null): string {
+  const name = raw?.trim() ?? '';
+  if (!name || PLACEHOLDER_NAMES.has(name.toLowerCase())) return '';
+  return name.slice(0, 80);
+}
+
+/**
+ * Name shown in Settings: signup Name, then Google profile, then cloud.
+ * Does not invent the email local-part (that raced over the registered name).
+ */
+export function resolveRegisteredDisplayName(input: {
+  explicit?: string | null;
+  authDisplayName?: string | null;
+  cloudDisplayName?: string | null;
+  googleDisplayName?: string | null;
+  email?: string | null;
+  isRealAccount: boolean;
+}): string {
+  const explicit = usablePersonName(input.explicit);
+  if (explicit) return explicit;
+  const emailLocal = input.email?.split('@')[0]?.trim() ?? '';
+  const authName = usablePersonName(input.authDisplayName);
+  const cloudName = usablePersonName(input.cloudDisplayName);
+  const googleName = usablePersonName(input.googleDisplayName);
+  const authIsEmailLocal =
+    Boolean(emailLocal) &&
+    authName.toLowerCase() === emailLocal.toLowerCase();
+  if (cloudName && authIsEmailLocal && cloudName.toLowerCase() !== authName.toLowerCase()) {
+    return cloudName;
+  }
+  if (authName && !authIsEmailLocal) return authName;
+  if (cloudName) return cloudName;
+  if (googleName) return googleName;
+  return input.isRealAccount ? 'Signed in' : 'Guest';
+}
+
 /** Settings / share copy: Guest vs Google/email. Ignores a leftover "Guest" name. */
 export function accountHeading(input: {
   isRealAccount: boolean;
@@ -180,6 +297,8 @@ export function toInviteGateMap(gate: SharedGatePayload): SharedGatePayload {
     lng: finiteCoord(gate.lng, -180, 180),
     radiusMeters: clampInviteRadiusMeters(gate.radiusMeters),
     cooldownMs: clampInviteCooldownMs(gate.cooldownMs),
+    holdEnabled: Boolean(gate.holdEnabled),
+    holdMs: clampInviteHoldMs(gate.holdMs),
     bluetooth: {
       required: Boolean(gate.bluetooth?.required),
       devices: (gate.bluetooth?.devices ?? []).slice(0, 12).map((d) => ({

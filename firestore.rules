@@ -46,11 +46,14 @@ service cloud.firestore {
     //   - name, nameOverride: string|null
     //   - enabled: bool (auto-open)
     //   - lat, lng: number|null
-    //   - radiusMeters: number 25-150
+    //   - radiusMeters: number 10-150
     //   - cooldownMs: number 0-3600000
+    //   - holdEnabled: bool (auto-open hold pulses)
+    //   - holdMs: number 0-90000
     //   - bluetooth: { required, devices[{name?,address?}] }
     //   - lastOpenedAt: number|null
     //   - lastResult: string|null
+    //   - shareDisabled: bool — owner unlinked PalGate; recipient copy stays
     //   - sortIndex: number 0-63
     //   - createdAt, updatedAt: timestamp
     // Owner Google/email only (isSharingAccount). Recipients get a copy
@@ -174,7 +177,8 @@ service cloud.firestore {
           'displayName', 'deviceId', 'systemId', 'origin',
           'sharedInviteCode', 'sharedFromName', 'name', 'nameOverride',
           'enabled', 'lat', 'lng', 'radiusMeters', 'cooldownMs',
-          'bluetooth', 'lastOpenedAt', 'lastResult', 'sortIndex',
+          'holdEnabled', 'holdMs',
+          'bluetooth', 'lastOpenedAt', 'lastResult', 'shareDisabled', 'sortIndex',
           'createdAt', 'updatedAt'
         ]) &&
         data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
@@ -188,11 +192,14 @@ service cloud.firestore {
         data.enabled is bool &&
         (data.lat == null || (data.lat is number && data.lat >= -90 && data.lat <= 90)) &&
         (data.lng == null || (data.lng is number && data.lng >= -180 && data.lng <= 180)) &&
-        data.radiusMeters is number && data.radiusMeters >= 25 && data.radiusMeters <= 150 &&
+        data.radiusMeters is number && data.radiusMeters >= 10 && data.radiusMeters <= 150 &&
         data.cooldownMs is number && data.cooldownMs >= 0 && data.cooldownMs <= 3600000 &&
+        data.holdEnabled is bool &&
+        data.holdMs is number && data.holdMs >= 0 && data.holdMs <= 90000 &&
         isValidUserBluetooth(data.bluetooth) &&
         (data.lastOpenedAt == null || (data.lastOpenedAt is number && data.lastOpenedAt >= 0)) &&
         (data.lastResult == null || (data.lastResult is string && data.lastResult.size() <= 200)) &&
+        data.shareDisabled is bool &&
         data.sortIndex is number && data.sortIndex >= 0 && data.sortIndex <= 63 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;

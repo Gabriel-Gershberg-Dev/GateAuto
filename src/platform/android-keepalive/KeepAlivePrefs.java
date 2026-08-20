@@ -21,7 +21,15 @@ public final class KeepAlivePrefs {
   private static final String KEY_TOKEN_TYPE = "tokenType";
   private static final String KEY_GATE_CREDS = "gateCredentialsJson";
   private static final String KEY_EVENTS = "nativeEventsJson";
+  private static final String KEY_BURST_COUNT = "burstCount";
+  private static final String KEY_GATE_LOCK_MS = "gateLockMs";
   private static final int MAX_NATIVE_EVENTS = 40;
+  private static final int MIN_BURST_COUNT = 3;
+  private static final int MAX_BURST_COUNT = 20;
+  private static final int DEFAULT_BURST_COUNT = 3;
+  private static final long MIN_GATE_LOCK_MS = 5L * 60L * 1000L;
+  private static final long MAX_GATE_LOCK_MS = 120L * 60L * 1000L;
+  private static final long DEFAULT_GATE_LOCK_MS = 15L * 60L * 1000L;
   private static final Set<String> IN_FLIGHT = new HashSet<>();
   private static volatile long geofenceSyncAtMem;
 
@@ -191,6 +199,69 @@ public final class KeepAlivePrefs {
     prefs(context).edit().putLong("opened:" + gateId, ts).apply();
   }
 
+  public static long holdUntil(Context context, String deviceId) {
+    if (deviceId == null || deviceId.isEmpty()) return 0L;
+    return prefs(context).getLong("holdUntil:" + deviceId, 0L);
+  }
+
+  public static void setHoldUntil(Context context, String deviceId, long ts) {
+    if (deviceId == null || deviceId.isEmpty()) return;
+    prefs(context).edit().putLong("holdUntil:" + deviceId, ts).commit();
+  }
+
+  public static boolean isHoldActive(Context context, String deviceId) {
+    return holdUntil(context, deviceId) > System.currentTimeMillis();
+  }
+
+  public static String holdGateId(Context context, String deviceId) {
+    if (deviceId == null || deviceId.isEmpty()) return "";
+    return prefs(context).getString("holdGate:" + deviceId, "");
+  }
+
+  public static void setHoldGateId(Context context, String deviceId, String gateId) {
+    if (deviceId == null || deviceId.isEmpty()) return;
+    prefs(context)
+      .edit()
+      .putString("holdGate:" + deviceId, gateId == null ? "" : gateId)
+      .apply();
+  }
+
+  public static long lastHoldPulseAt(Context context, String deviceId) {
+    if (deviceId == null || deviceId.isEmpty()) return 0L;
+    return prefs(context).getLong("holdPulse:" + deviceId, 0L);
+  }
+
+  public static void setLastHoldPulseAt(Context context, String deviceId, long ts) {
+    if (deviceId == null || deviceId.isEmpty()) return;
+    prefs(context).edit().putLong("holdPulse:" + deviceId, ts).apply();
+  }
+
+  public static void clearHold(Context context, String deviceId) {
+    if (deviceId == null || deviceId.isEmpty()) return;
+    prefs(context)
+      .edit()
+      .remove("holdUntil:" + deviceId)
+      .remove("holdGate:" + deviceId)
+      .remove("holdPulse:" + deviceId)
+      .apply();
+  }
+
+  public static void clearAllHolds(Context context) {
+    SharedPreferences p = prefs(context);
+    SharedPreferences.Editor ed = p.edit();
+    boolean any = false;
+    for (String k : p.getAll().keySet()) {
+      if (k != null
+        && (k.startsWith("holdUntil:")
+          || k.startsWith("holdGate:")
+          || k.startsWith("holdPulse:"))) {
+        ed.remove(k);
+        any = true;
+      }
+    }
+    if (any) ed.apply();
+  }
+
   public static long lockUntil(Context context, String gateId) {
     if (gateId == null || gateId.isEmpty()) return 0L;
     return prefs(context).getLong("lock:" + gateId, 0L);
@@ -220,13 +291,47 @@ public final class KeepAlivePrefs {
     long now = System.currentTimeMillis();
     long lock = lockUntil(context, gateId);
     if (lock > now) return false;
+    JSONObject gate = GeofenceRegistrar.gateById(context, gateId);
+    String deviceId =
+      gate != null ? gate.optString("deviceId", gateId).trim() : gateId;
+    if (deviceId.isEmpty()) deviceId = gateId;
+    long holdUntilMs = holdUntil(context, deviceId);
     long last = lastOpenedAt(context, gateId);
-    if (cooldownMs > 0 && last > 0 && now - last < cooldownMs) return false;
+    long cooldownStart = Math.max(last, holdUntilMs);
+    if (holdUntilMs <= now) {
+      if (cooldownMs > 0 && cooldownStart > 0 && now - cooldownStart < cooldownMs) {
+        return false;
+      }
+    }
     if (!IN_FLIGHT.add(gateId)) return false;
     return true;
   }
 
-  /** @return true if this auto-open newly engaged the 40m safety lock */
+  public static int burstCount(Context context) {
+    int n = prefs(context).getInt(KEY_BURST_COUNT, DEFAULT_BURST_COUNT);
+    if (n < MIN_BURST_COUNT) return MIN_BURST_COUNT;
+    if (n > MAX_BURST_COUNT) return MAX_BURST_COUNT;
+    return n;
+  }
+
+  public static long gateLockMs(Context context) {
+    long ms = prefs(context).getLong(KEY_GATE_LOCK_MS, DEFAULT_GATE_LOCK_MS);
+    if (ms < MIN_GATE_LOCK_MS) return MIN_GATE_LOCK_MS;
+    if (ms > MAX_GATE_LOCK_MS) return MAX_GATE_LOCK_MS;
+    return ms;
+  }
+
+  public static void setSafetyLockSettings(Context context, int burstCount, long gateLockMs) {
+    int n = burstCount;
+    if (n < MIN_BURST_COUNT) n = MIN_BURST_COUNT;
+    if (n > MAX_BURST_COUNT) n = MAX_BURST_COUNT;
+    long ms = gateLockMs;
+    if (ms < MIN_GATE_LOCK_MS) ms = MIN_GATE_LOCK_MS;
+    if (ms > MAX_GATE_LOCK_MS) ms = MAX_GATE_LOCK_MS;
+    prefs(context).edit().putInt(KEY_BURST_COUNT, n).putLong(KEY_GATE_LOCK_MS, ms).apply();
+  }
+
+  /** @return true if this auto-open newly engaged the safety lock */
   public static synchronized boolean markOpened(Context context, String gateId) {
     if (gateId == null || gateId.isEmpty()) return false;
     long now = System.currentTimeMillis();
@@ -314,11 +419,9 @@ public final class KeepAlivePrefs {
     ed.apply();
   }
 
-  private static final int BURST_COUNT = 4;
   private static final long BURST_WINDOW_MS = 2 * 60 * 1000L;
-  private static final long GATE_LOCK_MS = 40 * 60 * 1000L;
 
-  /** @return true if this open newly engaged the 40m lock */
+  /** @return true if this open newly engaged the safety lock */
   private static boolean applyBurst(Context context, String gateId, long now) {
     String csv = burstCsv(context, gateId);
     StringBuilder next = new StringBuilder();
@@ -341,10 +444,11 @@ public final class KeepAlivePrefs {
     next.append(now);
     count++;
     setBurstCsv(context, gateId, next.toString());
-    if (count >= BURST_COUNT) {
+    int limit = burstCount(context);
+    if (count >= limit) {
       long existing = lockUntil(context, gateId);
       if (existing <= now) {
-        setLockUntil(context, gateId, now + GATE_LOCK_MS);
+        setLockUntil(context, gateId, now + gateLockMs(context));
         return true;
       }
     }

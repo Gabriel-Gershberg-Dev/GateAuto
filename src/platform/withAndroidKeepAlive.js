@@ -85,6 +85,7 @@ function withKeepAliveManifest(config) {
           action: [
             { $: { 'android:name': 'com.gateauto.app.KEEPALIVE_ALARM' } },
             { $: { 'android:name': 'com.gateauto.app.COOLDOWN_WAKE' } },
+            { $: { 'android:name': 'com.gateauto.app.HOLD_PULSE' } },
           ],
         },
       ],
@@ -96,11 +97,11 @@ function withKeepAliveManifest(config) {
     if (
       keepAliveReceiver &&
       !keepAliveActions.some(
-        (a) => a?.$?.['android:name'] === 'com.gateauto.app.COOLDOWN_WAKE',
+        (a) => a?.$?.['android:name'] === 'com.gateauto.app.HOLD_PULSE',
       )
     ) {
       keepAliveActions.push({
-        $: { 'android:name': 'com.gateauto.app.COOLDOWN_WAKE' },
+        $: { 'android:name': 'com.gateauto.app.HOLD_PULSE' },
       });
       keepAliveReceiver['intent-filter'][0].action = keepAliveActions;
     }
@@ -220,5 +221,5 @@ function withAndroidKeepAlive(config) {
 module.exports = createRunOncePlugin(
   withAndroidKeepAlive,
   'gateauto-android-keep-alive',
-  '1.7.0',
+  '1.8.0',
 );

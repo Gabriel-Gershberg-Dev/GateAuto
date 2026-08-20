@@ -16,6 +16,7 @@ import { appendEvent } from '../../data/eventLog';
 import {
   DEFAULT_COOLDOWN_MS,
   DEFAULT_COOLDOWN_SECONDS,
+  DEFAULT_HOLD_SECONDS,
   displayGateName,
   getGate,
   upsertGate,
@@ -30,6 +31,8 @@ import {
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { openGate, PalGateApiError } from '../../palgate/api';
 import { BusySheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
+import { CooldownPicker } from '../components/CooldownPicker';
+import { HoldPicker } from '../components/HoldPicker';
 import { GateLocationPicker } from '../components/GateLocationPicker';
 import { hasGoogleMapsApiKey } from '../components/GateMap';
 import { RadiusSlider } from '../components/RadiusSlider';
@@ -37,6 +40,7 @@ import { StreetViewSheet } from '../components/StreetViewSheet';
 import { IconPin } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GateEditor'>;
 
@@ -66,6 +70,8 @@ function editorKey(g: GateConfig): string {
     lng: g.lng,
     radiusMeters: g.radiusMeters,
     cooldownMs: g.cooldownMs,
+    holdEnabled: g.holdEnabled,
+    holdMs: g.holdMs,
     bluetooth: g.bluetooth,
   });
 }
@@ -115,6 +121,7 @@ function toGateBtDevice(device: ConnectedBtDevice): GateBluetoothDevice | null {
 }
 
 export function GateEditorScreen({ navigation, route }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { gateId } = route.params;
@@ -126,6 +133,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
   const [lngText, setLngText] = useState('');
   const [radiusMeters, setRadiusMeters] = useState(50);
   const [cooldownSeconds, setCooldownSeconds] = useState(DEFAULT_COOLDOWN_SECONDS);
+  const [holdEnabled, setHoldEnabled] = useState(false);
+  const [holdSeconds, setHoldSeconds] = useState(DEFAULT_HOLD_SECONDS);
   const [btRequired, setBtRequired] = useState(false);
   const [btDevices, setBtDevices] = useState<GateBluetoothDevice[]>([]);
   const [btPickerOpen, setBtPickerOpen] = useState(false);
@@ -156,8 +165,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
       const g = await getGate(gateId);
       if (!g) {
         setInfo({
-          title: 'Gate not found',
-          message: 'Returning to the list.',
+          title: t('editor.notFound'),
+          message: t('editor.returning'),
         });
         navigation.goBack();
         return;
@@ -171,6 +180,10 @@ export function GateEditorScreen({ navigation, route }: Props) {
       setRadiusMeters(g.radiusMeters);
       setCooldownSeconds(
         Math.max(0, Math.round(g.cooldownMs / 1000)) || DEFAULT_COOLDOWN_SECONDS,
+      );
+      setHoldEnabled(Boolean(g.holdEnabled));
+      setHoldSeconds(
+        Math.max(0, Math.round(g.holdMs / 1000)) || DEFAULT_HOLD_SECONDS,
       );
       setBtRequired(g.bluetooth.required);
       setBtDevices(g.bluetooth.devices ?? []);
@@ -237,8 +250,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setInfo({
-          title: 'Location needed',
-          message: 'Allow location to place the gate pin.',
+          title: t('editor.locNeeded'),
+          message: t('editor.locNeededMsg'),
         });
         return;
       }
@@ -254,16 +267,16 @@ export function GateEditorScreen({ navigation, route }: Props) {
           });
       if (!pos) {
         setInfo({
-          title: 'Location',
-          message: 'Couldn’t read GPS. Try again outdoors.',
+          title: t('editor.locNeeded'),
+          message: t('editor.gpsFail'),
         });
         return;
       }
       setCoords(pos.coords.latitude, pos.coords.longitude);
     } catch {
       setInfo({
-        title: 'Location',
-        message: 'Couldn’t read GPS. Try again outdoors.',
+          title: t('editor.locNeeded'),
+          message: t('editor.gpsFail'),
       });
     } finally {
       setLocating(false);
@@ -296,16 +309,14 @@ export function GateEditorScreen({ navigation, route }: Props) {
       setBtBonded(lists.bonded);
       if (lists.connected.length === 0 && lists.bonded.length === 0) {
         setInfo({
-          title: 'Bluetooth',
-          message:
-            'No connected or previously paired Bluetooth devices found. Connect/pair the car in Android Bluetooth settings and grant Nearby devices permission. (Dev client required for native BT.)',
+          title: t('editor.btTitle'),
+          message: t('editor.btNone'),
         });
       }
     } catch {
       setInfo({
-        title: 'Bluetooth',
-        message:
-          'Car Bluetooth matching is unavailable in this build. Use a development client with native Bluetooth.',
+        title: t('editor.btTitle'),
+        message: t('editor.btUnavailable'),
       });
     } finally {
       setBtPickerLoading(false);
@@ -335,6 +346,10 @@ export function GateEditorScreen({ navigation, route }: Props) {
     if (!gate) return null;
     const cooldownMs =
       Math.max(0, Math.round(cooldownSeconds * 1000)) || DEFAULT_COOLDOWN_MS;
+    const holdMs = Math.min(
+      90_000,
+      Math.max(0, Math.round(holdSeconds * 1000)),
+    );
     const trimmed = name.trim();
     const apiName = gate.name.trim() || gate.deviceId;
     const nameOverride =
@@ -347,6 +362,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
       lng,
       radiusMeters,
       cooldownMs,
+      holdEnabled,
+      holdMs: holdEnabled ? holdMs || DEFAULT_HOLD_SECONDS * 1000 : holdMs,
       bluetooth: {
         required: btRequired,
         devices: btDevices,
@@ -359,6 +376,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
     lng,
     radiusMeters,
     cooldownSeconds,
+    holdEnabled,
+    holdSeconds,
     btRequired,
     btDevices,
   ]);
@@ -379,7 +398,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [name, radiusMeters, cooldownSeconds, btRequired, btDevices, persistNonLocation]);
+  }, [name, radiusMeters, cooldownSeconds, holdEnabled, holdSeconds, btRequired, btDevices, persistNonLocation]);
 
   useEffect(() => {
     const unsub = navigation.addListener('beforeRemove', () => {
@@ -397,8 +416,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
     const credentials = await loadCredentialsForGate(gate);
     if (!credentials) {
       setInfo({
-        title: 'Not linked',
-        message: 'Link a PalGate account first from Gate systems.',
+        title: t('gates.notLinkedTitle'),
+        message: t('gates.notLinkedMsg'),
       });
       return;
     }
@@ -416,7 +435,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
       await appendEvent({
         kind: 'opened',
         gateId: gate.id,
-        message: 'Test open succeeded',
+        message: t('editor.testOk'),
       });
       setTestFlash('Opened');
       setTimeout(() => setTestFlash(null), 1600);
@@ -426,7 +445,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
           ? e.message
           : e instanceof Error
             ? e.message
-            : 'Open failed';
+            : t('gates.openFailed');
       await upsertGate({
         ...(buildGate() ?? gate),
         lastResult: `error: ${message}`,
@@ -434,7 +453,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
       await appendEvent({
         kind: 'error',
         gateId: gate.id,
-        message: `Test open: ${message}`,
+        message: t('editor.testFail', { message }),
       });
       setTestFlash('Failed');
       setTimeout(() => setTestFlash(null), 1800);
@@ -462,22 +481,22 @@ export function GateEditorScreen({ navigation, route }: Props) {
       nestedScrollEnabled
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.label}>Display name</Text>
+      <Text style={styles.label}>{t('editor.displayName')}</Text>
       <TextInput
         style={styles.input}
         value={name}
         onChangeText={setName}
-        placeholder={gate.name || 'Gate name'}
+        placeholder={gate.name || t('editor.gateName')}
         placeholderTextColor={colors.muted}
       />
       <Text style={styles.meta}>
-        PalGate name: {gate.name || gate.deviceId}
+        {t('editor.palGateName', { name: gate.name || gate.deviceId })}
         {gate.nameOverride?.trim()
-          ? ' · custom rename saved'
-          : ' · leave blank / match PalGate to use API name'}
+          ? t('editor.customRename')
+          : t('editor.matchApi')}
       </Text>
 
-      <Text style={styles.section}>Location pin</Text>
+      <Text style={styles.section}>{t('editor.locationPin')}</Text>
       <GateLocationPicker
         lat={mapLat}
         lng={mapLng}
@@ -497,9 +516,9 @@ export function GateEditorScreen({ navigation, route }: Props) {
 
       <RadiusSlider value={radiusMeters} onChange={setRadiusMeters} />
 
-      <Text style={styles.section}>Car Bluetooth (optional)</Text>
+      <Text style={styles.section}>{t('editor.carBt')}</Text>
       <View style={styles.rowBetween}>
-        <Text style={styles.label}>Require car Bluetooth</Text>
+        <Text style={styles.label}>{t('editor.requireBt')}</Text>
         <Switch
           value={btRequired}
           onValueChange={setBtRequired}
@@ -508,15 +527,14 @@ export function GateEditorScreen({ navigation, route }: Props) {
         />
       </View>
       <Text style={styles.meta}>
-        Any of these devices (OR) — auto-open if at least one is connected.
+        {t('editor.btHint')}
       </Text>
 
       {btRequired && (
         <>
           {btDevices.length === 0 ? (
             <Text style={styles.meta}>
-              No devices yet. Add at least one car, or auto-open will skip
-              (Bluetooth required).
+              {t('editor.noDevices')}
             </Text>
           ) : (
             btDevices.map((device, index) => (
@@ -526,7 +544,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
               >
                 <View style={styles.selectedDeviceInfo}>
                   <Text style={styles.deviceName}>
-                    {device.name?.trim() || 'Bluetooth device'}
+                    {device.name?.trim() || t('editor.btDevice')}
                   </Text>
                   <Text style={styles.deviceAddress}>
                     {device.address?.trim() || '—'}
@@ -536,9 +554,9 @@ export function GateEditorScreen({ navigation, route }: Props) {
                   onPress={() => removeBtDevice(index)}
                   hitSlop={8}
                   accessibilityRole="button"
-                  accessibilityLabel="Remove Bluetooth device"
+                  accessibilityLabel={t('editor.removeBt')}
                 >
-                  <Text style={styles.removeText}>Remove</Text>
+                  <Text style={styles.removeText}>{t('common.remove')}</Text>
                 </Pressable>
               </View>
             ))
@@ -548,7 +566,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
             style={styles.buttonSecondary}
             onPress={() => void openBtPicker()}
           >
-            <Text style={styles.buttonSecondaryText}>Add device</Text>
+            <Text style={styles.buttonSecondaryText}>{t('editor.addDevice')}</Text>
           </Pressable>
         </>
       )}
@@ -558,13 +576,13 @@ export function GateEditorScreen({ navigation, route }: Props) {
           {btPickerLoading ? (
             <View style={styles.pickerLoading}>
               <ActivityIndicator color={colors.primary} />
-              <Text style={styles.meta}>Loading Bluetooth devices…</Text>
+              <Text style={styles.meta}>{t('editor.loadingBt')}</Text>
             </View>
           ) : (
             <>
-              <Text style={styles.pickerSection}>Connected now</Text>
+              <Text style={styles.pickerSection}>{t('editor.connectedNow')}</Text>
               {btConnected.length === 0 ? (
-                <Text style={styles.meta}>None connected right now</Text>
+                <Text style={styles.meta}>{t('editor.noneConnected')}</Text>
               ) : (
                 btConnected.map((device, index) => (
                   <Pressable
@@ -573,7 +591,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
                     onPress={() => addBtDevice(device)}
                   >
                     <Text style={styles.deviceName}>
-                      {device.name?.trim() || 'Bluetooth device'}
+                      {device.name?.trim() || t('editor.btDevice')}
                     </Text>
                     <Text style={styles.deviceAddress}>
                       {device.address?.trim() || device.id?.trim() || '—'}
@@ -583,10 +601,10 @@ export function GateEditorScreen({ navigation, route }: Props) {
               )}
 
               <Text style={[styles.pickerSection, styles.pickerSectionSpaced]}>
-                Previously paired
+                {t('editor.paired')}
               </Text>
               {btBonded.length === 0 ? (
-                <Text style={styles.meta}>No other paired devices</Text>
+                <Text style={styles.meta}>{t('editor.noPaired')}</Text>
               ) : (
                 btBonded.map((device, index) => (
                   <Pressable
@@ -595,7 +613,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
                     onPress={() => addBtDevice(device)}
                   >
                     <Text style={styles.deviceName}>
-                      {device.name?.trim() || 'Bluetooth device'}
+                      {device.name?.trim() || t('editor.btDevice')}
                     </Text>
                     <Text style={styles.deviceAddress}>
                       {device.address?.trim() || device.id?.trim() || '—'}
@@ -608,34 +626,30 @@ export function GateEditorScreen({ navigation, route }: Props) {
                 style={styles.pickerDismiss}
                 onPress={() => setBtPickerOpen(false)}
               >
-                <Text style={styles.secondaryText}>Hide device list</Text>
+                <Text style={styles.secondaryText}>{t('editor.hideList')}</Text>
               </Pressable>
             </>
           )}
         </View>
       )}
 
-      <Text style={styles.section}>Cooldown (seconds)</Text>
-      <TextInput
-        style={styles.input}
-        value={String(cooldownSeconds)}
-        onChangeText={(t) =>
-          setCooldownSeconds(Number(t.replace(/[^0-9]/g, '')) || 0)
-        }
-        keyboardType="number-pad"
-        placeholder={String(DEFAULT_COOLDOWN_SECONDS)}
-        placeholderTextColor={colors.muted}
+      <CooldownPicker
+        value={cooldownSeconds}
+        onChange={setCooldownSeconds}
       />
-      <Text style={styles.meta}>
-        Wait this long before auto-opening again (default {DEFAULT_COOLDOWN_SECONDS}{' '}
-        sec).
-      </Text>
+
+      <HoldPicker
+        enabled={holdEnabled}
+        seconds={holdSeconds}
+        onEnabledChange={setHoldEnabled}
+        onSecondsChange={setHoldSeconds}
+      />
 
       <Pressable
         style={styles.buttonSecondary}
         onPress={() => navigation.navigate('ShareGate', { gateIds: [gate.id] })}
       >
-        <Text style={styles.buttonSecondaryText}>Share this gate</Text>
+        <Text style={styles.buttonSecondaryText}>{t('editor.shareThis')}</Text>
       </Pressable>
 
       <Pressable
@@ -649,27 +663,33 @@ export function GateEditorScreen({ navigation, route }: Props) {
         disabled={testing}
       >
         <Text style={styles.buttonText}>
-          {testing ? 'Opening…' : testFlash ?? 'Test open'}
+          {testing
+            ? t('editor.opening')
+            : testFlash === 'Opened'
+              ? t('gates.opened')
+              : testFlash === 'Failed'
+                ? t('gates.failed')
+                : t('editor.testOpen')}
         </Text>
       </Pressable>
 
       <Text style={styles.deviceId} selectable>
-        Device ID: {gate.deviceId}
+        {t('editor.deviceId', { id: gate.deviceId })}
       </Text>
     </ScrollView>
     <BusySheet
       visible={locating}
-      title="Finding location"
-      message="Waiting on GPS. This can take a few seconds outdoors."
+      title={t('editor.finding')}
+      message={t('editor.findingMsg')}
     />
     <ConfirmSheet
       visible={pendingPin != null && !confirmStreetView}
       icon={<IconPin color={colors.primary} />}
-      title={lat != null && lng != null ? 'Change location?' : 'Use this pin?'}
-      message="Auto-open uses this pin. Look at the street first if you want, then keep the current one or switch."
-      cancelLabel={lat != null && lng != null ? 'Keep current' : 'Cancel'}
-      confirmLabel={lat != null && lng != null ? 'Change' : 'Use pin'}
-      extraLabel="Look at the street"
+      title={lat != null && lng != null ? t('editor.changeLoc') : t('editor.usePin')}
+      message={t('editor.pinMsg')}
+      cancelLabel={lat != null && lng != null ? t('editor.keepCurrent') : t('common.cancel')}
+      confirmLabel={lat != null && lng != null ? t('editor.change') : t('editor.usePinBtn')}
+      extraLabel={t('editor.lookStreet')}
       onExtra={() => setConfirmStreetView(true)}
       onCancel={() => {
         setPendingPin(null);
@@ -688,7 +708,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
         visible
         lat={pendingPin.lat}
         lng={pendingPin.lng}
-        confirmLabel="Pin this place"
+        confirmLabel={t('editor.pinPlace')}
         onBack={() => setConfirmStreetView(false)}
         onConfirm={(pin) => {
           applyPin(pin.lat, pin.lng);
@@ -696,9 +716,8 @@ export function GateEditorScreen({ navigation, route }: Props) {
           setConfirmStreetView(false);
           if (pin.source === 'fallback') {
             setInfo({
-              title: 'Using the open pin',
-              message:
-                'Street camera position wasn’t available. The pin is the spot you opened Street View from.',
+              title: t('editor.fallbackTitle'),
+              message: t('editor.fallbackMsg'),
             });
           }
         }}

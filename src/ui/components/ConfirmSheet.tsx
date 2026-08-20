@@ -5,12 +5,14 @@ import {
   Easing,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeProvider';
+import { useTranslation } from 'react-i18next';
 import { radii, spacing, type ThemeColors } from '../theme';
 
 type Props = {
@@ -18,10 +20,12 @@ type Props = {
   icon?: ReactNode;
   title: string;
   message: string;
+  children?: ReactNode;
   cancelLabel: string;
   confirmLabel: string;
   extraLabel?: string;
   destructive?: boolean;
+  confirmDisabled?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   onExtra?: () => void;
@@ -32,10 +36,12 @@ export function ConfirmSheet({
   icon,
   title,
   message,
+  children,
   cancelLabel,
   confirmLabel,
   extraLabel,
   destructive = false,
+  confirmDisabled = false,
   onCancel,
   onConfirm,
   onExtra,
@@ -92,7 +98,16 @@ export function ConfirmSheet({
         >
           {icon ? <View style={styles.iconWrap}>{icon}</View> : null}
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+          {children ? (
+            <ScrollView
+              style={styles.bodyScroll}
+              contentContainerStyle={styles.bodyScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {children}
+            </ScrollView>
+          ) : null}
           {extraLabel && onExtra ? (
             <Pressable
               onPress={onExtra}
@@ -114,10 +129,12 @@ export function ConfirmSheet({
             </Pressable>
             <Pressable
               onPress={onConfirm}
+              disabled={confirmDisabled}
               style={({ pressed }) => [
                 styles.btn,
                 destructive ? styles.btnDanger : styles.btnPrimary,
                 pressed && styles.pressed,
+                confirmDisabled && styles.disabled,
               ]}
             >
               <Text
@@ -175,6 +192,16 @@ function createStyles(c: ThemeColors) {
       fontSize: 15,
       lineHeight: 22,
       color: c.muted,
+    },
+    bodyScroll: {
+      maxHeight: 280,
+    },
+    bodyScrollContent: {
+      gap: 8,
+      paddingBottom: 4,
+    },
+    disabled: {
+      opacity: 0.55,
     },
     extraBtn: {
       alignSelf: 'flex-start',
@@ -305,6 +332,7 @@ export function InfoSheet({
   message: string;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -364,7 +392,7 @@ export function InfoSheet({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.btnPrimaryText}>Got it</Text>
+            <Text style={styles.btnPrimaryText}>{t('common.gotIt')}</Text>
           </Pressable>
         </Animated.View>
       </View>

@@ -1,32 +1,35 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../ThemeProvider';
-import { radii, spacing, type ThemeColors, type ThemePreference } from '../theme';
+import { paddedCardStyle, radii, type ThemeColors, type ThemePreference } from '../theme';
 
-const OPTIONS: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
+const OPTIONS: ThemePreference[] = ['system', 'light', 'dark'];
 
 export function AppearancePicker() {
+  const { t } = useTranslation();
   const { colors, preference, setPreference } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const labelFor = (value: ThemePreference) => {
+    if (value === 'system') return t('appearance.system');
+    if (value === 'light') return t('appearance.light');
+    return t('appearance.dark');
+  };
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Appearance</Text>
+      <Text style={styles.title}>{t('appearance.title')}</Text>
       <View style={styles.segment}>
         {OPTIONS.map((opt) => {
-          const selected = preference === opt.value;
+          const selected = preference === opt;
           return (
             <Pressable
-              key={opt.value}
+              key={opt}
               style={[styles.chip, selected && styles.chipSelected]}
-              onPress={() => setPreference(opt.value)}
+              onPress={() => setPreference(opt)}
             >
               <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                {opt.label}
+                {labelFor(opt)}
               </Text>
             </Pressable>
           );
@@ -39,12 +42,8 @@ export function AppearancePicker() {
 function createStyles(c: ThemeColors) {
   return StyleSheet.create({
     card: {
-      backgroundColor: c.surface,
-      borderRadius: radii.md,
-      padding: spacing.md,
+      ...paddedCardStyle(c),
       gap: 12,
-      borderWidth: 1,
-      borderColor: c.border,
     },
     title: {
       fontSize: 16,

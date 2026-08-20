@@ -24,9 +24,12 @@ type GateAutoKeepAliveNative = {
   markOpened?(gateId: string): Promise<boolean>;
   releaseClaim?(gateId: string): Promise<boolean>;
   getLastOpened?(gateId: string): Promise<number>;
+  startHold?(deviceId: string, gateId: string, holdMs: number): Promise<boolean>;
+  getHoldUntil?(deviceId: string): Promise<number>;
   drainNativeEvents?(): Promise<string>;
   getSafetyLocksJson?(): Promise<string>;
   clearSafetyLocks?(): Promise<boolean>;
+  syncSafetyLockSettings?(burstCount: number, lockMs: number): Promise<boolean>;
 };
 
 function getNative(): GateAutoKeepAliveNative | null {
@@ -184,6 +187,31 @@ export async function getNativeLastOpened(gateId: string): Promise<number> {
   }
 }
 
+export async function startNativeHold(
+  deviceId: string,
+  gateId: string,
+  holdMs: number,
+): Promise<void> {
+  const native = getNative();
+  if (!native?.startHold) return;
+  try {
+    await native.startHold(deviceId, gateId, holdMs);
+  } catch (error) {
+    console.warn('[GateAuto] startNativeHold failed', error);
+  }
+}
+
+export async function getNativeHoldUntil(deviceId: string): Promise<number> {
+  const native = getNative();
+  if (!native?.getHoldUntil) return 0;
+  try {
+    const n = await native.getHoldUntil(deviceId);
+    return typeof n === 'number' && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 type NativeQueuedEvent = {
   kind?: string;
   gateId?: string;
@@ -269,6 +297,20 @@ export async function clearNativeSafetyLocks(): Promise<void> {
     await native.clearSafetyLocks();
   } catch (error) {
     console.warn('[GateAuto] clearNativeSafetyLocks failed', error);
+  }
+}
+
+/** Mirror JS safety-lock attempts / duration into KeepAlivePrefs. */
+export async function writeNativeSafetyLockSettings(
+  burstCount: number,
+  lockMs: number,
+): Promise<void> {
+  const native = getNative();
+  if (!native?.syncSafetyLockSettings) return;
+  try {
+    await native.syncSafetyLockSettings(burstCount, lockMs);
+  } catch (error) {
+    console.warn('[GateAuto] writeNativeSafetyLockSettings failed', error);
   }
 }
 

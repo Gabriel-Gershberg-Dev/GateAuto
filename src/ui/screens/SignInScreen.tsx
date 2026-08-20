@@ -15,20 +15,23 @@ import { useAuth } from '../../auth/AuthProvider';
 import { promptGoogleIdToken } from '../../auth/googleNative';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { BarrierMark } from '../components/BarrierMark';
+import { LanguageMenuButton } from '../components/LanguagePicker';
 import { BusySheet, InfoSheet } from '../components/ConfirmSheet';
 import { Group } from '../components/Group';
 import { IconGoogleMark } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 
 export function SignInScreen({}: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const auth = useAuth();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +44,7 @@ export function SignInScreen({}: Props) {
   const submitEmail = async () => {
     setFormError(null);
     if (!email.trim() || !password) {
-      setFormError('Enter email and password.');
+      setFormError(t('auth.enterEmailPassword'));
       return;
     }
     setBusy('email');
@@ -52,7 +55,7 @@ export function SignInScreen({}: Props) {
         await auth.signInEmail(email, password);
       }
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'Could not sign in');
+      setFormError(e instanceof Error ? e.message : t('auth.couldNotSignIn'));
     } finally {
       setBusy(null);
     }
@@ -64,7 +67,7 @@ export function SignInScreen({}: Props) {
     try {
       await auth.signInGuest();
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'Guest sign-in failed');
+      setFormError(e instanceof Error ? e.message : t('auth.guestFailed'));
     } finally {
       setBusy(null);
     }
@@ -74,9 +77,8 @@ export function SignInScreen({}: Props) {
     setFormError(null);
     if (!auth.googleClientConfigured) {
       setInfo({
-        title: 'Google sign-in',
-        message:
-          'Finish Google provider setup in Firebase Console (OAuth client), then reopen GateAuto.',
+        title: t('auth.googleTitle'),
+        message: t('auth.googleSetup'),
       });
       return;
     }
@@ -86,7 +88,7 @@ export function SignInScreen({}: Props) {
       if (!idToken) return;
       await auth.signInGoogle(idToken);
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'Google failed');
+      setFormError(e instanceof Error ? e.message : t('auth.googleFailed'));
     } finally {
       setBusy(null);
     }
@@ -104,35 +106,35 @@ export function SignInScreen({}: Props) {
         ]}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.langRow}>
+          <LanguageMenuButton />
+        </View>
         <View style={styles.hero}>
           <BarrierMark brand size={52} />
-          <Text style={styles.kicker}>GateAuto</Text>
+          <Text style={styles.kicker}>{t('brand')}</Text>
           <Text style={styles.title}>
-            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+            {mode === 'signup' ? t('auth.createTitle') : t('auth.welcomeBack')}
           </Text>
-          <Text style={styles.lede}>
-            Gates and PalGate stay on this phone. Sign in so sharing and
-            invites can find you — or continue as guest and upgrade later.
-          </Text>
+          <Text style={styles.lede}>{t('auth.lede')}</Text>
         </View>
 
         <Group>
           <View style={styles.cardInner}>
             {mode === 'signup' ? (
               <>
-                <Text style={styles.label}>Name</Text>
+                <Text style={styles.label}>{t('common.name')}</Text>
                 <TextInput
                   style={styles.input}
                   value={name}
                   onChangeText={setName}
-                  placeholder="Your name"
+                  placeholder={t('auth.yourName')}
                   placeholderTextColor={colors.muted}
                   autoCapitalize="words"
                   autoCorrect={false}
                 />
               </>
             ) : null}
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t('common.email')}</Text>
             <TextInput
               style={styles.input}
               value={email}
@@ -143,12 +145,14 @@ export function SignInScreen({}: Props) {
               autoCorrect={false}
               keyboardType="email-address"
             />
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t('common.password')}</Text>
             <TextInput
               style={styles.input}
               value={password}
               onChangeText={setPassword}
-              placeholder={mode === 'signup' ? 'At least 6 characters' : 'Password'}
+              placeholder={
+                mode === 'signup' ? t('auth.passwordMin') : t('auth.passwordPlaceholder')
+              }
               placeholderTextColor={colors.muted}
               secureTextEntry
             />
@@ -163,7 +167,7 @@ export function SignInScreen({}: Props) {
               disabled={Boolean(busy)}
             >
               <Text style={styles.primaryText}>
-                {mode === 'signup' ? 'Create account' : 'Sign in'}
+                {mode === 'signup' ? t('auth.createAccount') : t('auth.signIn')}
               </Text>
             </Pressable>
             <Pressable
@@ -174,9 +178,7 @@ export function SignInScreen({}: Props) {
               hitSlop={8}
             >
               <Text style={styles.switchText}>
-                {mode === 'signup'
-                  ? 'Already have an account? Sign in'
-                  : 'New here? Create an account'}
+                {mode === 'signup' ? t('auth.haveAccount') : t('auth.newHere')}
               </Text>
             </Pressable>
           </View>
@@ -192,7 +194,7 @@ export function SignInScreen({}: Props) {
           disabled={Boolean(busy)}
         >
           <IconGoogleMark color={colors.primary} size={18} />
-          <Text style={styles.googleText}>Continue with Google</Text>
+          <Text style={styles.googleText}>{t('auth.continueGoogle')}</Text>
         </Pressable>
 
         <Pressable
@@ -200,25 +202,22 @@ export function SignInScreen({}: Props) {
           disabled={Boolean(busy)}
           style={({ pressed }) => [styles.guestBtn, pressed && styles.pressed]}
         >
-          <Text style={styles.guestText}>Continue as guest</Text>
+          <Text style={styles.guestText}>{t('auth.continueGuest')}</Text>
         </Pressable>
-        <Text style={styles.footnote}>
-          Guest can scan PalGate and open gates on this phone. Sharing needs
-          Google or email.
-        </Text>
+        <Text style={styles.footnote}>{t('auth.footnote')}</Text>
       </ScrollView>
       <BusySheet
         visible={busy != null}
         title={
           busy === 'google'
-            ? 'Google'
+            ? t('auth.busyGoogle')
             : busy === 'guest'
-              ? 'Guest'
+              ? t('auth.busyGuest')
               : mode === 'signup'
-                ? 'Creating account'
-                : 'Signing in'
+                ? t('auth.busyCreate')
+                : t('auth.busySignIn')
         }
-        message="Keeping you on this phone…"
+        message={t('auth.busyKeep')}
       />
       <InfoSheet
         visible={info != null}
@@ -240,6 +239,9 @@ function createStyles(c: ThemeColors) {
       paddingHorizontal: spacing.md,
       paddingBottom: spacing.lg * 2,
       gap: 12,
+    },
+    langRow: {
+      alignItems: 'flex-end',
     },
     hero: {
       alignItems: 'center',

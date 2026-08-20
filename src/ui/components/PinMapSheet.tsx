@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../ThemeProvider';
 import { formatCoordPair } from '../streetName';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 import { GateMap } from './GateMap';
 
 type Props = {
@@ -27,6 +28,7 @@ export function PinMapSheet({
   onConfirm,
   onBack,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -50,15 +52,15 @@ export function PinMapSheet({
     >
       <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
         <View style={styles.topBar}>
-          <Text style={styles.kicker}>Gate pin</Text>
+          <Text style={styles.kicker}>{t('map.gatePin')}</Text>
           <Text style={styles.title} numberOfLines={2}>
             {streetName?.trim() ||
-              (draftPinned ? 'Dropped pin' : 'Tap the road to pin')}
+              (draftPinned ? t('map.droppedPin') : t('map.tapRoad'))}
           </Text>
           <Text style={styles.coords}>
             {draftPinned
               ? formatCoordPair(draftLat, draftLng)
-              : 'Tap, hold, or drag the mark'}
+              : t('map.tapHold')}
           </Text>
         </View>
 
@@ -92,7 +94,7 @@ export function PinMapSheet({
               pressed && styles.pressed,
             ]}
           >
-            <Text style={styles.btnGhostText}>Back to the editor</Text>
+            <Text style={styles.btnGhostText}>{t('common.back')}</Text>
           </Pressable>
           <Pressable
             onPress={() => onConfirm(draftLat, draftLng)}
@@ -104,7 +106,7 @@ export function PinMapSheet({
               !draftPinned && styles.disabled,
             ]}
           >
-            <Text style={styles.btnPrimaryText}>Use this pin</Text>
+            <Text style={styles.btnPrimaryText}>{t('editor.usePinBtn')}</Text>
           </Pressable>
         </View>
       </View>

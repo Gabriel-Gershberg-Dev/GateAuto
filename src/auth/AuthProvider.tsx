@@ -22,8 +22,12 @@ import {
 } from 'react';
 import { auth, db } from '../firebase/app';
 import { googleWebClientId } from '../firebase/config';
+import i18n from '../i18n';
 import { configureGoogleSignIn, signOutGoogleQuietly } from './googleNative';
-import { isRealFirebaseAccount } from '../share/inviteLogic';
+import {
+  isRealFirebaseAccount,
+  resolveRegisteredDisplayName,
+} from '../share/inviteLogic';
 import {
   activateAccountVault,
   leaveAccountVault,
@@ -61,6 +65,7 @@ type AuthContextValue = {
   ) => Promise<UpgradeResult>;
   upgradeWithGoogle: (idToken: string) => Promise<UpgradeResult>;
   signOut: () => Promise<void>;
+  updateDisplayName: (name: string) => Promise<void>;
   googleClientConfigured: boolean;
 };
 
@@ -104,14 +109,11 @@ async function settleUser(user: User): Promise<User> {
   return auth.currentUser ?? user;
 }
 
-function displayNameForProfile(user: User, name?: string): string {
-  const explicit = name?.trim();
-  if (explicit && explicit.toLowerCase() !== 'guest') return explicit.slice(0, 80);
-  const existing = user.displayName?.trim() ?? '';
-  if (existing && existing.toLowerCase() !== 'guest') return existing.slice(0, 80);
-  const local = user.email?.split('@')[0]?.trim();
-  if (local) return local.slice(0, 80);
-  return isRealUser(user) ? 'Signed in' : 'Guest';
+function googleProfileName(user: User): string | null {
+  return (
+    user.providerData.find((p) => p.providerId === 'google.com')?.displayName ??
+    null
+  );
 }
 
 function errorCode(error: unknown): string {
@@ -132,23 +134,24 @@ function isCredentialTaken(error: unknown): boolean {
 function authMessage(error: unknown): string {
   switch (errorCode(error)) {
     case 'auth/email-already-in-use':
-      return 'That email already has an account. Sign in instead.';
+      return i18n.t('auth.errEmailInUse');
     case 'auth/invalid-email':
-      return 'That email does not look valid.';
+      return i18n.t('auth.errInvalidEmail');
     case 'auth/weak-password':
-      return 'Use at least 6 characters for the password.';
+      return i18n.t('auth.errWeakPassword');
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return 'Email or password did not match.';
+      return i18n.t('auth.errBadCreds');
     case 'auth/credential-already-in-use':
-      return 'That Google or email login is already used on another account.';
+      return i18n.t('auth.errCredInUse');
     case 'auth/network-request-failed':
-      return 'Network error. Check the connection and try again.';
+      return i18n.t('auth.errNetwork');
     case 'permission-denied':
-      return 'Cloud permissions blocked this. Try again after the app updates.';
+      return i18n.t('auth.errPermission');
     default: {
-      const message = error instanceof Error ? error.message : 'Sign-in failed.';
+      const message =
+        error instanceof Error ? error.message : i18n.t('auth.errFailed');
       return message.replace(/^Firebase:\s*/i, '').replace(/\s*\(.*\)\s*$/, '');
     }
   }
@@ -156,14 +159,24 @@ function authMessage(error: unknown): string {
 
 async function persistProfile(user: User, name?: string): Promise<User> {
   const settled = await settleUser(user);
-  const displayName = displayNameForProfile(settled, name);
+  const ref = doc(db, 'users', settled.uid);
+  const existing = await getDoc(ref);
+  const cloudName = existing.exists()
+    ? String(existing.data()?.displayName ?? '')
+    : '';
+  const displayName = resolveRegisteredDisplayName({
+    explicit: name,
+    authDisplayName: settled.displayName,
+    cloudDisplayName: cloudName,
+    googleDisplayName: googleProfileName(settled),
+    email: settled.email,
+    isRealAccount: isRealUser(settled),
+  });
   if (displayName && settled.displayName !== displayName) {
     await updateProfile(settled, { displayName });
     await settled.reload();
   }
   const latest = auth.currentUser ?? settled;
-  const ref = doc(db, 'users', latest.uid);
-  const existing = await getDoc(ref);
   await setDoc(
     ref,
     {
@@ -271,7 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUpEmail: async (name, email, password) => {
         setError(null);
         const trimmed = name.trim();
-        if (!trimmed) throw new Error('Enter your name.');
+        if (!trimmed) throw new Error(i18n.t('auth.enterName'));
         try {
           const cred = await createUserWithEmailAndPassword(
             auth,
@@ -314,9 +327,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       upgradeWithEmail: async (name, email, password) => {
         setError(null);
         const current = auth.currentUser;
-        if (!current) throw new Error('Sign in first.');
+        if (!current) throw new Error(i18n.t('auth.signInFirst'));
         const trimmed = name.trim();
-        if (!trimmed) throw new Error('Enter your name.');
+        if (!trimmed) throw new Error(i18n.t('auth.enterName'));
         try {
           const credential = EmailAuthProvider.credential(email.trim(), password);
           try {
@@ -341,11 +354,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       upgradeWithGoogle: async (idToken) => {
         setError(null);
-        if (!auth.currentUser) throw new Error('Sign in first.');
+        if (!auth.currentUser) throw new Error(i18n.t('auth.signInFirst'));
         try {
           const { user, switchedAccount } = await linkOrSignInGoogle(idToken);
           setFirebaseUser(user);
           return { switchedAccount };
+        } catch (e) {
+          const message = authMessage(e);
+          setError(message);
+          throw new Error(message);
+        }
+      },
+      updateDisplayName: async (name) => {
+        setError(null);
+        const trimmed = name.trim();
+        if (!trimmed) throw new Error(i18n.t('auth.enterName'));
+        const current = auth.currentUser;
+        if (!current) throw new Error(i18n.t('auth.signInFirst'));
+        try {
+          setFirebaseUser(await persistProfile(current, trimmed));
         } catch (e) {
           const message = authMessage(e);
           setError(message);

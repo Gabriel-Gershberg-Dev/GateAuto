@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "gateauto-app"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

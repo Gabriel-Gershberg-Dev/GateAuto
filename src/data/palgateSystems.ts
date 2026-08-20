@@ -274,6 +274,27 @@ export async function hasAnySystem(): Promise<boolean> {
   return all.length > 0;
 }
 
+/** True only if this account scanned a PalGate QR (owner-linked). */
+export async function hasLinkedOwnerSystem(): Promise<boolean> {
+  return (await listLinkedSystems()).length > 0;
+}
+
+/**
+ * Drop shared-in PalGate systems that no longer have any gates.
+ * Never removes an owner-linked (QR) system.
+ */
+export async function pruneUnusedSharedSystems(): Promise<void> {
+  const [systems, gates] = await Promise.all([listSystems(), loadGates()]);
+  const used = new Set(
+    gates.map((g) => g.systemId).filter((id): id is string => Boolean(id)),
+  );
+  for (const sys of systems) {
+    if (sys.origin !== 'shared') continue;
+    if (used.has(sys.id)) continue;
+    await removeSystem(sys.id);
+  }
+}
+
 export type UpsertSystemOptions = {
   origin?: PalGateSystemOrigin;
   label?: string;
@@ -282,8 +303,8 @@ export type UpsertSystemOptions = {
 
 /**
  * Add or reuse a PalGate credential set. Same phone+token updates the existing
- * system instead of duplicating — except a share must not reuse an owner-linked
- * catalog as a full-sync system (it becomes shared-in with an allowlist).
+ * system instead of duplicating. A share must not demote an owner-linked
+ * (QR-scanned) PalGate to shared-in — catalog refresh stays owner-only.
  */
 export async function upsertSystem(
   credentials: PalGateCredentials,
@@ -305,8 +326,8 @@ export async function upsertSystem(
       nextOrigin = 'linked';
       nextAllow = null;
     } else if (match.origin === 'linked') {
-      nextOrigin = 'shared';
-      nextAllow = incomingAllow;
+      nextOrigin = 'linked';
+      nextAllow = null;
     } else {
       nextOrigin = 'shared';
       nextAllow = mergeAllowedDeviceIds(match.allowedDeviceIds, incomingAllow);

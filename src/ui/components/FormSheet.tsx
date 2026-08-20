@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 
@@ -51,6 +52,7 @@ export function FormSheet({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -147,7 +149,7 @@ export function FormSheet({
                   destructive ? styles.btnDangerText : styles.btnPrimaryText
                 }
               >
-                {busy ? 'Working…' : confirmLabel}
+                {busy ? t('common.working') : confirmLabel}
               </Text>
             </Pressable>
           </View>

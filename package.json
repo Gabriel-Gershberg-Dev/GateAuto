@@ -1,13 +1,13 @@
 {
   "name": "gateauto",
-  "version": "1.0.0",
+  "version": "1.0.6",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "tsx --test tests/autoOpenLogic.test.ts tests/configAndSafety.test.ts tests/streetName.test.ts tests/streetViewPin.test.ts tests/inviteLogic.test.ts tests/hubNavigation.test.ts tests/userScope.test.ts tests/vaultRecover.test.ts tests/sharedCatalog.test.ts",
+    "test": "tsx --test tests/autoOpenLogic.test.ts tests/configAndSafety.test.ts tests/streetName.test.ts tests/streetViewPin.test.ts tests/inviteLogic.test.ts tests/hubNavigation.test.ts tests/userScope.test.ts tests/vaultRecover.test.ts tests/sharedCatalog.test.ts tests/i18n.test.ts tests/appUpdate.test.ts tests/holdLogic.test.ts tests/shareRevoke.test.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package"
   },
@@ -22,6 +22,7 @@
     "expo-constants": "~57.0.10",
     "expo-crypto": "~57.0.1",
     "expo-keep-awake": "~57.0.1",
+    "expo-localization": "~57.0.1",
     "expo-location": "~57.0.9",
     "expo-notifications": "~57.0.10",
     "expo-secure-store": "~57.0.1",
@@ -29,7 +30,9 @@
     "expo-task-manager": "~57.0.9",
     "expo-web-browser": "~57.0.2",
     "firebase": "^12.17.1",
+    "i18next": "^26.3.6",
     "react": "19.2.3",
+    "react-i18next": "^17.0.11",
     "react-native": "0.86.2",
     "react-native-bluetooth-classic": "^1.73.0-rc.17",
     "react-native-maps": "1.27.2",

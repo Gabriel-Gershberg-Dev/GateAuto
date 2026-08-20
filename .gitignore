@@ -44,3 +44,7 @@ yarn-error.*
 firebase-debug.log
 firebase-debug.*.log
 .firestore-rules-analysis.md
+remoteconfig.live.json
+
+# Built sideload APKs — host on Firebase Storage, do not commit
+*.apk

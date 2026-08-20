@@ -1,0 +1,28 @@
+{
+  "parameters": {
+    "latest_version_code": {
+      "defaultValue": { "value": "7" },
+      "valueType": "NUMBER",
+      "description": "Android versionCode of the latest sideload APK. Must be greater than the installed versionCode to offer an update."
+    },
+    "latest_version_name": {
+      "defaultValue": { "value": "1.0.6" },
+      "valueType": "STRING",
+      "description": "User-facing version name shown in the update sheet."
+    },
+    "apk_url": {
+      "defaultValue": {
+        "value": "https://firebasestorage.googleapis.com/v0/b/gateauto-app.firebasestorage.app/o/releases%2FGateAuto-release.apk?alt=media&token=3ac2eea9-a873-4ba6-8b92-c0bf41a9a723"
+      },
+      "valueType": "STRING",
+      "description": "HTTPS URL of the latest APK (Firebase Storage or any HTTPS host). Leave empty until an APK is uploaded."
+    },
+    "release_notes": {
+      "defaultValue": {
+        "value": "Owner unlink disables shared copies (Remove only). Language on login. Settings language stays on Settings. PalGate unlink per system. Pending invites on Gates. Light theme default, darker cabin contrast. BT-off inside opens via native pollNearby."
+      },
+      "valueType": "STRING",
+      "description": "Optional what's-new text for the in-app update sheet."
+    }
+  }
+}

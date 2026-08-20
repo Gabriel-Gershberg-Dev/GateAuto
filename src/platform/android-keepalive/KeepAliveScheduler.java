@@ -18,8 +18,11 @@ public final class KeepAliveScheduler {
   private static final String TAG = "GateAutoKeepAlive";
   static final String ACTION_ALARM = "com.gateauto.app.KEEPALIVE_ALARM";
   static final String ACTION_COOLDOWN = "com.gateauto.app.COOLDOWN_WAKE";
+  static final String ACTION_HOLD_PULSE = "com.gateauto.app.HOLD_PULSE";
+  static final String EXTRA_DEVICE_ID = "deviceId";
   private static final int REQ = 71001;
   private static final int REQ_COOLDOWN = 71002;
+  private static final int REQ_HOLD_BASE = 0x51A10000;
   /** First recovery quickly after arm / process start. */
   private static final long FIRST_DELAY_MS = 60 * 1000L;
   /** Then every 9 min — refresh Play fences (no INITIAL_TRIGGER) + pollNearby. */
@@ -45,6 +48,7 @@ public final class KeepAliveScheduler {
     if (am != null) {
       am.cancel(pending(app));
       am.cancel(cooldownPending(app));
+      cancelAllHoldPulses(app);
     }
     unregisterScreenReceiver(app);
     Log.i(TAG, "keep-alive alarm cancelled");
@@ -109,6 +113,56 @@ public final class KeepAliveScheduler {
     }
   }
 
+  /** Exact-while-idle hold pulse. Per-deviceId so other gates are unaffected. */
+  public static void scheduleHoldPulse(Context context, String deviceId, long delayMs) {
+    if (deviceId == null || deviceId.trim().isEmpty()) return;
+    Context app = context.getApplicationContext();
+    AlarmManager am = (AlarmManager) app.getSystemService(Context.ALARM_SERVICE);
+    if (am == null) return;
+    long delay = Math.min(90_000L, Math.max(5_000L, delayMs));
+    long trigger = SystemClock.elapsedRealtime() + delay;
+    PendingIntent pi = holdPending(app, deviceId.trim());
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        boolean exact =
+          Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+            || am.canScheduleExactAlarms();
+        if (exact) {
+          am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi);
+        } else {
+          am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi);
+        }
+      } else {
+        am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi);
+      }
+      Log.i(TAG, "hold pulse in " + delay + "ms " + deviceId);
+    } catch (Exception e) {
+      Log.w(TAG, "scheduleHoldPulse failed", e);
+    }
+  }
+
+  public static void cancelHoldPulse(Context context, String deviceId) {
+    if (deviceId == null || deviceId.trim().isEmpty()) return;
+    Context app = context.getApplicationContext();
+    AlarmManager am = (AlarmManager) app.getSystemService(Context.ALARM_SERVICE);
+    if (am == null) return;
+    am.cancel(holdPending(app, deviceId.trim()));
+  }
+
+  public static void cancelAllHoldPulses(Context context) {
+    Context app = context.getApplicationContext();
+    org.json.JSONArray arr = GeofenceRegistrar.regionsArray(app);
+    if (arr != null) {
+      for (int i = 0; i < arr.length(); i++) {
+        org.json.JSONObject gate = arr.optJSONObject(i);
+        if (gate == null) continue;
+        String id = gate.optString("deviceId", gate.optString("id", "")).trim();
+        if (!id.isEmpty()) cancelHoldPulse(app, id);
+      }
+    }
+    KeepAlivePrefs.clearAllHolds(app);
+  }
+
   static boolean shouldThrottle(Context context) {
     long last = KeepAlivePrefs.lastRunAt(context);
     return last > 0 && System.currentTimeMillis() - last < MIN_RUN_GAP_MS;
@@ -120,6 +174,18 @@ public final class KeepAliveScheduler {
 
   private static PendingIntent cooldownPending(Context context) {
     return broadcastPending(context, ACTION_COOLDOWN, REQ_COOLDOWN);
+  }
+
+  private static PendingIntent holdPending(Context context, String deviceId) {
+    Intent intent = new Intent(context, KeepAliveReceiver.class);
+    intent.setAction(ACTION_HOLD_PULSE);
+    intent.putExtra(EXTRA_DEVICE_ID, deviceId);
+    int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      flags |= PendingIntent.FLAG_IMMUTABLE;
+    }
+    int req = REQ_HOLD_BASE | (deviceId.hashCode() & 0xFFFF);
+    return PendingIntent.getBroadcast(context, req, intent, flags);
   }
 
   private static PendingIntent broadcastPending(Context context, String action, int req) {

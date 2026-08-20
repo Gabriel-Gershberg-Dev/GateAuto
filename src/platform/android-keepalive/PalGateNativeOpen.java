@@ -43,6 +43,9 @@ public final class PalGateNativeOpen {
   private static final String TAG = "GateAutoKeepAlive";
   private static final String BASE = "https://api1.pal-es.com/v1/bt/";
   private static final double ABSOLUTE_MAX_M = 250.0;
+  private static final long HOLD_MAX_MS = 90_000L;
+  private static final long HOLD_PULSE_MIN_MS = 5_000L;
+  private static final long HOLD_PULSE_MAX_MS = 8_000L;
   /**
    * Swallow Play EXIT that arrives immediately after Off→On remove+add.
    * Alarm/recover refresh must not mark this window (that swallowed real enters).
@@ -290,6 +293,13 @@ public final class PalGateNativeOpen {
       Log.w(TAG, "native open skip — missing id/deviceId");
       return;
     }
+    if ("poll".equals(reason) && KeepAlivePrefs.isHoldActive(context, deviceId)) {
+      Log.i(
+        TAG,
+        "native open skip " + gateId + " — hold in progress (poll is not a new ENTER)"
+      );
+      return;
+    }
     if (!GeofenceRegistrar.isAutoEnabled(gate)) {
       Log.i(TAG, "native open skip " + gateId + " — auto-open off");
       return;
@@ -305,7 +315,7 @@ public final class PalGateNativeOpen {
     try {
       httpOpen(context, deviceId, gateId);
       boolean lockEngaged = KeepAlivePrefs.markOpened(context, gateId);
-      KeepAliveScheduler.scheduleCooldownWake(context, Math.max(3_000L, cooldownMs + 1_500L));
+      startHoldAfterAutoOpen(context, gate);
       String label = GeofenceRegistrar.displayLabel(gate);
       notifyOpened(context, label);
       long ts = System.currentTimeMillis();
@@ -322,7 +332,12 @@ public final class PalGateNativeOpen {
           context,
           "safety_lock",
           gateId,
-          label + ": Safety lock engaged for 40m (4 auto-opens in 2m)",
+          label
+            + ": Safety lock engaged for "
+            + Math.max(1L, Math.round(KeepAlivePrefs.gateLockMs(context) / 60_000.0))
+            + "m ("
+            + KeepAlivePrefs.burstCount(context)
+            + " auto-opens in 2m)",
           nativeOpenTrigger(reason),
           ts
         );
@@ -406,6 +421,148 @@ public final class PalGateNativeOpen {
       }
     } finally {
       conn.disconnect();
+    }
+  }
+
+  static long capHoldMs(long ms) {
+    if (ms <= 0) return 0L;
+    return Math.min(HOLD_MAX_MS, ms);
+  }
+
+  static long holdPulseIntervalMs(long holdMs) {
+    long ms = capHoldMs(holdMs);
+    if (ms <= 0) return 0L;
+    long delay = ms / 4L;
+    if (delay < HOLD_PULSE_MIN_MS) return HOLD_PULSE_MIN_MS;
+    if (delay > HOLD_PULSE_MAX_MS) return HOLD_PULSE_MAX_MS;
+    return delay;
+  }
+
+  static boolean holdSwitchOn(JSONObject gate) {
+    return gate != null && gate.optBoolean("holdEnabled", false);
+  }
+
+  public static void startHoldAfterAutoOpen(Context context, JSONObject gate) {
+    if (gate == null) return;
+    String deviceId = gate.optString("deviceId", "").trim();
+    long cooldownMs = gate.optLong("cooldownMs", 30_000L);
+    if (cooldownMs < 0) cooldownMs = 0;
+    if (deviceId.isEmpty()) return;
+    long holdMs = holdSwitchOn(gate) ? capHoldMs(gate.optLong("holdMs", 0L)) : 0L;
+    if (holdMs <= 0) {
+      KeepAlivePrefs.clearHold(context, deviceId);
+      KeepAliveScheduler.cancelHoldPulse(context, deviceId);
+      KeepAliveScheduler.scheduleCooldownWake(
+        context,
+        Math.max(3_000L, cooldownMs + 1_500L)
+      );
+      return;
+    }
+    long now = System.currentTimeMillis();
+    KeepAlivePrefs.setHoldUntil(context, deviceId, now + holdMs);
+    KeepAlivePrefs.setHoldGateId(context, deviceId, gate.optString("id", ""));
+    KeepAlivePrefs.setLastHoldPulseAt(context, deviceId, now);
+    long interval = holdPulseIntervalMs(holdMs);
+    KeepAliveScheduler.scheduleHoldPulse(context, deviceId, interval);
+    KeepAliveScheduler.scheduleCooldownWake(
+      context,
+      holdMs + cooldownMs + 1_500L
+    );
+    Log.i(
+      TAG,
+      "hold start " + deviceId + " for " + holdMs + "ms every " + interval + "ms"
+    );
+  }
+
+  public static void startHoldFromJs(
+    Context context,
+    String deviceId,
+    String gateId,
+    long holdMs
+  ) {
+    JSONObject gate = GeofenceRegistrar.gateById(context, gateId);
+    if (gate == null) gate = GeofenceRegistrar.gateByDeviceId(context, deviceId);
+    if (gate == null) {
+      gate = new JSONObject();
+      try {
+        gate.put("id", gateId == null || gateId.isEmpty() ? deviceId : gateId);
+        gate.put("deviceId", deviceId);
+        gate.put("holdEnabled", holdMs > 0);
+        gate.put("holdMs", capHoldMs(holdMs));
+        gate.put("cooldownMs", 30_000L);
+      } catch (Exception ignored) {
+        return;
+      }
+    } else {
+      try {
+        JSONObject copy = new JSONObject(gate.toString());
+        copy.put("holdEnabled", holdMs > 0);
+        copy.put("holdMs", capHoldMs(holdMs));
+        gate = copy;
+      } catch (Exception ignored) {
+        // use original
+      }
+    }
+    startHoldAfterAutoOpen(context, gate);
+  }
+
+  /**
+   * Silent hold pulse: PalGate GET only. No tray, no Monitoring log, no safety
+   * lock. Never starts a location FGS.
+   */
+  public static void pulseHold(Context context, String deviceId) {
+    if (deviceId == null || deviceId.trim().isEmpty()) return;
+    String id = deviceId.trim();
+    long now = System.currentTimeMillis();
+    long until = KeepAlivePrefs.holdUntil(context, id);
+    if (until <= now) {
+      Log.i(TAG, "hold end " + id);
+      KeepAlivePrefs.clearHold(context, id);
+      return;
+    }
+    JSONObject gate = GeofenceRegistrar.gateByDeviceId(context, id);
+    if (gate == null) {
+      String gateId = KeepAlivePrefs.holdGateId(context, id);
+      if (!gateId.isEmpty()) gate = GeofenceRegistrar.gateById(context, gateId);
+    }
+    if (gate == null || !holdSwitchOn(gate)) {
+      Log.i(TAG, "hold pulse skip " + id + " — off or unknown gate");
+      KeepAlivePrefs.clearHold(context, id);
+      KeepAliveScheduler.cancelHoldPulse(context, id);
+      return;
+    }
+    String credGateId = gate.optString("id", id);
+    if (!KeepAlivePrefs.hasCredentialsForGate(context, credGateId)) {
+      Log.w(TAG, "hold pulse skip — no credentials");
+      return;
+    }
+    long last = KeepAlivePrefs.lastHoldPulseAt(context, id);
+    if (last > 0 && now - last < HOLD_PULSE_MIN_MS) {
+      KeepAliveScheduler.scheduleHoldPulse(
+        context,
+        id,
+        HOLD_PULSE_MIN_MS - (now - last)
+      );
+      return;
+    }
+    String openId = gate.optString("deviceId", id).trim();
+    if (openId.isEmpty()) openId = id;
+    try {
+      httpOpen(context, openId, credGateId);
+      KeepAlivePrefs.setLastHoldPulseAt(context, id, System.currentTimeMillis());
+      Log.i(TAG, "hold pulse OK " + id + " (silent)");
+    } catch (Exception e) {
+      Log.w(TAG, "hold pulse failed " + id, e);
+    }
+    long remaining = until - System.currentTimeMillis();
+    if (remaining >= HOLD_PULSE_MIN_MS) {
+      long configured = capHoldMs(gate.optLong("holdMs", remaining));
+      long interval = holdPulseIntervalMs(configured > 0 ? configured : remaining);
+      KeepAliveScheduler.scheduleHoldPulse(
+        context,
+        id,
+        Math.min(interval, remaining)
+      );
     }
   }
 

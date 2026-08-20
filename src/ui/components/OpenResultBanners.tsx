@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 export type OpenBanner = {
   id: string;
@@ -34,6 +35,7 @@ function BannerRow({
   autoHideMs: number;
   styles: ReturnType<typeof createStyles>;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (autoHideMs <= 0) return;
     const timer = setTimeout(() => onDismiss(banner.id), autoHideMs);
@@ -56,7 +58,7 @@ function BannerRow({
       />
       <View style={styles.textCol}>
         <Text style={styles.eyebrow}>
-          {banner.success ? 'Opened' : 'Couldn’t open'}
+          {banner.success ? t('gates.opened') : t('gates.couldntOpen')}
         </Text>
         <Text style={styles.name} numberOfLines={1}>
           {banner.name}

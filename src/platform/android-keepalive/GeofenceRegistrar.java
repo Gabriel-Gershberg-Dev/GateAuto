@@ -72,6 +72,23 @@ public final class GeofenceRegistrar {
     return null;
   }
 
+  public static JSONObject gateByDeviceId(Context context, String deviceId) {
+    if (deviceId == null || deviceId.trim().isEmpty()) return null;
+    String want = deviceId.trim();
+    JSONArray arr = regionsArray(context);
+    JSONObject fallback = null;
+    for (int i = 0; i < arr.length(); i++) {
+      JSONObject o = arr.optJSONObject(i);
+      if (o == null) continue;
+      String did = o.optString("deviceId", "").trim();
+      if (did.isEmpty()) did = o.optString("id", "").trim();
+      if (!want.equals(did) && !want.equals(o.optString("id", "").trim())) continue;
+      if (isAutoEnabled(o)) return o;
+      if (fallback == null) fallback = o;
+    }
+    return fallback;
+  }
+
   /**
    * Per-gate Auto-open. Regions JSON stores every openable gate for Android Auto;
    * only {@code enabled: true} pins may auto-open or keep a Play Services fence.

@@ -18,6 +18,8 @@ export type RecoveredGate = {
   lng: number | null;
   radiusMeters: number;
   cooldownMs: number;
+  holdEnabled: boolean;
+  holdMs: number;
   bluetooth: {
     required: boolean;
     devices: Array<{ name?: string; address?: string }>;
@@ -113,6 +115,8 @@ type NativeRegionLike = {
   name?: string;
   displayName?: string;
   cooldownMs?: number;
+  holdEnabled?: boolean;
+  holdMs?: number;
   btRequired?: boolean;
   btAddresses?: string[];
   btNames?: string[];
@@ -167,6 +171,12 @@ export function gatesFromNativeRegions(raw: unknown): RecoveredGate[] {
       lng,
       radiusMeters: Number.isFinite(radius) ? radius : 50,
       cooldownMs: Number.isFinite(cooldown) && cooldown >= 0 ? cooldown : 30_000,
+      holdEnabled: Boolean(r.holdEnabled),
+      holdMs: (() => {
+        const h = Number(r.holdMs);
+        if (!Number.isFinite(h) || h <= 0) return 0;
+        return Math.min(90_000, Math.round(h));
+      })(),
       bluetooth: {
         required: Boolean(r.btRequired),
         devices,
@@ -216,8 +226,11 @@ export function mergeGateLists(
 export function initialHubRoute(input: {
   gateCount: number;
   systemCount: number;
+  pendingInviteCount?: number;
 }): 'GatesList' | 'GateSystems' {
-  return input.gateCount > 0 || input.systemCount > 0
+  return input.gateCount > 0 ||
+    input.systemCount > 0 ||
+    (input.pendingInviteCount ?? 0) > 0
     ? 'GatesList'
     : 'GateSystems';
 }

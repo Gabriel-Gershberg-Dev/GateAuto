@@ -15,10 +15,12 @@ import { ClipboardApi } from '../../platform/optionalExpo';
 import { QrCard } from '../components/QrCard';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ExportAccount'>;
 
 export function ExportAccountScreen({ navigation, route }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [payload, setPayload] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export function ExportAccountScreen({ navigation, route }: Props) {
       const credentials = await loadCredentials();
       if (cancelled) return;
       if (!credentials) {
-        setError('No linked account on this device.');
+        setError(t('export.noAccount'));
         return;
       }
       // Never appendEvent / log the export payload (contains session token).
@@ -71,7 +73,7 @@ export function ExportAccountScreen({ navigation, route }: Props) {
       <View style={styles.centered}>
         <Text style={styles.error}>{error}</Text>
         <Pressable style={styles.button} onPress={onContinue}>
-          <Text style={styles.buttonText}>Back</Text>
+          <Text style={styles.buttonText}>{t('common.back')}</Text>
         </Pressable>
       </View>
     );
@@ -90,24 +92,20 @@ export function ExportAccountScreen({ navigation, route }: Props) {
       style={styles.scroll}
       contentContainerStyle={styles.container}
     >
-      <Text style={styles.title}>Export account</Text>
-      <Text style={styles.body}>
-        Scan this QR with the other phone’s GateAuto Import, or copy the JSON
-        and paste it there. Personal transfer only — anyone with this payload
-        can use your Linked Device session.
-      </Text>
+      <Text style={styles.title}>{t('export.title')}</Text>
+      <Text style={styles.body}>{t('export.body')}</Text>
 
       <QrCard value={payload} size={260} showValue={false} />
 
       {ClipboardApi ? (
         <Pressable style={styles.button} onPress={() => void onCopy()}>
           <Text style={styles.buttonText}>
-            {copied ? 'Copied' : 'Copy JSON'}
+            {copied ? t('common.copied') : t('export.copyJson')}
           </Text>
         </Pressable>
       ) : (
         <Text style={styles.body}>
-          Long-press the JSON below to copy (clipboard module needs a rebuild).
+          {t('export.noClipboard')}
         </Text>
       )}
 
@@ -118,8 +116,8 @@ export function ExportAccountScreen({ navigation, route }: Props) {
       <Pressable style={styles.buttonSecondary} onPress={onContinue}>
         <Text style={styles.buttonSecondaryText}>
           {continueTo === 'Permissions'
-            ? 'Continue to Permissions'
-            : 'Done'}
+            ? t('export.continuePerms')
+            : t('common.done')}
         </Text>
       </Pressable>
     </ScrollView>

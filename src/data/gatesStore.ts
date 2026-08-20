@@ -3,6 +3,11 @@ import {
   DEFAULT_COOLDOWN_MS,
   normalizeCooldownMs,
 } from './cooldownNormalize';
+import {
+  DEFAULT_HOLD_MS,
+  effectiveHoldMs,
+  normalizeHoldMs,
+} from './holdNormalize';
 import { moveById } from './gateOrder';
 import {
   defaultBluetooth,
@@ -17,6 +22,14 @@ export {
   DEFAULT_COOLDOWN_SECONDS,
   normalizeCooldownMs,
 } from './cooldownNormalize';
+export {
+  DEFAULT_HOLD_MS,
+  DEFAULT_HOLD_SECONDS,
+  MAX_HOLD_MS,
+  MAX_HOLD_SECONDS,
+  effectiveHoldMs,
+  normalizeHoldMs,
+} from './holdNormalize';
 export { displayGateName } from './gateDisplay';
 export {
   normalizeBluetooth,
@@ -33,7 +46,7 @@ function monitoringKey(): string {
 }
 
 export const DEFAULT_RADIUS_METERS = 50;
-export const MIN_RADIUS_METERS = 25;
+export const MIN_RADIUS_METERS = 10;
 export const MAX_RADIUS_METERS = 150;
 
 export type GateOrigin = 'linked' | 'shared';
@@ -57,10 +70,18 @@ export type GateConfig = {
   lng: number | null;
   radiusMeters: number;
   cooldownMs: number;
+  /** Silent auto-open pulses after a successful auto open. Off ignores holdMs. */
+  holdEnabled: boolean;
+  /** Hold window in ms, capped at 90s. Ignored when holdEnabled is false. */
+  holdMs: number;
   bluetooth: GateBluetoothConfig;
   lastOpenedAt: number | null;
   /** Short label for list UI (e.g. opened / error / skipped). */
   lastResult: string | null;
+  /**
+   * Shared-in copy whose owner unlinked PalGate. Keep the row; block Open / Auto.
+   */
+  shareDisabled?: boolean;
 };
 
 export type DeviceSummary = {
@@ -86,9 +107,12 @@ export function createDefaultGate(
     lng: null,
     radiusMeters: DEFAULT_RADIUS_METERS,
     cooldownMs: DEFAULT_COOLDOWN_MS,
+    holdEnabled: false,
+    holdMs: DEFAULT_HOLD_MS,
     bluetooth: defaultBluetooth(),
     lastOpenedAt: null,
     lastResult: null,
+    shareDisabled: false,
   };
 }
 
@@ -217,7 +241,11 @@ export async function setGateEnabled(
   const gates = await loadGates();
   const idx = gates.findIndex((g) => g.id === gateId);
   if (idx < 0) return gates;
-  gates[idx] = { ...gates[idx], enabled };
+  if (gates[idx].shareDisabled) {
+    gates[idx] = { ...gates[idx], enabled: false };
+  } else {
+    gates[idx] = { ...gates[idx], enabled };
+  }
   await saveGates(gates);
   return gates;
 }
@@ -347,11 +375,21 @@ export async function getGate(gateId: string): Promise<GateConfig | null> {
 }
 
 export async function removeGate(gateId: string): Promise<GateConfig[]> {
+  return removeGates([gateId]);
+}
+
+export async function removeGates(gateIds: Iterable<string>): Promise<GateConfig[]> {
+  const ids = new Set(gateIds);
+  if (ids.size === 0) return loadGates();
   const gates = await loadGates();
-  const next = gates.filter((g) => g.id !== gateId);
+  const next = gates.filter((g) => !ids.has(g.id));
   if (next.length === gates.length) return gates;
   await saveGates(next);
   return next;
+}
+
+export async function clearAllGates(): Promise<void> {
+  await saveGates([]);
 }
 
 export async function isMonitoringEnabled(): Promise<boolean> {
@@ -405,11 +443,14 @@ function normalizeGate(gate: Partial<GateConfig> & { deviceId?: string }): GateC
       ? Math.min(MAX_RADIUS_METERS, Math.max(MIN_RADIUS_METERS, radius))
       : DEFAULT_RADIUS_METERS,
     cooldownMs: normalizeCooldownMs(gate.cooldownMs),
+    holdEnabled: Boolean(gate.holdEnabled),
+    holdMs: normalizeHoldMs(gate.holdMs) || (gate.holdEnabled ? DEFAULT_HOLD_MS : 0),
     bluetooth: normalizeBluetooth(gate.bluetooth),
     lastOpenedAt:
       typeof gate.lastOpenedAt === 'number' && Number.isFinite(gate.lastOpenedAt)
         ? gate.lastOpenedAt
         : null,
     lastResult: gate.lastResult != null ? String(gate.lastResult) : null,
+    shareDisabled: Boolean(gate.shareDisabled),
   };
 }

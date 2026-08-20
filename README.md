@@ -110,7 +110,7 @@ Without a key, GateAuto must not mount `MapView` (an empty key still crashes nat
 1. Pull devices from PalGate on the **Gates** list.
 2. Open a gate → **Gate Editor**:
    - Set map **pin** (drag on the map if a Maps key is configured, or use current location / lat-lng fields)
-   - Set **radius** (default ~50 m; typical range 25–150 m)
+   - Set **radius** (default ~50 m; range 10–150 m)
    - Optional: require **car Bluetooth** — connect the phone to the car first, then pick the connected device
    - Set **cooldown** (default ~5 min) so one arrival doesn’t spam opens
    - Tap **Test Open** to verify the API open works
@@ -131,6 +131,30 @@ Drive/walk tests after config:
 - [ ] After **Force stop**, open GateAuto once — monitoring restores if it was left ON
 
 Tune radius and cooldown from the Monitoring event log.
+
+## Sideload in-app updates (Android)
+
+GateAuto is not on Play Store. After you ship a new APK, the app can offer **Download and install** via Firebase Remote Config (project `gateauto-app`). Auto-open is not blocked by this check.
+
+1. Bump `expo.android.versionCode` in `app.json` (and usually `expo.version`) **before** `assembleRelease`. This APK is `versionCode` **2** / `1.0.1`.
+2. Build: `android\gradlew.bat assembleRelease`. Copy the artifact to `C:\dev\GateAuto\GateAuto-release.apk` if you want a stable path. **Do not git-commit the APK.**
+3. Upload that APK to Firebase Storage (or any HTTPS host) and copy the HTTPS URL.
+4. In Firebase Console → Remote Config (or `remoteconfig.template.json`), set:
+   - `latest_version_code` — integer, must be **greater** than phones already installed
+   - `latest_version_name` — e.g. `1.0.2`
+   - `apk_url` — HTTPS URL from step 3
+   - `release_notes` — optional
+5. **Publish** the Remote Config template.
+
+Phones on an older `versionCode` show a cabin-teal sheet on launch (after sign-in is ready) and from Settings → **Check for update**. Android may ask to allow GateAuto to install unknown apps.
+
+To push the parameter keys the first time (empty `apk_url`, same version as this APK so nobody is prompted):
+
+```bash
+npx firebase-tools deploy --only remoteconfig --project gateauto-app
+```
+
+Review `remoteconfig.template.json` before that deploy if you already have live Remote Config values.
 
 ## iOS (brief)
 

@@ -13,7 +13,8 @@
  *   4) Eligible-now on arm / app foreground → refine + currently-connected BT → open
  *   5) Eligibility poll (~30s FGS wake, or native cooldown wake) →
  *      inside radius + listed car if BT-required → open (poll_open)
- *      After a successful open, next auto-open is gated only by gate.cooldownMs.
+ *      After a successful auto-open, hold (if on) pulses silently, then
+ *      next auto-open is gated by that gate’s cooldownMs.
  *   Already inside home? ENTER will not re-fire (no INITIAL_TRIGGER) — wait
  *   for EXIT, car BT connect, eligible-now, or cooldown poll while still inside.
  *
@@ -25,7 +26,7 @@
  *   gatesStore: loadGates, getGate, saveGates, upsertGate,
  *               isMonitoringEnabled, setMonitoringEnabled
  *               GateConfig: id, deviceId, name, enabled, lat, lng, radiusMeters,
- *                           cooldownMs, bluetooth{required,devices[{name?,address?}]},
+ *                           cooldownMs, holdEnabled, holdMs, bluetooth{required,devices[{name?,address?}]},
  *                           lastOpenedAt, lastResult
  *   eventLog:   appendEvent({ kind, gateId?, message, distanceM?, accuracyM?, trigger? })
  *
@@ -86,10 +87,18 @@ import {
   markNativeOpened,
   releaseNativeClaim,
   getNativeLastOpened,
+  getNativeHoldUntil,
   importNativeOpenEvents,
   writeNativeCredentials,
 } from '../platform/keepAliveAlarm';
 import { cooldownRemainingMs } from './cooldown';
+import {
+  cooldownStartAt,
+  isHoldActive,
+  isSittingAutoTrigger,
+  shouldRestartHoldFromAuto,
+} from './holdLogic';
+import { beginHoldAfterAutoOpen, peekJsHoldUntil } from './holdRuntime';
 import {
   ABSOLUTE_MAX_OPEN_DISTANCE_M,
   refineArrival,
@@ -181,6 +190,7 @@ function sleep(ms: number): Promise<void> {
 
 function isGeofenceReady(gate: GateConfig): boolean {
   return (
+    !gate.shareDisabled &&
     gate.enabled &&
     typeof gate.lat === 'number' &&
     Number.isFinite(gate.lat) &&
@@ -543,15 +553,25 @@ export async function isMonitoringEnabled(): Promise<boolean> {
 async function checkCooldown(
   gate: GateConfig,
   label: string,
+  trigger: 'enter' | 'exit' | 'bt' | 'poll' | 'eligible_now',
 ): Promise<boolean> {
   const now = Date.now();
+  const nativeHold = await getNativeHoldUntil(gate.deviceId);
+  const holdUntil = Math.max(peekJsHoldUntil(gate.deviceId), nativeHold);
+  if (isHoldActive(holdUntil, now)) {
+    if (isSittingAutoTrigger(trigger) || !shouldRestartHoldFromAuto(trigger)) {
+      return false;
+    }
+    return true;
+  }
   const cooldownMs = gate.cooldownMs > 0 ? gate.cooldownMs : 0;
   const nativeLast = await getNativeLastOpened(gate.id);
   const lastOpenedAt = Math.max(gate.lastOpenedAt ?? 0, nativeLast);
-  const remainingMs = cooldownRemainingMs(lastOpenedAt, cooldownMs, now);
-  if (remainingMs > 0 && lastOpenedAt > 0) {
+  const cooldownStart = cooldownStartAt(lastOpenedAt, holdUntil);
+  const remainingMs = cooldownRemainingMs(cooldownStart, cooldownMs, now);
+  if (remainingMs > 0 && cooldownStart != null) {
     const remainingS = Math.ceil(remainingMs / 1000);
-    const nextAllowedAt = new Date(lastOpenedAt + cooldownMs);
+    const nextAllowedAt = new Date(cooldownStart + cooldownMs);
     const nextAllowed =
       Number.isFinite(nextAllowedAt.getTime())
         ? nextAllowedAt.toLocaleTimeString()
@@ -753,8 +773,7 @@ async function performOpen(
     });
     publishOpenResult(gate.id, label, true, 'Opened successfully');
     await notifyOpenSuccess(label);
-    const cooldownMs = gate.cooldownMs > 0 ? gate.cooldownMs : 15_000;
-    void scheduleCooldownWake(cooldownMs + 1_500);
+    await beginHoldAfterAutoOpen(gate);
   } catch (error) {
     const message = formatOpenApiError(error);
     const failKind = openErrorKind(resultKind);
@@ -827,7 +846,7 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
     return;
   }
 
-  if (!(await checkCooldown(gate, label))) return;
+  if (!(await checkCooldown(gate, label, 'enter'))) return;
 
   const refine = await runProximityRefine(gate, label, 'enter');
   if (!refine) return;
@@ -890,7 +909,7 @@ export async function handleGeofenceExit(regionIdentifier: string): Promise<void
     return;
   }
 
-  if (!(await checkCooldown(gate, label))) return;
+  if (!(await checkCooldown(gate, label, 'exit'))) return;
 
   const refine = await runProximityRefine(gate, label, 'exit');
   if (!refine) return;
@@ -981,7 +1000,7 @@ export async function handleBluetoothDeviceConnected(
       continue;
     }
 
-    if (!(await checkCooldown(gate, label))) continue;
+    if (!(await checkCooldown(gate, label, 'bt'))) continue;
 
     // Fresh high-accuracy fix + assertNearGate — never open on stale/cached GPS.
     const refine = await runProximityRefine(gate, label, 'bt_connect');
@@ -1058,7 +1077,7 @@ export async function checkEligibleNowAndOpen(
         continue;
       }
 
-      if (!(await checkCooldown(gate, label))) continue;
+      if (!(await checkCooldown(gate, label, 'eligible_now'))) continue;
 
       const refine = await runProximityRefine(gate, label, 'eligible_now');
       if (!refine) continue;
@@ -1146,7 +1165,7 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
         continue;
       }
 
-      if (!(await checkCooldown(gate, label))) continue;
+      if (!(await checkCooldown(gate, label, 'poll'))) continue;
 
       let refine: RefineResult;
       try {

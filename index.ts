@@ -1,6 +1,7 @@
 import { registerRootComponent } from 'expo';
 
 import './src/geo/task';
+import './src/i18n';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

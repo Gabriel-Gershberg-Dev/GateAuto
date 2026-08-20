@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useAuth } from '../../auth/AuthProvider';
 import { displayGateName, loadGates, type GateConfig } from '../../data/gatesStore';
+import { isolateBidiText } from '../../i18n/bidi';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 import { ClipboardApi } from '../../platform/optionalExpo';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import {
@@ -24,11 +26,14 @@ import { FormSheet } from '../components/FormSheet';
 import { Group, Hairline } from '../components/Group';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShareGate'>;
 
 export function ShareGateScreen({ navigation, route }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
+  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { user } = useAuth();
   const ids = useMemo(() => {
@@ -95,8 +100,8 @@ export function ShareGateScreen({ navigation, route }: Props) {
       await reload();
     } catch (e) {
       setInfo({
-        title: 'Share',
-        message: e instanceof Error ? e.message : 'Could not create invite',
+        title: t('share.title'),
+        message: e instanceof Error ? e.message : t('share.createFail'),
       });
     } finally {
       setBusy(false);
@@ -106,7 +111,7 @@ export function ShareGateScreen({ navigation, route }: Props) {
   const copyCode = async () => {
     if (!code || !ClipboardApi) return;
     await ClipboardApi.setStringAsync(code);
-    setInfo({ title: 'Copied', message: 'Invite code is on the clipboard.' });
+    setInfo({ title: t('common.copied'), message: t('share.copiedMsg') });
   };
 
   if (gates.length === 0) {
@@ -115,29 +120,36 @@ export function ShareGateScreen({ navigation, route }: Props) {
 
   const many = gates.length > 1;
   const title = many
-    ? `${gates.length} gates`
+    ? t('share.manyTitle', { count: gates.length })
     : displayGateName(gates[0]);
 
   return (
     <>
       <ScrollView contentContainerStyle={styles.page}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { writingDirection, textAlign }]}>
+          {many ? title : isolateBidiText(title, isRtl)}
+        </Text>
         <Text style={styles.body}>
           {many
-            ? 'One code copies every selected gate — names, pins, radius, Bluetooth, and PalGate open details. They type it in GateAuto.'
-            : 'They type this code in GateAuto. The pin, radius, Bluetooth list, and PalGate open details copy to their phone. Only you and people who accept can read them.'}
+            ? t('share.bodyMany')
+            : t('share.bodyOne')}
         </Text>
         {many
           ? gates.map((g) => (
-              <Text key={g.id} style={styles.gateName}>
-                {displayGateName(g)}
+              <Text
+                key={g.id}
+                style={[styles.gateName, { writingDirection, textAlign }]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {isolateBidiText(displayGateName(g), isRtl)}
               </Text>
             ))
           : null}
 
         {code ? (
           <View style={styles.codeCard}>
-            <Text style={styles.codeLabel}>Invite code</Text>
+            <Text style={styles.codeLabel}>{t('share.inviteCode')}</Text>
             <Text selectable style={styles.code}>
               {code}
             </Text>
@@ -145,7 +157,7 @@ export function ShareGateScreen({ navigation, route }: Props) {
               style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
               onPress={() => void copyCode()}
             >
-              <Text style={styles.primaryText}>Copy code</Text>
+              <Text style={styles.primaryText}>{t('share.copyCode')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -153,7 +165,7 @@ export function ShareGateScreen({ navigation, route }: Props) {
             style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
             onPress={() => void makeCode()}
           >
-            <Text style={styles.primaryText}>Create invite code</Text>
+            <Text style={styles.primaryText}>{t('share.createCode')}</Text>
           </Pressable>
         )}
 
@@ -164,27 +176,37 @@ export function ShareGateScreen({ navigation, route }: Props) {
             setEmailOpen(true);
           }}
         >
-          <Text style={styles.secondaryText}>Send to an email</Text>
+          <Text style={styles.secondaryText}>{t('share.sendEmail')}</Text>
         </Pressable>
 
         {outgoing.length > 0 ? (
           <>
-            <Text style={styles.section}>Invites for this gate</Text>
+            <Text style={styles.section}>{t('share.invitesFor')}</Text>
             <Group>
               {outgoing.map((inv, i) => (
                 <View key={inv.code}>
                   {i > 0 ? <Hairline /> : null}
-                  <View style={styles.row}>
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.rowTitle}>{inv.code}</Text>
-                      <Text style={styles.rowMeta}>
-                        {inv.status}
+                  <View style={[styles.row, { flexDirection: row }]}>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <Text
+                        style={[styles.rowTitle, { writingDirection, textAlign }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {inv.code}
+                      </Text>
+                      <Text
+                        style={[styles.rowMeta, { writingDirection, textAlign }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {t(`share.status_${inv.status}`)}
                         {inv.toEmailLower ? ` · ${inv.toEmailLower}` : ''}
                       </Text>
                     </View>
                     {inv.status !== 'revoked' ? (
                       <Pressable onPress={() => setRevokeTarget(inv.code)} hitSlop={8}>
-                        <Text style={styles.revoke}>Revoke</Text>
+                        <Text style={styles.revoke}>{t('common.revoke')}</Text>
                       </Pressable>
                     ) : null}
                   </View>
@@ -197,30 +219,30 @@ export function ShareGateScreen({ navigation, route }: Props) {
 
       <FormSheet
         visible={emailOpen}
-        title="Share by email"
-        message="If they already use that email in GateAuto, the invite shows up on their systems screen. They can still type the code."
+        title={t('share.emailTitle')}
+        message={t('share.emailMsg')}
         fields={[
           {
             key: 'email',
-            label: 'Email',
+            label: t('common.email'),
             value: email,
             onChange: setEmail,
-            placeholder: 'friend@email.com',
+            placeholder: t('share.friendEmail'),
             keyboardType: 'email-address',
           },
         ]}
-        cancelLabel="Cancel"
-        confirmLabel="Create invite"
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('share.createInvite')}
         busy={busy}
         onCancel={() => setEmailOpen(false)}
         onConfirm={() => void makeCode(email)}
       />
       <ConfirmSheet
         visible={upgradeOpen}
-        title="Sharing needs an account"
-        message="Guest can open gates on this phone. To share a gate, sign in with Google or email so the other person can accept."
-        cancelLabel="Not now"
-        confirmLabel="Upgrade"
+        title={t('gates.shareNeedsAccount')}
+        message={t('share.needsAccountMsg')}
+        cancelLabel={t('common.notNow')}
+        confirmLabel={t('common.upgrade')}
         onCancel={() => setUpgradeOpen(false)}
         onConfirm={() => {
           setUpgradeOpen(false);
@@ -229,10 +251,10 @@ export function ShareGateScreen({ navigation, route }: Props) {
       />
       <ConfirmSheet
         visible={revokeTarget != null}
-        title="Revoke this invite?"
-        message="They will lose the shared copy the next time their app syncs. You can send a new code later."
-        cancelLabel="Keep"
-        confirmLabel="Revoke"
+        title={t('share.revokeTitle')}
+        message={t('share.revokeMsg')}
+        cancelLabel={t('common.keep')}
+        confirmLabel={t('common.revoke')}
         destructive
         onCancel={() => setRevokeTarget(null)}
         onConfirm={() => {
@@ -241,7 +263,7 @@ export function ShareGateScreen({ navigation, route }: Props) {
           if (id) void revokeInvite(id).then(() => reload());
         }}
       />
-      <BusySheet visible={busy && !emailOpen} title="Invite" message="Creating a short code…" />
+      <BusySheet visible={busy && !emailOpen} title={t('systems.invite')} message={t('share.creating')} />
       <InfoSheet
         visible={info != null}
         title={info?.title ?? ''}
@@ -337,7 +359,6 @@ function createStyles(c: ThemeColors) {
       color: c.muted,
     },
     row: {
-      flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 16,
       paddingVertical: 14,

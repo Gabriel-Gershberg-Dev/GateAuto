@@ -1,8 +1,12 @@
 import { CommonActions, type NavigationProp } from '@react-navigation/native';
 import type { RootStackParamList } from './RootNavigator';
-import { compactSystemsGatesStack, type HubRouteSnap } from './hubStack';
+import {
+  compactSystemsGatesStack,
+  hubRoutesAfterInvite,
+  type HubRouteSnap,
+} from './hubStack';
 
-export { compactSystemsGatesStack } from './hubStack';
+export { compactSystemsGatesStack, hubRoutesAfterInvite } from './hubStack';
 export type { HubRouteSnap } from './hubStack';
 
 type HubNav = NavigationProp<RootStackParamList>;
@@ -31,6 +35,14 @@ export function goToGatesList(navigation: HubNav): void {
   const last = routes[routes.length - 1];
   if (last?.name === 'GatesList') return;
   resetTo(navigation, [...routes, { name: 'GatesList' }]);
+}
+
+/** Invite Done / accept: Gates list if any gates exist; never empty systems hub. */
+export function resetToHubAfterInvite(
+  navigation: HubNav,
+  input: { gateCount: number; systemCount: number },
+): void {
+  resetTo(navigation, hubRoutesAfterInvite(input));
 }
 
 /** Open gate systems without stacking a second GateSystems. */

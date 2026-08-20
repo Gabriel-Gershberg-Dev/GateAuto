@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import i18n from '../i18n';
 
 const CHANNEL_ID = 'gateauto';
 const LINKING_CHANNEL_ID = 'gateauto-linking';
@@ -95,8 +96,8 @@ export async function showLinkingStickyNotification(): Promise<void> {
     }
     linkingNotificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'GateAuto linking — keep this notification',
-        body: 'Switch to PalGate on this phone, scan the QR, then return. Long-poll resumes automatically.',
+        title: i18n.t('notify.linkingTitle'),
+        body: i18n.t('notify.linkingBody'),
         sticky: true,
         autoDismiss: false,
         priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -194,7 +195,7 @@ export async function notifyOpenSuccess(gateName: string): Promise<void> {
     await ensureNotifyPermission();
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Gate opened',
+        title: i18n.t('notify.opened'),
         body: gateName,
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -215,7 +216,7 @@ export async function notifyOpenFailure(
     await ensureNotifyPermission();
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `Gate open failed: ${gateName}`,
+        title: i18n.t('notify.failed', { name: gateName }),
         body: message,
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,

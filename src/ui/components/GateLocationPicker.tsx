@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../ThemeProvider';
 import { formatCoordPair, formatStreetName } from '../streetName';
-import { STREET_VIEW_FALLBACK_HINT } from '../streetViewPin';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 import { GateMap } from './GateMap';
 import { PinMapSheet } from './PinMapSheet';
 import { StreetViewSheet } from './StreetViewSheet';
@@ -86,6 +86,7 @@ export function GateLocationPicker({
   mapNonce,
   onGestureLock,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [mode, setMode] = useState<Mode>(mapsEnabled ? 'map' : 'coords');
@@ -144,14 +145,14 @@ export function GateLocationPicker({
       const hits = await Location.geocodeAsync(q);
       const first = hits[0];
       if (!first) {
-        setSearchHint('No match for that address');
+        setSearchHint(t('map.noMatch'));
         return;
       }
       setViewLat(first.latitude);
       setViewLng(first.longitude);
       onProposePin(first.latitude, first.longitude);
     } catch {
-      setSearchHint('Couldn’t look up that address');
+      setSearchHint(t('map.lookupFail'));
     } finally {
       setSearching(false);
     }
@@ -161,8 +162,8 @@ export function GateLocationPicker({
   const plaqueName = savedStreet
     ? savedStreet
     : hasPin
-      ? 'Dropped pin'
-      : 'Tap the road to pin';
+      ? t('map.droppedPin')
+      : t('map.tapRoad');
 
   return (
     <View style={styles.wrap}>
@@ -170,8 +171,8 @@ export function GateLocationPicker({
         <View style={styles.segment}>
           {(
             [
-              { value: 'map', label: 'Map' },
-              { value: 'coords', label: 'Coordinates' },
+              { value: 'map', label: t('map.map') },
+              { value: 'coords', label: t('map.coords') },
             ] as const
           ).map((opt) => {
             const selected = mode === opt.value;
@@ -200,7 +201,7 @@ export function GateLocationPicker({
               value={query}
               onChangeText={setQuery}
               onSubmitEditing={() => void runSearch()}
-              placeholder="Find a street"
+              placeholder={t('map.findStreet')}
               placeholderTextColor={colors.muted}
               returnKeyType="search"
               autoCorrect={false}
@@ -246,7 +247,7 @@ export function GateLocationPicker({
                 <Text style={styles.plaqueCoords}>
                   {hasPin
                     ? formatCoordPair(lat, lng)
-                    : 'Tap, hold, or drag the mark'}
+                    : t('map.tapHold')}
                 </Text>
               </View>
             </View>
@@ -257,7 +258,7 @@ export function GateLocationPicker({
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.fullMapText}>Full map</Text>
+              <Text style={styles.fullMapText}>{t('map.fullMap')}</Text>
             </Pressable>
           </View>
 
@@ -291,7 +292,7 @@ export function GateLocationPicker({
                 setStreetView({ lat, lng, name: savedStreet });
               }}
             >
-              <Text style={styles.btnPrimaryText}>Look at the street</Text>
+              <Text style={styles.btnPrimaryText}>{t('editor.lookStreet')}</Text>
             </Pressable>
           </View>
         </>
@@ -303,7 +304,7 @@ export function GateLocationPicker({
               this build.
             </Text>
           ) : null}
-          <Text style={styles.fieldLabel}>Latitude</Text>
+          <Text style={styles.fieldLabel}>{t('map.lat')}</Text>
           <TextInput
             style={styles.input}
             value={latText}
@@ -314,7 +315,7 @@ export function GateLocationPicker({
             keyboardType="decimal-pad"
             autoCapitalize="none"
           />
-          <Text style={styles.fieldLabel}>Longitude</Text>
+          <Text style={styles.fieldLabel}>{t('map.lng')}</Text>
           <TextInput
             style={styles.input}
             value={lngText}
@@ -333,7 +334,7 @@ export function GateLocationPicker({
             {locating ? (
               <ActivityIndicator color={colors.primaryOn} size="small" />
             ) : (
-              <Text style={styles.btnPrimaryText}>Use current location</Text>
+              <Text style={styles.btnPrimaryText}>{t('map.useCurrent')}</Text>
             )}
           </Pressable>
           {hasPin ? (
@@ -347,7 +348,7 @@ export function GateLocationPicker({
               }
               style={styles.linkBtn}
             >
-              <Text style={styles.linkText}>Look at the street</Text>
+              <Text style={styles.linkText}>{t('editor.lookStreet')}</Text>
             </Pressable>
           ) : null}
         </>
@@ -375,7 +376,7 @@ export function GateLocationPicker({
           lat={streetView.lat}
           lng={streetView.lng}
           streetName={streetView.name}
-          confirmLabel="Pin this place"
+          confirmLabel={t('editor.pinPlace')}
           onBack={() => setStreetView(null)}
           onConfirm={(pin) => {
             setViewLat(pin.lat);
@@ -383,7 +384,7 @@ export function GateLocationPicker({
             onProposePin(pin.lat, pin.lng);
             setStreetView(null);
             if (pin.source === 'fallback') {
-              setSearchHint(STREET_VIEW_FALLBACK_HINT);
+              setSearchHint(t('map.fallbackHint'));
             }
           }}
         />

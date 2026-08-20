@@ -18,8 +18,14 @@ import {
   applyBurstOpen,
   BURST_COUNT,
   BURST_WINDOW_MS,
+  clampBurstCount,
+  clampLockMinutes,
   formatSafetyLockMessage,
   GATE_LOCK_MS,
+  MAX_BURST_COUNT,
+  MAX_GATE_LOCK_MINUTES,
+  MIN_BURST_COUNT,
+  MIN_GATE_LOCK_MINUTES,
 } from '../src/data/safetyBurst';
 import { moveById, moveToIndex } from '../src/data/gateOrder';
 import { splitDeviceId } from '../src/palgate/api';
@@ -229,6 +235,8 @@ describe('nativeRegionFromGate', () => {
       lng: 34.78,
       radiusMeters: 50,
       cooldownMs: 30_000,
+      holdEnabled: false,
+      holdMs: 0,
       bluetooth: { required: false, devices: [] },
       lastOpenedAt: null,
       lastResult: null,
@@ -255,6 +263,8 @@ describe('nativeRegionFromGate', () => {
       lng: 34.78,
       radiusMeters: 50,
       cooldownMs: 30_000,
+      holdEnabled: false,
+      holdMs: 0,
       bluetooth: {
         required: true,
         devices: [{ name: 'Car', address: 'AA:BB:CC:DD:EE:FF' }],
@@ -280,7 +290,7 @@ describe('event log filters', () => {
 });
 
 describe('applyBurstOpen (per-gate safety lock)', () => {
-  it('does not lock after 3 opens in the window', () => {
+  it('does not lock after fewer than BURST_COUNT opens in the window', () => {
     const t0 = 1_000_000;
     let state = { lockUntil: null as number | null, openTimestamps: [] as number[] };
     for (let i = 0; i < BURST_COUNT - 1; i++) {
@@ -292,7 +302,7 @@ describe('applyBurstOpen (per-gate safety lock)', () => {
     assert.equal(state.openTimestamps.length, BURST_COUNT - 1);
   });
 
-  it('locks the gate on the 4th open within 2 minutes', () => {
+  it('locks the gate on the Nth open within 2 minutes (default 3)', () => {
     const t0 = 1_000_000;
     let last = applyBurstOpen(
       { lockUntil: null, openTimestamps: [] },
@@ -301,9 +311,29 @@ describe('applyBurstOpen (per-gate safety lock)', () => {
     for (let i = 1; i < BURST_COUNT; i++) {
       last = applyBurstOpen(last.next, t0 + i * 1_000);
     }
+    assert.equal(BURST_COUNT, 3);
     assert.equal(last.lockEngaged, true);
     assert.equal(last.remainingMs, GATE_LOCK_MS);
+    assert.equal(GATE_LOCK_MS, 15 * 60 * 1000);
     assert.ok((last.next.lockUntil ?? 0) > t0);
+  });
+
+  it('uses a custom attempt count and lock duration', () => {
+    const t0 = 1_000_000;
+    const lockMs = 10 * 60 * 1000;
+    let last = applyBurstOpen(
+      { lockUntil: null, openTimestamps: [] },
+      t0,
+      { burstCount: 5, lockMs },
+    );
+    for (let i = 1; i < 5; i++) {
+      last = applyBurstOpen(last.next, t0 + i * 1_000, {
+        burstCount: 5,
+        lockMs,
+      });
+    }
+    assert.equal(last.lockEngaged, true);
+    assert.equal(last.remainingMs, lockMs);
   });
 
   it('does not count opens outside the 2 minute window', () => {
@@ -326,10 +356,21 @@ describe('applyBurstOpen (per-gate safety lock)', () => {
   });
 });
 
+describe('safety lock setting clamps', () => {
+  it('keeps attempts at least 3 and duration 5–120 minutes', () => {
+    assert.equal(clampBurstCount(2), MIN_BURST_COUNT);
+    assert.equal(clampBurstCount(3), 3);
+    assert.equal(clampBurstCount(99), MAX_BURST_COUNT);
+    assert.equal(clampLockMinutes(1), MIN_GATE_LOCK_MINUTES);
+    assert.equal(clampLockMinutes(15), 15);
+    assert.equal(clampLockMinutes(999), MAX_GATE_LOCK_MINUTES);
+  });
+});
+
 describe('formatSafetyLockMessage', () => {
   it('ceils remaining time to minutes', () => {
     assert.match(formatSafetyLockMessage(1), /wait 1m/);
-    assert.match(formatSafetyLockMessage(40 * 60 * 1000), /wait 40m/);
+    assert.match(formatSafetyLockMessage(15 * 60 * 1000), /wait 15m/);
   });
 });
 

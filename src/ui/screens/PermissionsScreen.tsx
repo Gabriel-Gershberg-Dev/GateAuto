@@ -18,6 +18,7 @@ import {
 } from '../../platform/androidBatteryLinks';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Permissions'>;
 
@@ -32,20 +33,21 @@ type ChecklistItem = {
   onAction: () => void;
 };
 
-function labelFor(state: PermState): string {
+function labelFor(state: PermState, t: (key: string) => string): string {
   switch (state) {
     case 'granted':
-      return 'Granted';
+      return t('permissions.granted');
     case 'denied':
-      return 'Needed';
+      return t('permissions.needed');
     case 'limited':
-      return 'Limited';
+      return t('permissions.limited');
     default:
-      return 'Check';
+      return t('permissions.check');
   }
 }
 
 export function PermissionsScreen({ navigation }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [fg, setFg] = useState<PermState>('unknown');
@@ -109,50 +111,42 @@ export function PermissionsScreen({ navigation }: Props) {
   const items: ChecklistItem[] = [
     {
       key: 'loc-fg',
-      title: 'Location (While Using)',
-      detail: 'Needed to place pins and refine arrival before opening.',
+      title: t('permissions.locFg'),
+      detail: t('permissions.locFgDetail'),
       state: fg,
-      actionLabel: fg === 'granted' ? 'OK' : 'Allow',
+      actionLabel: fg === 'granted' ? t('common.ok') : t('common.allow'),
       onAction: () => void requestLocation(),
     },
     {
       key: 'loc-bg',
-      title: 'Location (Always)',
-      detail: 'Required for background geofence enter detection.',
+      title: t('permissions.locBg'),
+      detail: t('permissions.locBgDetail'),
       state: bg,
-      actionLabel: bg === 'granted' ? 'OK' : 'Allow Always',
+      actionLabel: bg === 'granted' ? t('common.ok') : t('permissions.allowAlways'),
       onAction: () => void requestLocation(),
     },
     {
       key: 'notif',
-      title: 'Notifications',
-      detail:
-        'Open/fail alerts when a gate triggers. While Auto-open is on, Android pins a “Searching for nearby gates” notice that cannot be swiped away (required, same as PalGate).',
+      title: t('permissions.notif'),
+      detail: t('permissions.notifDetail'),
       state: notif,
-      actionLabel: notif === 'granted' ? 'OK' : 'Allow',
+      actionLabel: notif === 'granted' ? t('common.ok') : t('common.allow'),
       onAction: () => void requestNotifications(),
     },
     {
       key: 'bt',
-      title: Platform.OS === 'android' ? 'Bluetooth (Android 12+)' : 'Bluetooth',
-      detail:
-        'Grant nearby devices / Bluetooth so car-connection matching can work.',
+      title: Platform.OS === 'android' ? t('permissions.btAndroid') : t('permissions.bt'),
+      detail: t('permissions.btDetail'),
       state: 'unknown',
-      actionLabel: 'Allow / Settings',
+      actionLabel: t('permissions.allowSettings'),
       onAction: () => void requestBluetooth(),
     },
   ];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Permissions checklist</Text>
-      <Text style={styles.body}>
-        Grant these before enabling auto-open. Always location and unrestricted
-        battery matter most on Samsung. Monitoring works after swipe-away and
-        reboot when Unrestricted; Force stop in App info fully disables
-        auto-open until you open GateAuto again (Android OS rule — no app can
-        restart itself after Force stop).
-      </Text>
+      <Text style={styles.title}>{t('permissions.title')}</Text>
+      <Text style={styles.body}>{t('permissions.body')}</Text>
 
       {items.map((item) => (
         <View key={item.key} style={styles.card}>
@@ -164,7 +158,7 @@ export function PermissionsScreen({ navigation }: Props) {
                 item.state === 'granted' ? styles.badgeOk : styles.badgeWarn,
               ]}
             >
-              {labelFor(item.state)}
+              {labelFor(item.state, t)}
             </Text>
           </View>
           <Text style={styles.cardDetail}>{item.detail}</Text>
@@ -179,41 +173,29 @@ export function PermissionsScreen({ navigation }: Props) {
       {Platform.OS === 'android' && (
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Samsung One UI battery</Text>
-            <Text style={[styles.badge, styles.badgeWarn]}>Required</Text>
+            <Text style={styles.cardTitle}>{t('permissions.samsungTitle')}</Text>
+            <Text style={[styles.badge, styles.badgeWarn]}>{t('permissions.required')}</Text>
           </View>
-          <Text style={styles.cardDetail}>
-            Galaxy S25 Ultra (One UI) can block geofence and Bluetooth wakes
-            unless GateAuto is unrestricted. Swipe-away from Recents is OK;
-            Force stop in App info fully kills auto-open until you open the
-            app. Leave the pinned “Searching for nearby gates” notice up. Do
-            all of these:
-          </Text>
-          <Text style={styles.steps}>
-            1. Apps → GateAuto → Battery → set to Unrestricted{'\n'}
-            2. Never put GateAuto to sleep (Sleeping apps / Deep sleeping apps →
-            remove GateAuto){'\n'}
-            3. Keep notifications allowed (pinned “Searching for nearby gates”
-            + open success/fail alerts)
-          </Text>
+          <Text style={styles.cardDetail}>{t('permissions.samsungDetail')}</Text>
+          <Text style={styles.steps}>{t('permissions.samsungSteps')}</Text>
           <View style={styles.buttonRow}>
             <Pressable
               style={styles.button}
               onPress={() => void openBatteryUnrestrictedPrompt()}
             >
-              <Text style={styles.buttonText}>Unrestricted battery</Text>
+              <Text style={styles.buttonText}>{t('permissions.unrestricted')}</Text>
             </Pressable>
             <Pressable
               style={styles.buttonSecondary}
               onPress={() => void openSamsungDeviceCareBattery()}
             >
-              <Text style={styles.buttonSecondaryText}>Device Care battery</Text>
+              <Text style={styles.buttonSecondaryText}>{t('permissions.deviceCare')}</Text>
             </Pressable>
             <Pressable
               style={styles.buttonSecondary}
               onPress={() => void openAppDetailsSettings()}
             >
-              <Text style={styles.buttonSecondaryText}>App settings</Text>
+              <Text style={styles.buttonSecondaryText}>{t('permissions.appSettings')}</Text>
             </Pressable>
           </View>
         </View>
@@ -221,29 +203,26 @@ export function PermissionsScreen({ navigation }: Props) {
 
       {Platform.OS !== 'android' && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Background location</Text>
-          <Text style={styles.cardDetail}>
-            Choose Always Allow for GateAuto so geofences can wake the app when
-            you arrive at a gate.
-          </Text>
+          <Text style={styles.cardTitle}>{t('permissions.bgLocation')}</Text>
+          <Text style={styles.cardDetail}>{t('permissions.bgLocationDetail')}</Text>
           <Pressable
             style={styles.button}
             onPress={() => void openAppDetailsSettings()}
           >
-            <Text style={styles.buttonText}>Open Settings</Text>
+            <Text style={styles.buttonText}>{t('permissions.openSettings')}</Text>
           </Pressable>
         </View>
       )}
 
       <Pressable style={styles.secondary} onPress={() => void refresh()}>
-        <Text style={styles.secondaryText}>Refresh status</Text>
+        <Text style={styles.secondaryText}>{t('permissions.refresh')}</Text>
       </Pressable>
 
       <Pressable
         style={styles.primary}
         onPress={() => navigation.replace('GatesList')}
       >
-        <Text style={styles.buttonText}>Continue to gates</Text>
+        <Text style={styles.buttonText}>{t('permissions.continue')}</Text>
       </Pressable>
     </ScrollView>
   );

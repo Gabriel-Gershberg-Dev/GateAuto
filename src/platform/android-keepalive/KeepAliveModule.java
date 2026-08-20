@@ -1,6 +1,8 @@
 package com.gateauto.app.keepalive;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -15,6 +17,8 @@ import com.facebook.react.module.annotations.ReactModule;
 public class KeepAliveModule extends ReactContextBaseJavaModule {
   public static final String NAME = "GateAutoKeepAlive";
   private static final long MIN_POLL_GAP_MS = 20_000L;
+  /** Second chance if fused last-location is briefly empty after a region rewrite. */
+  private static final long REGION_POLL_RETRY_MS = 1_500L;
   private static long lastPollAt;
 
   public KeepAliveModule(ReactApplicationContext reactContext) {
@@ -52,6 +56,7 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
    */
   public static void applyArmed(Context context, boolean armed, boolean startLocationFgs) {
     Context ctx = context.getApplicationContext();
+    boolean wasArmed = KeepAlivePrefs.isArmed(ctx);
     KeepAlivePrefs.setArmed(ctx, armed);
     Log.i(
       NAME,
@@ -71,11 +76,35 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       if (startLocationFgs) {
         MonitoringService.start(ctx);
       }
+      if (!wasArmed) {
+        pollNearbySoon(ctx, "arm");
+      }
     } else {
       KeepAliveScheduler.stop(ctx);
       MonitoringService.stop(ctx);
       GeofenceRegistrar.unregister(ctx);
     }
+  }
+
+  /**
+   * In-process last-location poll. Does not start a location FGS (Android 12+
+   * rejects background location FGS). {@link PalGateNativeOpen#pollNearby}
+   * skips BT-required gates unless the listed car is connected.
+   */
+  static void pollNearbySoon(Context context, String reason) {
+    final Context app = context.getApplicationContext();
+    Log.i(NAME, "native poll after " + reason + " (already-inside, last loc, no new FGS)");
+    new Thread(() -> PalGateNativeOpen.pollNearby(app), "gateauto-" + reason).start();
+    new Handler(Looper.getMainLooper())
+      .postDelayed(
+        () ->
+          new Thread(
+            () -> PalGateNativeOpen.pollNearby(app),
+            "gateauto-" + reason + "-retry"
+          )
+            .start(),
+        REGION_POLL_RETRY_MS
+      );
   }
 
   @ReactMethod
@@ -202,6 +231,20 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void syncSafetyLockSettings(double burstCount, double lockMs, Promise promise) {
+    try {
+      KeepAlivePrefs.setSafetyLockSettings(
+        getReactApplicationContext(),
+        (int) burstCount,
+        (long) lockMs
+      );
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_safety", e);
+    }
+  }
+
+  @ReactMethod
   public void getSafetyLocksJson(Promise promise) {
     try {
       promise.resolve(
@@ -244,6 +287,32 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void startHold(String deviceId, String gateId, double holdMs, Promise promise) {
+    try {
+      PalGateNativeOpen.startHoldFromJs(
+        getReactApplicationContext(),
+        deviceId,
+        gateId,
+        (long) holdMs
+      );
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_hold", e);
+    }
+  }
+
+  @ReactMethod
+  public void getHoldUntil(String deviceId, Promise promise) {
+    try {
+      promise.resolve(
+        (double) KeepAlivePrefs.holdUntil(getReactApplicationContext(), deviceId)
+      );
+    } catch (Exception e) {
+      promise.reject("keepalive_hold", e);
+    }
+  }
+
+  @ReactMethod
   public void drainNativeEvents(Promise promise) {
     try {
       promise.resolve(KeepAlivePrefs.drainNativeEvents(getReactApplicationContext()));
@@ -258,9 +327,10 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       ReactApplicationContext ctx = getReactApplicationContext();
       GeofenceRegistrar.saveRegionsJson(ctx, json);
       if (KeepAlivePrefs.isArmed(ctx)) {
-        // Geometry change rewrites (no INITIAL_TRIGGER). Rename / BT-check
-        // leaves Play fences in place. Do not poll-open from a list update.
+        // Geometry change rewrites (no INITIAL_TRIGGER). Rename / BT-off
+        // leaves Play fences in place. Poll non-BT auto-on gates with last loc.
         GeofenceRegistrar.register(ctx, false);
+        pollNearbySoon(ctx, "regions");
       }
       promise.resolve(true);
     } catch (Exception e) {

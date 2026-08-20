@@ -32,12 +32,12 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function parsePreference(raw: string | null): ThemePreference {
   if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
-  return 'system';
+  return 'light';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
-  const [preference, setPreferenceState] = useState<ThemePreference>('system');
+  const [preference, setPreferenceState] = useState<ThemePreference>('light');
   const [ready, setReady] = useState(false);
 
   useEffect(() => {

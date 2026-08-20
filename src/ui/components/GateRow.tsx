@@ -12,10 +12,13 @@ import {
   View,
 } from 'react-native';
 import { displayGateName, type GateConfig } from '../../data/gatesStore';
+import { isolateBidiText } from '../../i18n/bidi';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 import { BarrierMark } from './BarrierMark';
 import { IconShare } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 export type GateOpenFlash = {
   kind: 'success' | 'fail';
@@ -26,6 +29,7 @@ export type GateOpenFlash = {
 type Props = {
   gate: GateConfig;
   onPress: () => void;
+  onLongPress?: () => void;
   onShare?: () => void;
   onToggleEnabled: (enabled: boolean) => void;
   /** Master Auto-open in Settings. When off, the per-gate Auto switch is locked. */
@@ -47,6 +51,7 @@ type Props = {
 export function GateRow({
   gate,
   onPress,
+  onLongPress,
   onShare,
   onToggleEnabled,
   autoOpenMaster = true,
@@ -62,9 +67,13 @@ export function GateRow({
   selecting = false,
   selected = false,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
+  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const name = isolateBidiText(displayGateName(gate), isRtl);
   const hasPin = gate.lat != null && gate.lng != null;
+  const shareOff = Boolean(gate.shareDisabled);
   const lockMins =
     safetyLockRemainingMs > 0
       ? Math.max(1, Math.ceil(safetyLockRemainingMs / 60_000))
@@ -125,28 +134,30 @@ export function GateRow({
   }, [openFlash, sheen]);
 
   let status: string;
-  if (flashLabel === 'Opened') {
-    status = openFlash?.message || 'Opened successfully';
+  if (shareOff) {
+    status = t('gates.shareDisabled');
+  } else if (flashLabel === 'Opened') {
+    status = openFlash?.message || t('gates.openedOk');
   } else if (flashLabel === 'Failed') {
-    status = openFlash?.message || 'Couldn’t open';
+    status = openFlash?.message || t('gates.couldntOpen');
   } else if (lockMins > 0) {
-    status = `Auto locked · ${lockMins}m`;
+    status = t('gates.autoLocked', { mins: lockMins });
   } else if (!autoOpenMaster && gate.enabled) {
-    status = 'Paused in Settings';
+    status = t('gates.paused');
   } else if (gate.enabled && hasPin) {
-    status = `Opens on arrive · ${gate.radiusMeters} m`;
+    status = t('gates.opensArrive', { meters: gate.radiusMeters });
   } else if (gate.enabled && !hasPin) {
-    status = 'Needs a pin';
+    status = t('gates.needsPin');
   } else if (hasPin) {
-    status = `Manual · ${gate.radiusMeters} m`;
+    status = t('gates.manualMeters', { meters: gate.radiusMeters });
   } else {
-    status = 'Manual · no pin';
+    status = t('gates.manualNoPin');
   }
 
   const openKind = flashLabel === 'Opened' ? 'success' : flashLabel === 'Failed' ? 'fail' : null;
 
   return (
-    <View style={[styles.row, dragging && styles.rowDragging]}>
+    <View style={[styles.row, { flexDirection: row }, dragging && styles.rowDragging]}>
       <Animated.View
         pointerEvents="none"
         style={[
@@ -160,7 +171,7 @@ export function GateRow({
       />
       <View
         {...pan.panHandlers}
-        accessibilityLabel="Hold and drag to reorder"
+        accessibilityLabel={t('gates.reorder')}
         accessibilityRole="adjustable"
         hitSlop={8}
         style={styles.notchHit}
@@ -170,11 +181,14 @@ export function GateRow({
       </View>
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={420}
         android_ripple={
           dragging ? undefined : { color: colors.surfacePressed }
         }
         style={({ pressed }) => [
           styles.rowBody,
+          { flexDirection: row },
           pressed && !dragging && Platform.OS === 'ios'
             ? styles.rowPressed
             : null,
@@ -194,18 +208,23 @@ export function GateRow({
         {selecting ? (
           <View
             style={[styles.check, selected && styles.checkOn]}
-            accessibilityLabel={selected ? 'Selected' : 'Not selected'}
+            accessibilityLabel={selected ? t('common.selected') : t('common.notSelected')}
           >
             {selected ? <View style={styles.checkDot} /> : null}
           </View>
         ) : null}
         <View style={styles.main}>
-          <Text style={styles.name} numberOfLines={2} ellipsizeMode="tail">
-            {displayGateName(gate)}
+          <Text
+            style={[styles.name, { writingDirection, textAlign }]}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {name}
           </Text>
           <Text
             style={[
               styles.meta,
+              { writingDirection, textAlign },
               lockMins > 0 && !flashLabel && styles.lockHint,
               !autoOpenMaster &&
                 gate.enabled &&
@@ -215,20 +234,22 @@ export function GateRow({
               openKind === 'fail' && styles.failHint,
             ]}
             numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {status}
           </Text>
         </View>
-        {onShare && !selecting ? (
+        {onShare && !selecting && !shareOff ? (
           <Pressable
             onPress={onShare}
             hitSlop={8}
-            accessibilityLabel="Share gate"
+            accessibilityLabel={t('gates.shareOne')}
             style={styles.shareBtn}
           >
             <IconShare color={colors.muted} size={18} />
           </Pressable>
         ) : null}
+        {!shareOff ? (
         <Pressable
           style={({ pressed }) => [
             styles.openBtn,
@@ -251,11 +272,17 @@ export function GateRow({
                 openKind === 'fail' && styles.openTextFail,
               ]}
             >
-              {flashLabel ?? 'Open'}
+              {flashLabel === 'Opened'
+                ? t('gates.opened')
+                : flashLabel === 'Failed'
+                  ? t('gates.failed')
+                  : t('open')}
             </Text>
           )}
         </Pressable>
+        ) : null}
       </Pressable>
+      {!shareOff ? (
       <Pressable
         onPress={() => {
           if (!autoOpenMaster) onAutoOpenBlocked?.();
@@ -268,7 +295,7 @@ export function GateRow({
             !autoOpenMaster && styles.toggleLabelLocked,
           ]}
         >
-          Auto
+          {t('autoOpen.auto')}
         </Text>
         <View pointerEvents={autoOpenMaster ? 'auto' : 'none'}>
           <Switch
@@ -287,6 +314,9 @@ export function GateRow({
           />
         </View>
       </Pressable>
+      ) : (
+        <Text style={styles.removeHint}>{t('common.remove')}</Text>
+      )}
     </View>
   );
 }
@@ -294,10 +324,9 @@ export function GateRow({
 function createStyles(c: ThemeColors) {
   return StyleSheet.create({
     row: {
-      flexDirection: 'row',
       alignItems: 'center',
-      paddingLeft: 6,
-      paddingRight: 16,
+      paddingStart: 6,
+      paddingEnd: 16,
       backgroundColor: c.surface,
       overflow: 'hidden',
       borderRadius: radii.md,
@@ -306,10 +335,9 @@ function createStyles(c: ThemeColors) {
     },
     rowBody: {
       flex: 1,
-      flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 12,
-      paddingLeft: 4,
+      paddingStart: 4,
       gap: 10,
       minWidth: 0,
     },
@@ -350,10 +378,14 @@ function createStyles(c: ThemeColors) {
       lineHeight: 21,
       fontWeight: '600',
       color: c.text,
+      flexShrink: 1,
+      alignSelf: 'stretch',
     },
     meta: {
       fontSize: 14,
       color: c.muted,
+      flexShrink: 1,
+      alignSelf: 'stretch',
     },
     lockHint: {
       color: c.warning,
@@ -419,6 +451,12 @@ function createStyles(c: ThemeColors) {
     },
     toggleLabelLocked: {
       color: c.muted,
+    },
+    removeHint: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.danger,
+      paddingStart: 8,
     },
     check: {
       width: 22,

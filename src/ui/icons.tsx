@@ -77,6 +77,17 @@ export function IconUnlink({ color, size = 22 }: IconProps) {
   );
 }
 
+export function IconTrash({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M4 7h16" {...stroke(color)} />
+      <Path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" {...stroke(color)} />
+      <Path d="M7 7l1 13a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-13" {...stroke(color)} />
+    </>,
+  );
+}
+
 export function IconChevronRight({ color, size = 18 }: IconProps) {
   return wrap(size, <Path d="M9 6l6 6-6 6" {...stroke(color)} />);
 }
@@ -150,6 +161,17 @@ export function IconShare({ color, size = 22 }: IconProps) {
       <Path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" {...stroke(color)} />
       <Path d="M16 6l-4-4-4 4" {...stroke(color)} />
       <Path d="M12 2v13" {...stroke(color)} />
+    </>,
+  );
+}
+
+export function IconDownload({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M12 3v12" {...stroke(color)} />
+      <Path d="M8 11l4 4 4-4" {...stroke(color)} />
+      <Path d="M5 21h14" {...stroke(color)} />
     </>,
   );
 }

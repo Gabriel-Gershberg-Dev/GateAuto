@@ -6,6 +6,7 @@ import {
 } from '../../data/gatesStore';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   value: number;
@@ -22,6 +23,7 @@ export function RadiusSlider({
   max = MAX_RADIUS_METERS,
   step = 5,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const steps = useMemo(() => {
@@ -39,7 +41,7 @@ export function RadiusSlider({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>Radius: {value} m</Text>
+      <Text style={styles.label}>{t('map.radius', { meters: value })}</Text>
       <View style={styles.controls}>
         <Pressable style={styles.btn} onPress={dec}>
           <Text style={styles.btnText}>−</Text>
@@ -57,7 +59,7 @@ export function RadiusSlider({
         </Pressable>
       </View>
       <Text style={styles.hint}>
-        {min}–{max} m (default 50)
+        {t('map.radiusHint', { min, max })}
       </Text>
     </View>
   );

@@ -2,7 +2,7 @@
   "expo": {
     "name": "GateAuto",
     "slug": "GateAuto",
-    "version": "1.0.0",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,7 +11,11 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#E7EEEC"
+    },
+    "extra": {
+      "supportsRTL": true,
+      "androidVersionCode": 7
     },
     "ios": {
       "supportsTablet": true,
@@ -27,6 +31,7 @@
     },
     "android": {
       "package": "com.gateauto.app",
+      "versionCode": 7,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0D3D42",
@@ -55,7 +60,8 @@
         "BLUETOOTH",
         "BLUETOOTH_ADMIN",
         "BLUETOOTH_CONNECT",
-        "BLUETOOTH_SCAN"
+        "BLUETOOTH_SCAN",
+        "REQUEST_INSTALL_PACKAGES"
       ]
     },
     "web": {
@@ -96,7 +102,14 @@
       "./src/platform/withAndroidBootSync",
       "./src/platform/withAndroidKeepAlive",
       "./src/platform/withAndroidAuto",
-      "./src/platform/withGoogleMaps"
+      "./src/platform/withGoogleMaps",
+      "./src/platform/withApkInstall",
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true
+        }
+      ]
     ]
   }
 }

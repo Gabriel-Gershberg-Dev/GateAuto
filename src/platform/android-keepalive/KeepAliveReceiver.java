@@ -24,10 +24,19 @@ public class KeepAliveReceiver extends BroadcastReceiver {
     String action = intent != null ? intent.getAction() : null;
     boolean alarm = KeepAliveScheduler.ACTION_ALARM.equals(action);
     boolean cooldown = KeepAliveScheduler.ACTION_COOLDOWN.equals(action);
+    boolean holdPulse = KeepAliveScheduler.ACTION_HOLD_PULSE.equals(action);
     if (alarm) {
       KeepAliveScheduler.scheduleNext(context, KeepAliveScheduler.INTERVAL_MS);
     }
     if (!KeepAlivePrefs.isArmed(context)) return;
+    if (holdPulse) {
+      String deviceId =
+        intent != null
+          ? intent.getStringExtra(KeepAliveScheduler.EXTRA_DEVICE_ID)
+          : null;
+      runHoldPulse(goAsync(), context, deviceId);
+      return;
+    }
     if (cooldown) {
       runNative(goAsync(), context, "cooldown", false);
       return;
@@ -60,6 +69,25 @@ public class KeepAliveReceiver extends BroadcastReceiver {
         PalGateNativeOpen.pollNearby(app);
       },
       "gateauto-screen"
+    ).start();
+  }
+
+  private static void runHoldPulse(
+    PendingResult pending,
+    Context context,
+    String deviceId
+  ) {
+    Log.i(TAG, "native hold pulse " + deviceId);
+    final Context app = context.getApplicationContext();
+    new Thread(
+      () -> {
+        try {
+          PalGateNativeOpen.pulseHold(app, deviceId);
+        } finally {
+          new Handler(Looper.getMainLooper()).post(pending::finish);
+        }
+      },
+      "gateauto-hold"
     ).start();
   }
 
