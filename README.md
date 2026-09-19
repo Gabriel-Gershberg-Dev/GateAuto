@@ -27,11 +27,15 @@ GateAuto needs a **custom Development Client** (or EAS preview build), not Expo 
 
 ```bash
 cd C:\dev\GateAuto
+copy .env.example .env
+copy google-services.example.json google-services.json
 npm install
 npx expo install
 npx expo prebuild --platform android
 npx expo run:android
 ```
+
+Fill `.env` and `google-services.json` from Firebase / Google Cloud (do not commit them). The Maps key and Android Firebase key are restricted to `com.gateauto.app` and the upload SHA-1.
 
 `npx expo run:android` builds the Dev Client and installs it on a USB-connected device (or emulator).
 

@@ -1,6 +1,27 @@
-/** Client Firebase config. API keys are restricted by package / SHA in Console. */
+import Constants from 'expo-constants';
+
+type Extra = {
+  firebaseWebApiKey?: string;
+};
+
+function extra(): Extra {
+  return (Constants.expoConfig?.extra ?? {}) as Extra;
+}
+
+function firebaseWebApiKey(): string {
+  const fromExtra = String(extra().firebaseWebApiKey ?? '').trim();
+  if (fromExtra) return fromExtra;
+  return String(process.env.FIREBASE_WEB_API_KEY ?? '').trim();
+}
+
+/**
+ * JS Firebase client config. The API key is a project identifier (not a
+ * server secret). Load it from env / app extra — do not commit the key.
+ * Authorization is Auth + Firestore rules. The Android key is restricted
+ * to `com.gateauto.app` + the upload SHA-1 in Google Cloud.
+ */
 export const firebaseWebConfig = {
-  apiKey: 'AIzaSyCZ3GFYZeZagwHs0HUZnkQ9mVl1jmxsBlE',
+  apiKey: firebaseWebApiKey(),
   authDomain: 'gateauto-app.firebaseapp.com',
   projectId: 'gateauto-app',
   storageBucket: 'gateauto-app.firebasestorage.app',

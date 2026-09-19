@@ -41,9 +41,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyCXR7YOMCgKPC-ITBRiSMvsclJqMdrpKCY"
-        }
+        "googleMaps": {}
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
