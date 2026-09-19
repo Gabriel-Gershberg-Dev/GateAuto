@@ -5,6 +5,7 @@ export {
   getConnectedCarDevices,
   isBluetoothNativeAvailable,
   isCarBluetoothConnected,
+  hasBluetoothPermissions,
   requestBluetoothPermissions,
 } from './carBluetooth';
 export {

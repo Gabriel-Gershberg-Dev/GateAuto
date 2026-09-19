@@ -1,8 +1,9 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  BackHandler,
   Platform,
   Pressable,
   RefreshControl,
@@ -16,6 +17,19 @@ import { useAuth } from '../../auth/AuthProvider';
 import { loadCredentialsForGate } from '../../data/credentials';
 import { appendEvent } from '../../data/eventLog';
 import { moveToIndex } from '../../data/gateOrder';
+import {
+  createGateList,
+  gatesInList,
+  loadGateLists,
+  pruneMissingGates,
+  renameGateList,
+  reorderUngrouped,
+  saveGateLists,
+  toggleGateListExpanded,
+  ungroupGateList,
+  ungroupedGates,
+  type GateList,
+} from '../../data/gateLists';
 import {
   displayGateName,
   isMonitoringEnabled,
@@ -38,7 +52,9 @@ import {
   clearAllSafetyLocks,
   getActiveLocks,
 } from '../../data/openSafetyLock';
+import { isExpectedPrePermissionNativeError } from '../../geo/expectedNativeRejection';
 import { trySyncGeofences } from '../../integrations/optionalNative';
+import { canShareGate, shareableSelectedIds } from '../../share/inviteLogic';
 import {
   listIncomingPendingInvites,
   syncRevokedShares,
@@ -50,14 +66,26 @@ import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { getDevices, openGate, PalGateApiError } from '../../palgate/api';
 import { BarrierMark } from '../components/BarrierMark';
 import { ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
+import { FormSheet } from '../components/FormSheet';
+import { PermissionWarningBanner } from '../components/PermissionSetupHost';
+import { GateListCard } from '../components/GateListCard';
 import { GateRow, type GateOpenFlash } from '../components/GateRow';
+import { Hairline } from '../components/Group';
 import { IncomingInvites } from '../components/IncomingInvites';
 import { HeaderIconButton, NavHeader } from '../components/NavHeader';
+import { SelectionHud } from '../components/SelectionHud';
 import { IconLog, IconRefresh, IconSettings, IconShare } from '../icons';
+import {
+  classifyCardHoldMove,
+  isListAtTop,
+  listRefreshEnabled,
+  shouldLockListScrollForCardHold,
+} from '../listRefreshLock';
 import { useTheme } from '../ThemeProvider';
-import { radii, spacing, type ThemeColors } from '../theme';
+import { HUD_TEAL, hudFrameStyle, radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
+import { requestOpenPermissionSetup, refreshPermissionStatus } from '../../permissions/autoOpenPermissions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GatesList'>;
 
@@ -77,6 +105,11 @@ export function GatesListScreen({ navigation }: Props) {
   const auth = useAuth();
   const { user } = auth;
   const [gates, setGates] = useState<GateConfig[]>([]);
+  const [lists, setLists] = useState<GateList[]>([]);
+  const [listSheet, setListSheet] = useState<'create' | 'rename' | null>(null);
+  const [listName, setListName] = useState('');
+  const [renameListId, setRenameListId] = useState<string | null>(null);
+  const [ungroupId, setUngroupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +126,7 @@ export function GatesListScreen({ navigation }: Props) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [autoOpenMaster, setAutoOpenMaster] = useState(true);
   const [autoOpenBlockedOpen, setAutoOpenBlockedOpen] = useState(false);
-  const [selectMode, setSelectMode] = useState<'off' | 'share' | 'remove'>('off');
+  const [selectMode, setSelectMode] = useState<'off' | 'share' | 'select'>('off');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [removeOpen, setRemoveOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -108,8 +141,16 @@ export function GatesListScreen({ navigation }: Props) {
   const persistChain = useRef(Promise.resolve());
   const listRef = useRef<ScrollView>(null);
   const draggingRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const listAtTopRef = useRef(true);
+  const cardHoldRef = useRef(false);
+  const cardStartYRef = useRef(0);
+  const [cardFingerDown, setCardFingerDown] = useState(false);
   const gatesRef = useRef(gates);
   gatesRef.current = gates;
+  const listsRef = useRef(lists);
+  listsRef.current = lists;
+  const looseGates = useMemo(() => ungroupedGates(gates, lists), [gates, lists]);
   const workingRef = useRef(gates);
   const dragY = useRef(new Animated.Value(0)).current;
   const dragScale = useRef(new Animated.Value(1)).current;
@@ -171,6 +212,22 @@ export function GatesListScreen({ navigation }: Props) {
     await trySyncGeofences();
   }, []);
 
+  const persistLists = useCallback(async (next: GateList[]) => {
+    setLists(next);
+    await saveGateLists(next);
+  }, []);
+
+  const syncListsToGates = useCallback(
+    async (nextGates: GateConfig[]) => {
+      const pruned = pruneMissingGates(
+        listsRef.current,
+        nextGates.map((gate) => gate.id),
+      );
+      if (pruned !== listsRef.current) await persistLists(pruned);
+    },
+    [persistLists],
+  );
+
   const refreshDevices = useCallback(async () => {
     setError(null);
     const [linked, systems, local, pending] = await Promise.all([
@@ -204,6 +261,7 @@ export function GatesListScreen({ navigation }: Props) {
         return;
       }
       await syncNativeRegions();
+      await syncListsToGates(merged);
       return;
     }
 
@@ -225,7 +283,6 @@ export function GatesListScreen({ navigation }: Props) {
       merged = stripLeakedPalGateCatalog(merged, await listSystems());
       await saveGates(merged);
       setGates(merged);
-      await syncNativeRegions();
       if (
         linked.length > 0 &&
         merged.filter((g) => g.origin !== 'shared').length === 0
@@ -235,24 +292,34 @@ export function GatesListScreen({ navigation }: Props) {
     } catch (e) {
       const local = stripLeakedPalGateCatalog(await loadGates(), systems);
       setGates(local);
-      const message =
-        e instanceof PalGateApiError
-          ? e.message
-          : e instanceof Error
+      if (!isExpectedPrePermissionNativeError(e)) {
+        const message =
+          e instanceof PalGateApiError
             ? e.message
-            : t('gates.loadFailed');
-      setError(message);
-      await appendEvent({
-        kind: 'error',
-        message: t('gates.refreshEvent', { message }),
-      });
+            : e instanceof Error
+              ? e.message
+              : t('gates.loadFailed');
+        setError(message);
+        await appendEvent({
+          kind: 'error',
+          message: t('gates.refreshEvent', { message }),
+        });
+      }
     }
-  }, [navigation, syncNativeRegions, t]);
+    await syncNativeRegions();
+    await syncListsToGates(await loadGates());
+  }, [navigation, syncListsToGates, syncNativeRegions, t]);
 
   const loadLocal = useCallback(async () => {
     setLoading(true);
-    const local = await loadGates();
+    const [local, stored] = await Promise.all([loadGates(), loadGateLists()]);
+    const pruned = pruneMissingGates(
+      stored,
+      local.map((gate) => gate.id),
+    );
     setGates(local);
+    setLists(pruned);
+    if (pruned !== stored) await saveGateLists(pruned);
     setLoading(false);
     await refreshDevices();
     setLoading(false);
@@ -263,12 +330,99 @@ export function GatesListScreen({ navigation }: Props) {
       void loadLocal();
       void refreshSafetyLockBanner();
       void isMonitoringEnabled().then(setAutoOpenMaster);
+      void refreshPermissionStatus();
       const id = setInterval(() => {
         void refreshSafetyLockBanner();
       }, 30_000);
       return () => clearInterval(id);
     }, [loadLocal, refreshSafetyLockBanner]),
   );
+
+  const exitSelect = useCallback(() => {
+    setSelectMode('off');
+    setSelectedIds(new Set());
+    setCardFingerDown(false);
+    cardHoldRef.current = false;
+    listRef.current?.setNativeProps({ scrollEnabled: true });
+  }, []);
+
+  const setListScrollEnabled = useCallback((enabled: boolean) => {
+    listRef.current?.setNativeProps({ scrollEnabled: enabled });
+  }, []);
+
+  const runRefresh = useCallback(async () => {
+    if (draggingRef.current || refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      await refreshDevices();
+    } finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  }, [refreshDevices]);
+
+  const onCardTouchStart = useCallback(
+    (pageY: number) => {
+      if (draggingRef.current) return;
+      cardStartYRef.current = pageY;
+      cardHoldRef.current = true;
+      setCardFingerDown(true);
+      if (shouldLockListScrollForCardHold(listAtTopRef.current, selectMode !== 'off')) {
+        setListScrollEnabled(false);
+      }
+    },
+    [selectMode, setListScrollEnabled],
+  );
+
+  const onCardTouchMove = useCallback(
+    (pageY: number) => {
+      if (!cardHoldRef.current || draggingRef.current) return;
+      const kind = classifyCardHoldMove(
+        pageY - cardStartYRef.current,
+        listAtTopRef.current,
+      );
+      if (kind === 'hold') return;
+      cardHoldRef.current = false;
+      setCardFingerDown(false);
+      setListScrollEnabled(true);
+      if (kind === 'pullRefresh' && selectMode === 'off') {
+        void runRefresh();
+      }
+    },
+    [runRefresh, selectMode, setListScrollEnabled],
+  );
+
+  const onCardTouchEnd = useCallback(() => {
+    cardHoldRef.current = false;
+    setCardFingerDown(false);
+    if (draggingRef.current) return;
+    setListScrollEnabled(true);
+  }, [setListScrollEnabled]);
+
+  const refreshEnabled = listRefreshEnabled({
+    selecting: selectMode !== 'off',
+    dragging: draggingId != null,
+    cardFingerDown,
+  });
+
+  const toggleSelected = useCallback((gate: GateConfig) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(gate.id)) next.delete(gate.id);
+      else next.add(gate.id);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (selectMode === 'off' || removeOpen || upgradeOpen) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      exitSelect();
+      return true;
+    });
+    return () => sub.remove();
+  }, [exitSelect, removeOpen, selectMode, upgradeOpen]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -277,18 +431,24 @@ export function GatesListScreen({ navigation }: Props) {
           title={selectMode !== 'off' ? t('gates.selectTitle') : t('gates.title')}
           mark
           onBack={
-            props.back ? () => props.navigation.goBack() : undefined
+            selectMode !== 'off'
+              ? exitSelect
+              : props.back
+                ? () => props.navigation.goBack()
+                : undefined
           }
           actions={
             selectMode !== 'off' ? (
               <HeaderIconButton
                 wide
-                onPress={() => {
-                  setSelectMode('off');
-                  setSelectedIds(new Set());
-                }}
+                onPress={exitSelect}
               >
-                <Text style={styles.headerActionText}>{t('common.done')}</Text>
+                <Text
+                  style={styles.headerActionText}
+                  maxFontSizeMultiplier={1.2}
+                >
+                  {t('common.cancel')}
+                </Text>
               </HeaderIconButton>
             ) : (
               <>
@@ -301,11 +461,7 @@ export function GatesListScreen({ navigation }: Props) {
                 <HeaderIconButton
                   onPress={() => {
                     if (refreshing || draggingRef.current) return;
-                    void (async () => {
-                      setRefreshing(true);
-                      await refreshDevices();
-                      setRefreshing(false);
-                    })();
+                    void runRefresh();
                   }}
                   accessibilityLabel={t('gates.refresh')}
                 >
@@ -327,7 +483,7 @@ export function GatesListScreen({ navigation }: Props) {
         />
       ),
     });
-  }, [colors.primary, navigation, refreshDevices, refreshing, selectMode, styles, t]);
+  }, [colors.primary, exitSelect, navigation, refreshing, runRefresh, selectMode, styles, t]);
 
   const flashOpen = useCallback(
     (gateId: string, success: boolean, message: string) => {
@@ -377,9 +533,10 @@ export function GatesListScreen({ navigation }: Props) {
 
   const onReorderGrant = useCallback(
     (id: string) => {
-      const idx = gatesRef.current.findIndex((g) => g.id === id);
+      const loose = ungroupedGates(gatesRef.current, listsRef.current);
+      const idx = loose.findIndex((g) => g.id === id);
       if (idx < 0) return;
-      workingRef.current = gatesRef.current.slice();
+      workingRef.current = loose.slice();
       dragSession.current.id = id;
       dragSession.current.startIndex = idx;
       dragSession.current.targetIndex = idx;
@@ -430,8 +587,9 @@ export function GatesListScreen({ navigation }: Props) {
     listRef.current?.setNativeProps({ scrollEnabled: true });
     setDraggingId(null);
     if (!dirty || !id) return;
-    setGates(ordered);
-    void saveGates(ordered);
+    const next = reorderUngrouped(gatesRef.current, listsRef.current, ordered);
+    setGates(next);
+    void saveGates(next);
   }, []);
 
   useLayoutEffect(() => {
@@ -501,6 +659,14 @@ export function GatesListScreen({ navigation }: Props) {
       await openGate(credentials, gate.deviceId);
       await persistOpenResult(gate, true, t('gates.openedOk'));
       flashOpen(gate.id, true, t('gates.openedOk'));
+      void import('../../telemetry').then((t) =>
+        t.logAutoOpen({
+          source: 'manual',
+          gateHash: t.hashGateId(gate.id),
+          radiusM: gate.radiusMeters,
+          btRequired: Boolean(gate.bluetooth?.required),
+        }),
+      );
     } catch (e) {
       const message = errorMessage(e, t('gates.openFailed'));
       await persistOpenResult(gate, false, message);
@@ -516,14 +682,18 @@ export function GatesListScreen({ navigation }: Props) {
 
   if (loading && gates.length === 0) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.container}>
+        <PermissionWarningBanner onPress={() => requestOpenPermissionSetup()} />
+        <View style={styles.centered}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <PermissionWarningBanner onPress={() => requestOpenPermissionSetup()} />
       {safetyLockBanner ? (
         <View style={[styles.safetyLockBox, { flexDirection: row }]}>
           <Text style={[styles.safetyLock, { writingDirection, flex: 1 }]}>
@@ -573,19 +743,24 @@ export function GatesListScreen({ navigation }: Props) {
         ref={listRef}
         scrollEnabled={draggingId == null}
         nestedScrollEnabled={false}
-        overScrollMode={draggingId ? 'never' : 'auto'}
-        contentContainerStyle={styles.list}
+        overScrollMode={
+          draggingId || !refreshEnabled ? 'never' : 'auto'
+        }
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          listAtTopRef.current = isListAtTop(e.nativeEvent.contentOffset.y);
+        }}
+        contentContainerStyle={[
+          styles.list,
+          selectMode !== 'off' && styles.listSelecting,
+        ]}
         refreshControl={
           <RefreshControl
-            enabled={draggingId == null}
+            enabled={refreshEnabled}
             refreshing={refreshing && draggingId == null}
             onRefresh={() => {
-              if (draggingRef.current || draggingId) return;
-              void (async () => {
-                setRefreshing(true);
-                await refreshDevices();
-                setRefreshing(false);
-              })();
+              if (!refreshEnabled || draggingRef.current || draggingId) return;
+              void runRefresh();
             }}
             tintColor={colors.primary}
           />
@@ -593,8 +768,10 @@ export function GatesListScreen({ navigation }: Props) {
       >
         {gates.length === 0 ? (
           <View style={styles.emptyBox}>
-            <BarrierMark size={56} color={colors.muted} />
-            <Text style={styles.empty}>{t('gates.empty')}</Text>
+            <View style={styles.emptyHud}>
+              <BarrierMark size={40} color={HUD_TEAL} />
+              <Text style={styles.empty}>{t('gates.empty')}</Text>
+            </View>
             <Pressable
               onPress={() => setSignOutOpen(true)}
               hitSlop={10}
@@ -606,7 +783,83 @@ export function GatesListScreen({ navigation }: Props) {
           </View>
         ) : (
           <View style={styles.stack}>
-            {gates.map((item) => (
+            {lists.map((list) => {
+              const members = gatesInList(gates, list);
+              if (members.length === 0) return null;
+              return (
+                <View key={list.id} style={styles.card}>
+                  <View style={styles.cardClip}>
+                    <GateListCard
+                    name={list.name}
+                    count={members.length}
+                    autoCount={members.filter((g) => g.enabled).length}
+                    expanded={list.expanded}
+                    onToggleExpand={() => {
+                      void persistLists(toggleGateListExpanded(lists, list.id));
+                    }}
+                    onLongPress={() => {
+                      if (draggingRef.current) return;
+                      setSelectMode('select');
+                      setSelectedIds(new Set(list.gateIds));
+                    }}
+                    onUngroup={() => setUngroupId(list.id)}
+                    onRename={() => {
+                      setRenameListId(list.id);
+                      setListName(list.name);
+                      setListSheet('rename');
+                    }}
+                  >
+                    {members.map((item, index) => (
+                      <View key={item.id}>
+                        {index > 0 ? <Hairline inset={16} /> : null}
+                        <GateRow
+                          embedded
+                          gate={item}
+                          autoOpenMaster={autoOpenMaster}
+                          onAutoOpenBlocked={() => setAutoOpenBlockedOpen(true)}
+                          selecting={selectMode !== 'off'}
+                          selected={selectedIds.has(item.id)}
+                          onPress={() => {
+                            if (selectMode !== 'off') {
+                              if (selectMode === 'share' && !canShareGate(item)) {
+                                return;
+                              }
+                              toggleSelected(item);
+                              return;
+                            }
+                            if (item.shareDisabled) {
+                              setDisabledGate(item);
+                              return;
+                            }
+                            navigation.navigate('GateEditor', { gateId: item.id });
+                          }}
+                          onLongPress={() => {
+                            if (selectMode !== 'off') {
+                              if (selectMode === 'share' && !canShareGate(item)) {
+                                return;
+                              }
+                              toggleSelected(item);
+                              return;
+                            }
+                            setSelectMode('select');
+                            setSelectedIds(new Set([item.id]));
+                          }}
+                          onToggleEnabled={(enabled) => void onToggle(item, enabled)}
+                          onOpen={() => void onOpen(item)}
+                          opening={openingIds.has(item.id)}
+                          openFlash={openFlashById[item.id] ?? null}
+                          safetyLockRemainingMs={
+                            lockRemainingByGateId[item.id] ?? 0
+                          }
+                        />
+                      </View>
+                    ))}
+                    </GateListCard>
+                  </View>
+                </View>
+              );
+            })}
+            {looseGates.map((item) => (
               <Animated.View
                 key={item.id}
                 onLayout={(e) => {
@@ -636,13 +889,8 @@ export function GatesListScreen({ navigation }: Props) {
                   selected={selectedIds.has(item.id)}
                   onPress={() => {
                     if (selectMode !== 'off') {
-                      if (selectMode === 'share' && item.shareDisabled) return;
-                      setSelectedIds((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(item.id)) next.delete(item.id);
-                        else next.add(item.id);
-                        return next;
-                      });
+                      if (selectMode === 'share' && !canShareGate(item)) return;
+                      toggleSelected(item);
                       return;
                     }
                     if (item.shareDisabled) {
@@ -653,21 +901,20 @@ export function GatesListScreen({ navigation }: Props) {
                   }}
                   onLongPress={() => {
                     if (draggingRef.current) return;
-                    if (selectMode === 'off') {
-                      setSelectMode('remove');
-                      setSelectedIds(new Set([item.id]));
+                    cardHoldRef.current = false;
+                    setCardFingerDown(false);
+                    setListScrollEnabled(true);
+                    if (selectMode !== 'off') {
+                      if (selectMode === 'share' && !canShareGate(item)) return;
+                      toggleSelected(item);
                       return;
                     }
-                    setSelectedIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(item.id)) next.delete(item.id);
-                      else next.add(item.id);
-                      return next;
-                    });
+                    setSelectMode('select');
+                    setSelectedIds(new Set([item.id]));
                   }}
-                  onShare={() =>
-                    navigation.navigate('ShareGate', { gateIds: [item.id] })
-                  }
+                  onCardTouchStart={onCardTouchStart}
+                  onCardTouchMove={onCardTouchMove}
+                  onCardTouchEnd={onCardTouchEnd}
                   onToggleEnabled={(enabled) => void onToggle(item, enabled)}
                   onOpen={() => void onOpen(item)}
                   opening={openingIds.has(item.id)}
@@ -679,38 +926,51 @@ export function GatesListScreen({ navigation }: Props) {
                 />
               </Animated.View>
             ))}
+            {selectMode !== 'off' ? (
+              <Pressable
+                style={styles.selectDismiss}
+                onPress={exitSelect}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.cancel')}
+              />
+            ) : null}
           </View>
         )}
       </ScrollView>
-      {selectMode === 'share' && selectedIds.size > 0 ? (
-        <Pressable
-          style={({ pressed }) => [styles.shareBar, pressed && { opacity: 0.9 }]}
-          onPress={() => {
-            if (!user?.isRealAccount) {
-              setUpgradeOpen(true);
-              return;
-            }
-            const ids = [...selectedIds];
-            setSelectMode('off');
-            setSelectedIds(new Set());
-            navigation.navigate('ShareGate', { gateIds: ids });
-          }}
-        >
-          <Text style={styles.shareBarText}>
-            {t('gates.shareBar', { count: selectedIds.size })}
-          </Text>
-        </Pressable>
-      ) : null}
-      {selectMode === 'remove' && selectedIds.size > 0 ? (
-        <Pressable
-          style={({ pressed }) => [styles.removeBar, pressed && { opacity: 0.9 }]}
-          onPress={() => setRemoveOpen(true)}
-        >
-          <Text style={styles.removeBarText}>
-            {t('gates.removeBar', { count: selectedIds.size })}
-          </Text>
-        </Pressable>
-      ) : null}
+      <SelectionHud
+        visible={selectMode !== 'off'}
+        count={selectedIds.size}
+        showList={selectMode === 'select'}
+        showShare={
+          selectMode === 'share' ||
+          shareableSelectedIds(gates, selectedIds).length > 0
+        }
+        showRemove={selectMode === 'select'}
+        onList={() => {
+          if (selectedIds.size < 2) return;
+          setListName('');
+          setRenameListId(null);
+          setListSheet('create');
+        }}
+        onShare={() => {
+          const ids =
+            selectMode === 'share'
+              ? [...selectedIds]
+              : shareableSelectedIds(gates, selectedIds);
+          if (ids.length === 0) return;
+          if (!user?.isRealAccount) {
+            setUpgradeOpen(true);
+            return;
+          }
+          exitSelect();
+          navigation.navigate('ShareGate', { gateIds: ids });
+        }}
+        onRemove={() => {
+          if (selectedIds.size === 0) return;
+          setRemoveOpen(true);
+        }}
+        onCancel={exitSelect}
+      />
       <ConfirmSheet
         visible={disabledGate != null}
         title={t('gates.shareDisabledTitle')}
@@ -732,9 +992,18 @@ export function GatesListScreen({ navigation }: Props) {
         }}
       />
       <ConfirmSheet
+        compact
         visible={removeOpen}
-        title={t('gates.removeTitle')}
-        message={t('gates.removeMsg')}
+        title={
+          selectedIds.size === 1
+            ? t('gates.removeOneTitle')
+            : t('gates.removeTitle')
+        }
+        message={
+          selectedIds.size === 1
+            ? t('gates.removeOneMsg')
+            : t('gates.removeMsg')
+        }
         cancelLabel={t('common.cancel')}
         confirmLabel={t('gates.removeBar', { count: selectedIds.size })}
         destructive
@@ -813,6 +1082,59 @@ export function GatesListScreen({ navigation }: Props) {
           navigation.navigate('Settings');
         }}
       />
+      <FormSheet
+        visible={listSheet != null}
+        title={
+          listSheet === 'rename' ? t('gates.listRenameTitle') : t('gates.listTitle')
+        }
+        message={t('gates.listMsg')}
+        fields={[
+          {
+            key: 'name',
+            label: t('gates.listName'),
+            value: listName,
+            onChange: setListName,
+            placeholder: t('gates.listDefault'),
+            autoCapitalize: 'words',
+            autoFocus: true,
+            autoComplete: 'name',
+          },
+        ]}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={
+          listSheet === 'rename' ? t('common.save') : t('gates.listMake')
+        }
+        onCancel={() => {
+          setListSheet(null);
+          setRenameListId(null);
+        }}
+        onConfirm={() => {
+          const name = listName.trim() || t('gates.listDefault');
+          if (listSheet === 'rename' && renameListId) {
+            void persistLists(renameGateList(lists, renameListId, name));
+          } else if (listSheet === 'create') {
+            void persistLists(createGateList(lists, name, selectedIds));
+            exitSelect();
+          }
+          setListSheet(null);
+          setRenameListId(null);
+        }}
+      />
+      <ConfirmSheet
+        compact
+        visible={ungroupId != null}
+        title={t('gates.listUngroupTitle')}
+        message={t('gates.listUngroupMsg')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('gates.listUngroup')}
+        onCancel={() => setUngroupId(null)}
+        onConfirm={() => {
+          const id = ungroupId;
+          setUngroupId(null);
+          if (!id) return;
+          void persistLists(ungroupGateList(lists, id));
+        }}
+      />
       <InfoSheet
         visible={info != null}
         title={info?.title ?? ''}
@@ -839,6 +1161,13 @@ function createStyles(c: ThemeColors) {
       padding: spacing.md,
       paddingBottom: spacing.lg,
       flexGrow: 1,
+    },
+    listSelecting: {
+      paddingBottom: 88,
+    },
+    cardClip: {
+      borderRadius: radii.md,
+      overflow: 'hidden',
     },
     stack: {
       gap: CARD_GAP,
@@ -881,8 +1210,23 @@ function createStyles(c: ThemeColors) {
       marginTop: spacing.lg,
       paddingHorizontal: spacing.md,
     },
+    emptyHud: {
+      ...hudFrameStyle(),
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 14,
+      backgroundColor: c.surface,
+    },
     emptyLogout: {
-      paddingVertical: 10,
+      minHeight: 36,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+    },
+    selectDismiss: {
+      flexGrow: 1,
+      minHeight: 56,
     },
     error: {
       color: c.danger,
@@ -922,7 +1266,7 @@ function createStyles(c: ThemeColors) {
       marginHorizontal: spacing.md,
       marginTop: 8,
       marginBottom: 4,
-      minHeight: 40,
+      minHeight: 44,
       paddingHorizontal: 14,
       borderRadius: radii.sm,
       borderWidth: 1,
@@ -940,34 +1284,6 @@ function createStyles(c: ThemeColors) {
       fontWeight: '700',
       fontSize: 14,
       letterSpacing: -0.2,
-    },
-    shareBar: {
-      marginHorizontal: spacing.md,
-      marginBottom: spacing.md,
-      height: 48,
-      borderRadius: radii.pill,
-      backgroundColor: c.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    shareBarText: {
-      color: c.primaryOn,
-      fontWeight: '700',
-      fontSize: 15,
-    },
-    removeBar: {
-      marginHorizontal: spacing.md,
-      marginBottom: spacing.md,
-      height: 48,
-      borderRadius: radii.pill,
-      backgroundColor: c.danger,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    removeBarText: {
-      color: '#FFFFFF',
-      fontWeight: '700',
-      fontSize: 15,
     },
   });
 }

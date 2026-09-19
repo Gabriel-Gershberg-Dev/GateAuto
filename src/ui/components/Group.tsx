@@ -26,7 +26,7 @@ export function Hairline({ inset = 16 }: { inset?: number }) {
       style={{
         height: StyleSheet.hairlineWidth,
         backgroundColor: colors.divider,
-        marginLeft: inset,
+        marginStart: inset,
       }}
     />
   );

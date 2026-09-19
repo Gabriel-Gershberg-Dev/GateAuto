@@ -1,8 +1,10 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AppState,
   Platform,
   Pressable,
   ScrollView,
@@ -10,7 +12,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { requestBluetoothPermissions } from '../../bluetooth/carBluetooth';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
+import {
+  probeAutoOpenPermissions,
+  refreshPermissionStatus,
+  type PermissionProbe,
+} from '../../permissions/autoOpenPermissions';
 import {
   openAppDetailsSettings,
   openBatteryUnrestrictedPrompt,
@@ -19,6 +27,7 @@ import {
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Permissions'>;
 
@@ -46,27 +55,48 @@ function labelFor(state: PermState, t: (key: string) => string): string {
   }
 }
 
+function btState(probe: PermissionProbe | null): PermState {
+  if (!probe) return 'unknown';
+  return probe.bluetooth ? 'granted' : 'denied';
+}
+
+function batteryState(probe: PermissionProbe | null): PermState {
+  if (!probe) return 'unknown';
+  if (Platform.OS !== 'android') return 'granted';
+  return probe.batteryUnrestricted ? 'granted' : 'denied';
+}
+
 export function PermissionsScreen({ navigation }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { row } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [fg, setFg] = useState<PermState>('unknown');
   const [bg, setBg] = useState<PermState>('unknown');
   const [notif, setNotif] = useState<PermState>('unknown');
+  const [probe, setProbe] = useState<PermissionProbe | null>(null);
 
   const refresh = useCallback(async () => {
-    const foreground = await Location.getForegroundPermissionsAsync();
-    setFg(foreground.granted ? 'granted' : 'denied');
-
-    const background = await Location.getBackgroundPermissionsAsync();
-    setBg(background.granted ? 'granted' : 'denied');
-
+    const next = await probeAutoOpenPermissions();
+    setProbe(next);
+    setFg(next.locationFg ? 'granted' : 'denied');
+    setBg(next.locationBg ? 'granted' : 'denied');
     const n = await Notifications.getPermissionsAsync();
     setNotif(n.granted ? 'granted' : n.status === 'denied' ? 'denied' : 'limited');
+    await refreshPermissionStatus();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
   useEffect(() => {
-    void refresh();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void refresh();
+    });
+    return () => sub.remove();
   }, [refresh]);
 
   const requestLocation = async () => {
@@ -82,31 +112,25 @@ export function PermissionsScreen({ navigation }: Props) {
   const requestNotifications = async () => {
     const n = await Notifications.requestPermissionsAsync();
     setNotif(n.granted ? 'granted' : 'denied');
+    await refresh();
   };
 
   const requestBluetooth = async () => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const bt = require('../../bluetooth/carBluetooth') as {
-        requestBluetoothPermissions?: () => Promise<boolean>;
-      };
-      if (!bt.requestBluetoothPermissions) {
-        void openAppDetailsSettings();
-        return;
-      }
-      // Permission dialogs can pause/recreate the activity; never let a throw
-      // escape to the UI thread after the grant callback.
-      const ok = await Promise.resolve(bt.requestBluetoothPermissions()).catch(
+      const ok = await Promise.resolve(requestBluetoothPermissions()).catch(
         () => false,
       );
-      if (!ok) {
+      if (!ok && Platform.OS === 'android') {
         void openAppDetailsSettings();
       }
     } catch {
-      // Soft-fail: open settings instead of crashing the checklist UI.
       void openAppDetailsSettings();
     }
+    await refresh();
   };
+
+  const bluetooth = btState(probe);
+  const battery = batteryState(probe);
 
   const items: ChecklistItem[] = [
     {
@@ -137,8 +161,9 @@ export function PermissionsScreen({ navigation }: Props) {
       key: 'bt',
       title: Platform.OS === 'android' ? t('permissions.btAndroid') : t('permissions.bt'),
       detail: t('permissions.btDetail'),
-      state: 'unknown',
-      actionLabel: t('permissions.allowSettings'),
+      state: bluetooth,
+      actionLabel:
+        bluetooth === 'granted' ? t('common.ok') : t('permissions.allowSettings'),
       onAction: () => void requestBluetooth(),
     },
   ];
@@ -150,13 +175,16 @@ export function PermissionsScreen({ navigation }: Props) {
 
       {items.map((item) => (
         <View key={item.key} style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
+          <View style={[styles.cardHeader, { flexDirection: row }]}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
             <Text
               style={[
                 styles.badge,
                 item.state === 'granted' ? styles.badgeOk : styles.badgeWarn,
               ]}
+              numberOfLines={1}
             >
               {labelFor(item.state, t)}
             </Text>
@@ -172,32 +200,49 @@ export function PermissionsScreen({ navigation }: Props) {
 
       {Platform.OS === 'android' && (
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{t('permissions.samsungTitle')}</Text>
-            <Text style={[styles.badge, styles.badgeWarn]}>{t('permissions.required')}</Text>
+          <View style={[styles.cardHeader, { flexDirection: row }]}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {t('permissions.samsungTitle')}
+            </Text>
+            <Text
+              style={[
+                styles.badge,
+                battery === 'granted' ? styles.badgeOk : styles.badgeWarn,
+              ]}
+            >
+              {labelFor(battery, t)}
+            </Text>
           </View>
           <Text style={styles.cardDetail}>{t('permissions.samsungDetail')}</Text>
-          <Text style={styles.steps}>{t('permissions.samsungSteps')}</Text>
-          <View style={styles.buttonRow}>
-            <Pressable
-              style={styles.button}
-              onPress={() => void openBatteryUnrestrictedPrompt()}
-            >
-              <Text style={styles.buttonText}>{t('permissions.unrestricted')}</Text>
-            </Pressable>
-            <Pressable
-              style={styles.buttonSecondary}
-              onPress={() => void openSamsungDeviceCareBattery()}
-            >
-              <Text style={styles.buttonSecondaryText}>{t('permissions.deviceCare')}</Text>
-            </Pressable>
-            <Pressable
-              style={styles.buttonSecondary}
-              onPress={() => void openAppDetailsSettings()}
-            >
-              <Text style={styles.buttonSecondaryText}>{t('permissions.appSettings')}</Text>
-            </Pressable>
-          </View>
+          {battery !== 'granted' && (
+            <>
+              <Text style={styles.steps}>{t('permissions.samsungSteps')}</Text>
+              <View style={styles.buttonRow}>
+                <Pressable
+                  style={styles.button}
+                  onPress={() => void openBatteryUnrestrictedPrompt()}
+                >
+                  <Text style={styles.buttonText}>{t('permissions.unrestricted')}</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.buttonSecondary}
+                  onPress={() => void openSamsungDeviceCareBattery()}
+                >
+                  <Text style={styles.buttonSecondaryText}>
+                    {t('permissions.deviceCare')}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.buttonSecondary}
+                  onPress={() => void openAppDetailsSettings()}
+                >
+                  <Text style={styles.buttonSecondaryText}>
+                    {t('permissions.appSettings')}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -252,18 +297,20 @@ function createStyles(c: ThemeColors) {
       gap: spacing.sm,
     },
     cardHeader: {
-      flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       gap: spacing.sm,
     },
     cardTitle: {
       flex: 1,
+      minWidth: 0,
+      flexShrink: 1,
       fontSize: 16,
       fontWeight: '600',
       color: c.text,
     },
     badge: {
+      flexShrink: 0,
       fontSize: 12,
       fontWeight: '600',
       paddingHorizontal: 8,
@@ -293,6 +340,8 @@ function createStyles(c: ThemeColors) {
     },
     button: {
       alignSelf: 'flex-start',
+      minHeight: 44,
+      justifyContent: 'center',
       backgroundColor: c.primary,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
@@ -300,6 +349,8 @@ function createStyles(c: ThemeColors) {
     },
     buttonSecondary: {
       alignSelf: 'flex-start',
+      minHeight: 44,
+      justifyContent: 'center',
       backgroundColor: c.surface,
       borderColor: c.primary,
       borderWidth: 1,

@@ -1,8 +1,10 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Sideload APK only — clients GET this object; writes stay off the client SDK.
-    match /releases/GateAuto-release.apk {
+    // Sideload APKs — clients GET; writes stay off the client SDK.
+    // Production: releases/GateAuto-release.apk
+    // Beta:       releases/GateAuto-beta.apk  (do not overwrite production)
+    match /releases/{apk} {
       allow read: if true;
       allow write: if false;
     }

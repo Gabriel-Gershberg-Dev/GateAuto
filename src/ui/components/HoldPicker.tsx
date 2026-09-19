@@ -57,6 +57,7 @@ export function HoldPicker({
         <Text style={[styles.label, { writingDirection, textAlign }]}>
           {t('editor.hold')}
         </Text>
+        <View style={styles.switchSlot}>
         <Switch
           value={enabled}
           onValueChange={(next) => {
@@ -66,6 +67,7 @@ export function HoldPicker({
           trackColor={{ false: colors.border, true: colors.primaryMuted }}
           thumbColor={enabled ? colors.primary : colors.switchThumbOff}
         />
+        </View>
       </View>
       {enabled ? (
         <>
@@ -151,9 +153,13 @@ function createStyles(c: ThemeColors) {
     },
     label: {
       flex: 1,
+      minWidth: 0,
       fontSize: 16,
       fontWeight: '600',
       color: c.text,
+    },
+    switchSlot: {
+      flexShrink: 0,
     },
     presets: {
       flexWrap: 'wrap',
@@ -161,6 +167,8 @@ function createStyles(c: ThemeColors) {
     },
     chip: {
       minWidth: 44,
+      minHeight: 44,
+      justifyContent: 'center',
       paddingHorizontal: 12,
       paddingVertical: 7,
       borderRadius: radii.pill,

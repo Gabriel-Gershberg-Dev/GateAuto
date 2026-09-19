@@ -15,7 +15,10 @@ import {
   partitionInviteGates,
   toInviteGateMap,
   toShareGateMap,
+  canShareGate,
+  shareableSelectedIds,
   sharedGateId,
+  palGateDeviceKey,
 } from '../src/share/inviteLogic';
 
 describe('invite codes', () => {
@@ -52,6 +55,14 @@ describe('invite codes', () => {
 
   it('builds a shared gate id from code + device', () => {
     assert.equal(sharedGateId('7K3MNP2Q', 'abc'), 'share:7K3MNP2Q:abc');
+  });
+
+  it('reads PalGate device ids, not share:CODE row ids', () => {
+    assert.equal(palGateDeviceKey({ deviceId: 'abc', id: 'share:7K3MNP2Q:abc' }), 'abc');
+    assert.equal(
+      palGateDeviceKey({ deviceId: 'share:7K3MNP2Q:abc', id: 'share:7K3MNP2Q:abc' }),
+      '',
+    );
   });
 
   it('matches invited gates by PalGate deviceId, not share row id', () => {
@@ -116,6 +127,31 @@ describe('invite codes', () => {
     ]);
     assert.equal(toAdd.length, 0);
     assert.equal(alreadyHave.length, 1);
+  });
+
+  it('lets owners share and blocks invitees', () => {
+    assert.equal(canShareGate({ origin: 'linked' }), true);
+    assert.equal(canShareGate({ origin: 'shared' }), false);
+    assert.equal(canShareGate({ origin: 'linked', shareDisabled: true }), false);
+    assert.equal(canShareGate({ origin: 'shared', shareDisabled: true }), false);
+  });
+
+  it('HUD Share only lists selected owner gates', () => {
+    assert.deepEqual(
+      shareableSelectedIds(
+        [
+          { id: 'own', origin: 'linked' },
+          { id: 'in', origin: 'shared' },
+          { id: 'off', origin: 'linked', shareDisabled: true },
+        ],
+        ['own', 'in', 'off'],
+      ),
+      ['own'],
+    );
+    assert.deepEqual(
+      shareableSelectedIds([{ id: 'in', origin: 'shared' }], ['in']),
+      [],
+    );
   });
 
   it('does not transfer Bluetooth-required on share payloads', () => {

@@ -2,8 +2,11 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +16,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import {
+  sheetAvoidKeyboard,
+  useKeyboardBottomInset,
+} from '../useKeyboardBottomInset';
+import { useReduceMotion } from '../useReduceMotion';
 
 export type FormSheetField = {
   key: string;
@@ -23,6 +31,10 @@ export type FormSheetField = {
   autoCapitalize?: 'none' | 'words' | 'sentences';
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'email-address' | 'number-pad';
+  autoFocus?: boolean;
+  autoComplete?: 'email' | 'off' | 'name' | 'password';
+  returnKeyType?: 'done' | 'next' | 'send' | 'go';
+  onSubmitEditing?: () => void;
 };
 
 export function FormSheet({
@@ -56,11 +68,19 @@ export function FormSheet({
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
+  const reduceMotion = useReduceMotion();
   const progress = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<ScrollView>(null);
+  const pad = sheetAvoidKeyboard(insets.bottom, keyboardHeight);
 
   useEffect(() => {
     if (!visible) {
       progress.setValue(0);
+      return;
+    }
+    if (reduceMotion) {
+      progress.setValue(1);
       return;
     }
     progress.setValue(0);
@@ -70,7 +90,7 @@ export function FormSheet({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [progress, visible]);
+  }, [progress, reduceMotion, visible]);
 
   return (
     <Modal
@@ -80,15 +100,20 @@ export function FormSheet({
       statusBarTranslucent
       onRequestClose={onCancel}
     >
-      <View style={styles.root} pointerEvents={visible ? 'auto' : 'none'}>
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
+        pointerEvents={visible ? 'auto' : 'none'}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel}>
           <Animated.View style={[styles.scrim, { opacity: progress }]} />
         </Pressable>
         <Animated.View
           style={[
             styles.sheet,
+            pad,
             {
-              paddingBottom: Math.max(insets.bottom, 16) + 8,
               opacity: progress,
               transform: [
                 {
@@ -101,27 +126,45 @@ export function FormSheet({
             },
           ]}
         >
-          <Text style={styles.title}>{title}</Text>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-          {fields.map((field) => (
-            <View key={field.key} style={styles.field}>
-              <Text style={styles.label}>{field.label}</Text>
-              <TextInput
-                style={styles.input}
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder={field.placeholder}
-                placeholderTextColor={colors.muted}
-                autoCapitalize={field.autoCapitalize ?? 'none'}
-                autoCorrect={false}
-                secureTextEntry={field.secureTextEntry}
-                keyboardType={field.keyboardType ?? 'default'}
-                editable={!busy}
-              />
-            </View>
-          ))}
-          {extra}
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <ScrollView
+            ref={scrollRef}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            style={styles.bodyScroll}
+            contentContainerStyle={styles.body}
+          >
+            <Text style={styles.title}>{title}</Text>
+            {message ? <Text style={styles.message}>{message}</Text> : null}
+            {fields.map((field) => (
+              <View key={field.key} style={styles.field}>
+                <Text style={styles.label}>{field.label}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  placeholder={field.placeholder}
+                  placeholderTextColor={colors.muted}
+                  autoCapitalize={field.autoCapitalize ?? 'none'}
+                  autoCorrect={false}
+                  autoComplete={field.autoComplete}
+                  autoFocus={field.autoFocus}
+                  secureTextEntry={field.secureTextEntry}
+                  keyboardType={field.keyboardType ?? 'default'}
+                  returnKeyType={field.returnKeyType ?? 'done'}
+                  onSubmitEditing={field.onSubmitEditing ?? onConfirm}
+                  blurOnSubmit
+                  editable={!busy}
+                  onFocus={() => {
+                    requestAnimationFrame(() => {
+                      scrollRef.current?.scrollToEnd({ animated: true });
+                    });
+                  }}
+                />
+              </View>
+            ))}
+            {extra}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+          </ScrollView>
           <View style={styles.actions}>
             <Pressable
               onPress={onCancel}
@@ -132,7 +175,9 @@ export function FormSheet({
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.btnGhostText}>{cancelLabel}</Text>
+              <Text style={styles.btnGhostText} numberOfLines={2}>
+                {cancelLabel}
+              </Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}
@@ -148,13 +193,14 @@ export function FormSheet({
                 style={
                   destructive ? styles.btnDangerText : styles.btnPrimaryText
                 }
+                numberOfLines={2}
               >
                 {busy ? t('common.working') : confirmLabel}
               </Text>
             </Pressable>
           </View>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -171,7 +217,6 @@ function createStyles(c: ThemeColors) {
     },
     sheet: {
       marginHorizontal: spacing.md,
-      marginBottom: spacing.sm,
       backgroundColor: c.surface,
       borderRadius: radii.lg,
       paddingHorizontal: spacing.lg,
@@ -179,6 +224,13 @@ function createStyles(c: ThemeColors) {
       gap: 10,
       borderWidth: 1,
       borderColor: c.border,
+    },
+    bodyScroll: {
+      maxHeight: 360,
+    },
+    body: {
+      gap: 10,
+      paddingBottom: 4,
     },
     title: {
       fontSize: 22,
@@ -206,6 +258,7 @@ function createStyles(c: ThemeColors) {
       borderRadius: radii.sm,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
+      minHeight: 48,
       fontSize: 16,
       color: c.text,
     },
@@ -215,12 +268,15 @@ function createStyles(c: ThemeColors) {
     },
     actions: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 10,
       marginTop: spacing.sm,
     },
     btn: {
-      flex: 1,
-      height: 48,
+      flexGrow: 1,
+      flexBasis: 132,
+      minHeight: 48,
+      paddingHorizontal: 12,
       borderRadius: radii.pill,
       alignItems: 'center',
       justifyContent: 'center',
@@ -232,6 +288,7 @@ function createStyles(c: ThemeColors) {
       color: c.text,
       fontWeight: '700',
       fontSize: 15,
+      textAlign: 'center',
     },
     btnPrimary: {
       backgroundColor: c.primary,
@@ -240,6 +297,7 @@ function createStyles(c: ThemeColors) {
       color: c.primaryOn,
       fontWeight: '700',
       fontSize: 15,
+      textAlign: 'center',
     },
     btnDanger: {
       backgroundColor: c.danger,
@@ -248,6 +306,7 @@ function createStyles(c: ThemeColors) {
       color: '#FFFFFF',
       fontWeight: '700',
       fontSize: 15,
+      textAlign: 'center',
     },
     pressed: {
       opacity: 0.88,

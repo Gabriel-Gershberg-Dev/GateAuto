@@ -95,6 +95,19 @@ describe('translation catalogs', () => {
     assert.equal(he.open, 'Open');
     assert.equal(ru.open, 'Open');
   });
+
+  it('does not tell the user to quit the app after a language change', () => {
+    for (const body of [
+      en.lang.restartToRtl,
+      en.lang.restartToLtr,
+      he.lang.restartToRtl,
+      he.lang.restartToLtr,
+      ru.lang.restartToRtl,
+      ru.lang.restartToLtr,
+    ]) {
+      assert.doesNotMatch(body, /swipe|force-quit|force quit|סגרו את|закройте/i);
+    }
+  });
 });
 
 describe('RTL bidi helpers', () => {

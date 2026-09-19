@@ -1,3 +1,5 @@
+export type UpdateChannel = 'production' | 'beta';
+
 export type RemoteUpdateConfig = {
   latestVersionCode: number;
   latestVersionName: string;
@@ -5,11 +7,53 @@ export type RemoteUpdateConfig = {
   releaseNotes: string;
 };
 
+export type RemoteUpdateChannels = {
+  production: RemoteUpdateConfig;
+  beta: RemoteUpdateConfig;
+};
+
+export const RC_PRODUCTION_KEYS = {
+  code: 'latest_version_code',
+  name: 'latest_version_name',
+  url: 'apk_url',
+  notes: 'release_notes',
+} as const;
+
+export const RC_BETA_KEYS = {
+  code: 'beta_version_code',
+  name: 'beta_version_name',
+  url: 'beta_apk_url',
+  notes: 'beta_release_notes',
+} as const;
+
+export const RC_UPDATE_KEYS = [
+  RC_PRODUCTION_KEYS.code,
+  RC_PRODUCTION_KEYS.name,
+  RC_PRODUCTION_KEYS.url,
+  RC_PRODUCTION_KEYS.notes,
+  RC_BETA_KEYS.code,
+  RC_BETA_KEYS.name,
+  RC_BETA_KEYS.url,
+  RC_BETA_KEYS.notes,
+] as const;
+
 export const REMOTE_UPDATE_DEFAULTS: RemoteUpdateConfig = {
   latestVersionCode: 2,
   latestVersionName: '1.0.1',
   apkUrl: '',
   releaseNotes: '',
+};
+
+export const REMOTE_BETA_DEFAULTS: RemoteUpdateConfig = {
+  latestVersionCode: 0,
+  latestVersionName: '',
+  apkUrl: '',
+  releaseNotes: '',
+};
+
+export const REMOTE_UPDATE_CHANNELS_DEFAULTS: RemoteUpdateChannels = {
+  production: REMOTE_UPDATE_DEFAULTS,
+  beta: REMOTE_BETA_DEFAULTS,
 };
 
 const HTTPS = /^https:\/\//i;
@@ -53,15 +97,44 @@ export function readRemoteConfigEntries(
   return values;
 }
 
+type ChannelKeyMap = {
+  code: string;
+  name: string;
+  url: string;
+  notes: string;
+};
+
+export function parseChannelUpdateConfig(
+  values: Record<string, string | undefined>,
+  keys: ChannelKeyMap,
+): RemoteUpdateConfig {
+  const apkUrl = String(values[keys.url] ?? '').trim();
+  return {
+    latestVersionCode: parseVersionCode(values[keys.code]),
+    latestVersionName: String(values[keys.name] ?? '').trim(),
+    apkUrl,
+    releaseNotes: String(values[keys.notes] ?? '').trim(),
+  };
+}
+
 export function parseRemoteUpdateConfig(
   values: Record<string, string | undefined>,
 ): RemoteUpdateConfig {
-  const apkUrl = String(values.apk_url ?? '').trim();
+  return parseChannelUpdateConfig(values, RC_PRODUCTION_KEYS);
+}
+
+export function parseBetaUpdateConfig(
+  values: Record<string, string | undefined>,
+): RemoteUpdateConfig {
+  return parseChannelUpdateConfig(values, RC_BETA_KEYS);
+}
+
+export function parseRemoteUpdateChannels(
+  values: Record<string, string | undefined>,
+): RemoteUpdateChannels {
   return {
-    latestVersionCode: parseVersionCode(values.latest_version_code),
-    latestVersionName: String(values.latest_version_name ?? '').trim(),
-    apkUrl,
-    releaseNotes: String(values.release_notes ?? '').trim(),
+    production: parseRemoteUpdateConfig(values),
+    beta: parseBetaUpdateConfig(values),
   };
 }
 
@@ -80,6 +153,10 @@ export function isHttpsApkUrl(url: string): boolean {
   }
 }
 
+/**
+ * Offer a sideload only when the channel's versionCode is strictly newer.
+ * A phone on a beta APK above production is not asked to "update" downward.
+ */
 export function shouldOfferUpdate(opts: {
   installedVersionCode: number;
   remote: RemoteUpdateConfig;

@@ -18,6 +18,7 @@ import {
   stopMonitoring,
   syncGeofences,
 } from './geofencing';
+import { isExpectedPrePermissionNativeError } from './expectedNativeRejection';
 
 let started = false;
 let syncing: Promise<void> | null = null;
@@ -70,11 +71,13 @@ export async function resyncMonitoringIfArmed(reason: string): Promise<void> {
       await checkEligibleNowAndOpen(reason);
     } catch (error) {
       console.warn(`[GateAuto] resync geofences failed (${reason})`, error);
-      const message = error instanceof Error ? error.message : String(error);
-      await appendEvent({
-        kind: 'error',
-        message: `Resync failed (${reason}): ${message}`,
-      });
+      if (!isExpectedPrePermissionNativeError(error)) {
+        const message = error instanceof Error ? error.message : String(error);
+        await appendEvent({
+          kind: 'error',
+          message: `Resync failed (${reason}): ${message}`,
+        });
+      }
     } finally {
       syncing = null;
     }

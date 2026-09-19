@@ -92,6 +92,18 @@ export function IconChevronRight({ color, size = 18 }: IconProps) {
   return wrap(size, <Path d="M9 6l6 6-6 6" {...stroke(color)} />);
 }
 
+/** Globe with meridians — language / direction. */
+export function IconGlobe({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Circle cx="12" cy="12" r="9" {...stroke(color)} />
+      <Path d="M3 12h18" {...stroke(color)} />
+      <Path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" {...stroke(color)} />
+    </>,
+  );
+}
+
 export function IconPin({ color, size = 22 }: IconProps) {
   return wrap(
     size,
@@ -176,6 +188,19 @@ export function IconDownload({ color, size = 22 }: IconProps) {
   );
 }
 
+export function IconBell({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path
+        d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"
+        {...stroke(color)}
+      />
+      <Path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" {...stroke(color)} />
+    </>,
+  );
+}
+
 export function IconPerson({ color, size = 22 }: IconProps) {
   return wrap(
     size,
@@ -197,6 +222,27 @@ export function IconQr({ color, size = 22 }: IconProps) {
       <Path d="M18 14h2v2h-2z" {...stroke(color)} />
       <Path d="M14 18h2v2h-2z" {...stroke(color)} />
       <Path d="M18 18h2v2h-2z" {...stroke(color)} />
+    </>,
+  );
+}
+
+export function IconLayers({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M4 8.5L12 4l8 4.5-8 4.5-8-4.5z" {...stroke(color)} />
+      <Path d="M4 13l8 4.5L20 13" {...stroke(color)} />
+      <Path d="M4 17l8 4.5L20 17" {...stroke(color)} />
+    </>,
+  );
+}
+
+export function IconClose({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M6 6l12 12" {...stroke(color)} />
+      <Path d="M18 6L6 18" {...stroke(color)} />
     </>,
   );
 }

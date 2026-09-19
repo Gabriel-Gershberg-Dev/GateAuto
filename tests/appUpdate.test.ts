@@ -4,11 +4,13 @@ import {
   isFetchedUpdateConfig,
   isHttpsApkUrl,
   isIntegerVersionCode,
+  parseRemoteUpdateChannels,
   parseRemoteUpdateConfig,
   parseVersionCode,
   readRemoteConfigEntries,
   shouldOfferUpdate,
 } from '../src/updates/updateLogic';
+import { shouldPostUpdateNotice } from '../src/updates/updateNoticeLogic';
 
 describe('sideload Remote Config update', () => {
   it('offers only when remote versionCode is higher and apk_url is HTTPS', () => {
@@ -93,6 +95,96 @@ describe('sideload Remote Config update', () => {
     assert.equal(
       shouldOfferUpdate({ installedVersionCode: 4, remote }),
       true,
+    );
+  });
+
+  it('does not offer production when the phone is already on a newer beta build', () => {
+    const production = parseRemoteUpdateConfig({
+      latest_version_code: '13',
+      latest_version_name: '1.0.12',
+      apk_url: 'https://example.com/GateAuto.apk',
+    });
+    assert.equal(
+      shouldOfferUpdate({ installedVersionCode: 14, remote: production }),
+      false,
+    );
+  });
+
+  it('parses beta keys separately from production REST strings', () => {
+    const values = readRemoteConfigEntries({
+      latest_version_code: '13',
+      latest_version_name: '1.0.12',
+      apk_url: 'https://example.com/GateAuto.apk',
+      release_notes: 'Family',
+      beta_version_code: '14',
+      beta_version_name: '1.0.13',
+      beta_apk_url: 'https://example.com/GateAuto-beta.apk',
+      beta_release_notes: 'Beta',
+    });
+    const channels = parseRemoteUpdateChannels(values);
+    assert.equal(channels.production.latestVersionCode, 13);
+    assert.equal(channels.production.releaseNotes, 'Family');
+    assert.equal(channels.beta.latestVersionCode, 14);
+    assert.equal(channels.beta.latestVersionName, '1.0.13');
+    assert.equal(channels.beta.apkUrl, 'https://example.com/GateAuto-beta.apk');
+    assert.equal(parseRemoteUpdateConfig(values).apkUrl, channels.production.apkUrl);
+    assert.equal(
+      shouldOfferUpdate({
+        installedVersionCode: 13,
+        remote: channels.production,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldOfferUpdate({
+        installedVersionCode: 13,
+        remote: channels.beta,
+      }),
+      true,
+    );
+  });
+});
+
+describe('update tray notice', () => {
+  it('posts once per remote versionCode when the toggle is on', () => {
+    assert.equal(
+      shouldPostUpdateNotice({
+        enabled: true,
+        willOffer: true,
+        versionCode: 31,
+        lastNotifiedCode: 0,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldPostUpdateNotice({
+        enabled: true,
+        willOffer: true,
+        versionCode: 31,
+        lastNotifiedCode: 31,
+      }),
+      false,
+    );
+  });
+
+  it('does not post when the toggle is off or there is no offer', () => {
+    assert.equal(
+      shouldPostUpdateNotice({
+        enabled: false,
+        willOffer: true,
+        versionCode: 31,
+        lastNotifiedCode: 0,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldPostUpdateNotice({
+        enabled: true,
+        willOffer: false,
+        versionCode: 31,
+        lastNotifiedCode: 0,
+      }),
+      false,
     );
   });
 });

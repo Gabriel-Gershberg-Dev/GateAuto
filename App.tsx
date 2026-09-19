@@ -6,6 +6,7 @@ import {
 // Register GEOFENCE / boot headless tasks early (TaskManager + AppRegistry).
 import './src/geo/task';
 import { startMonitoringResyncLifecycle } from './src/geo/monitoringResync';
+import { startTelemetryBootstrap } from './src/telemetry/bootstrap';
 import { hydrateSafetyLockSettingsToNative } from './src/data/safetyLockSettings';
 import { hydrateUserScope } from './src/data/userScope';
 import { AuthProvider } from './src/auth/AuthProvider';
@@ -18,6 +19,7 @@ import { ThemeProvider, useTheme } from './src/ui/ThemeProvider';
 void hydrateUserScope().then(() => {
   startMonitoringResyncLifecycle();
   void hydrateSafetyLockSettingsToNative();
+  startTelemetryBootstrap();
 });
 
 function AppStatusBar() {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Void cockpit. Host still owns the true AA wallpaper. -->
+    <color name="car_surface">#020809</color>
+    <color name="car_surface_elevated">#071112</color>
+    <!-- Phosphor cyan — glass-edge highlight, not flat teal. -->
+    <color name="car_primary">#3EE8D4</color>
+    <color name="car_primary_dark">#A8FFF6</color>
+    <color name="car_secondary">#071112</color>
+    <color name="car_secondary_dark">#020809</color>
+</resources>

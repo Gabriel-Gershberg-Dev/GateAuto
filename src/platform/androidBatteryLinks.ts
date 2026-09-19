@@ -35,12 +35,20 @@ export async function openAppDetailsSettings(): Promise<void> {
 }
 
 /**
- * System “allow unrestricted / ignore battery optimizations” prompt when available,
- * else the battery-optimization list, else app details.
+ * App battery page (Unrestricted / Optimized / Restricted) when available,
+ * else the ignore-optimizations prompt, else app details.
  */
 export async function openBatteryUnrestrictedPrompt(): Promise<void> {
   if (Platform.OS !== 'android') {
     await Linking.openSettings();
+    return;
+  }
+
+  if (
+    await tryOpenUrl(
+      `intent:#Intent;action=android.settings.APP_BATTERY_SETTINGS;data=package:${PACKAGE};end`,
+    )
+  ) {
     return;
   }
 

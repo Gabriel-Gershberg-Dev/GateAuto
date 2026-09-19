@@ -1,14 +1,19 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import i18n from '../i18n';
+import { getNativeNotificationPrefs } from '../platform/keepAliveAlarm';
+import { shadeKindVisible } from './noticeLogic';
 
 const CHANNEL_ID = 'gateauto';
 const LINKING_CHANNEL_ID = 'gateauto-linking';
 const MONITORING_CHANNEL_ID = 'gateauto-monitoring';
+const UPDATE_CHANNEL_ID = 'gateauto-updates';
+const UPDATE_NOTIFICATION_ID = 'gateauto-update';
 
 let channelReady: Promise<void> | null = null;
 let linkingChannelReady: Promise<void> | null = null;
 let monitoringChannelReady: Promise<void> | null = null;
+let updateChannelReady: Promise<void> | null = null;
 let linkingNotificationId: string | null = null;
 let monitoringNotificationId: string | null = null;
 
@@ -72,10 +77,29 @@ async function ensureMonitoringChannel(): Promise<void> {
   await monitoringChannelReady;
 }
 
+async function ensureUpdateChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  if (!updateChannelReady) {
+    updateChannelReady = Notifications.setNotificationChannelAsync(
+      UPDATE_CHANNEL_ID,
+      {
+        name: i18n.t('notifications.updates'),
+        importance: Notifications.AndroidImportance.DEFAULT,
+        vibrationPattern: [0, 180],
+        lightColor: '#0D3D42',
+        lockscreenVisibility:
+          Notifications.AndroidNotificationVisibility.PUBLIC,
+      },
+    ).then(() => undefined);
+  }
+  await updateChannelReady;
+}
+
 export async function ensureNotificationSetup(): Promise<void> {
   await ensureAndroidChannel();
   await ensureLinkingChannel();
   await ensureMonitoringChannel();
+  await ensureUpdateChannel();
 }
 
 function immediateTrigger(): Notifications.NotificationTriggerInput {
@@ -189,8 +213,52 @@ async function ensureNotifyPermission(): Promise<boolean> {
   }
 }
 
+export async function dismissUpdateNotification(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.dismissNotificationAsync(UPDATE_NOTIFICATION_ID);
+  } catch (error) {
+    console.warn('[GateAuto] dismissUpdateNotification failed', error);
+  }
+}
+
+/** Tray ping when a sideload APK is ready. Returns false if permission missing. */
+export async function showUpdateAvailableNotification(opts: {
+  versionName: string;
+  versionCode: number;
+}): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  try {
+    await ensureUpdateChannel();
+    if (!(await ensureNotifyPermission())) return false;
+    await Notifications.dismissNotificationAsync(UPDATE_NOTIFICATION_ID).catch(
+      () => undefined,
+    );
+    await Notifications.scheduleNotificationAsync({
+      identifier: UPDATE_NOTIFICATION_ID,
+      content: {
+        title: i18n.t('notify.updateTitle'),
+        body: i18n.t('notify.updateBody', { name: opts.versionName }),
+        data: { kind: 'app-update', versionCode: opts.versionCode },
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.DEFAULT,
+        ...(Platform.OS === 'android'
+          ? { channelId: UPDATE_CHANNEL_ID }
+          : {}),
+      },
+      trigger: null,
+    });
+    return true;
+  } catch (error) {
+    console.warn('[GateAuto] showUpdateAvailableNotification failed', error);
+    return false;
+  }
+}
+
 export async function notifyOpenSuccess(gateName: string): Promise<void> {
   try {
+    const prefs = await getNativeNotificationPrefs();
+    if (!shadeKindVisible(prefs.all, prefs.gateOpen)) return;
     await ensureAndroidChannel();
     await ensureNotifyPermission();
     await Notifications.scheduleNotificationAsync({
@@ -212,6 +280,8 @@ export async function notifyOpenFailure(
   message: string,
 ): Promise<void> {
   try {
+    const prefs = await getNativeNotificationPrefs();
+    if (!shadeKindVisible(prefs.all, prefs.gateOpen)) return;
     await ensureAndroidChannel();
     await ensureNotifyPermission();
     await Notifications.scheduleNotificationAsync({

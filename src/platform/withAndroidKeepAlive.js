@@ -22,13 +22,20 @@ const JAVA_FILES = [
   'KeepAliveService.java',
   'KeepAliveModule.java',
   'KeepAlivePackage.java',
+  'AutoOpenPermissionStatus.java',
   'GeofenceRegistrar.java',
   'GeofenceTransitionReceiver.java',
   'MonitoringService.java',
+  'ApproachSampler.java',
+  'MonitoringNotice.java',
+  'MonitoringNoticeReceiver.java',
+  'HoldService.java',
   'BtConnectReceiver.java',
+  'CarBluetoothState.java',
   'PalGateAes.java',
   'PalGateToken.java',
   'PalGateNativeOpen.java',
+  'GateAutoTelemetry.java',
 ];
 
 function withKeepAliveSources(config) {
@@ -62,13 +69,15 @@ function upsertReceiver(app, name, attrs, intentFilter) {
   app.receiver = receivers;
 }
 
-function upsertService(app, name, attrs) {
+function upsertService(app, name, attrs, children) {
   const services = app.service ?? [];
   if (services.some((s) => s?.$?.['android:name'] === name)) {
     app.service = services;
     return;
   }
-  services.push({ $: { 'android:name': name, ...attrs } });
+  const service = { $: { 'android:name': name, ...attrs } };
+  if (children) Object.assign(service, children);
+  services.push(service);
   app.service = services;
 }
 
@@ -105,12 +114,30 @@ function withKeepAliveManifest(config) {
       });
       keepAliveReceiver['intent-filter'][0].action = keepAliveActions;
     }
+    // Delete intent of the monitoring notice: Android 13+ lets the user swipe an
+    // ongoing FGS notification away, so re-post it while still armed.
+    upsertReceiver(
+      app,
+      'com.gateauto.app.keepalive.MonitoringNoticeReceiver',
+      { 'android:enabled': 'true', 'android:exported': 'false' },
+      [
+        {
+          action: [
+            { $: { 'android:name': 'com.gateauto.app.MONITOR_NOTICE_RESTORE' } },
+          ],
+        },
+      ],
+    );
     upsertReceiver(
       app,
       'com.gateauto.app.keepalive.GeofenceTransitionReceiver',
       { 'android:enabled': 'true', 'android:exported': 'false' },
       [{ action: [{ $: { 'android:name': 'com.gateauto.app.GEOFENCE_TRANSITION' } }] }],
     );
+    // ACL_DISCONNECTED matters as much as ACL_CONNECTED: these manifest
+    // broadcasts are what keep the cached connected-car set exact even while the
+    // process is dead, so a locked-phone open can answer "is the car connected?"
+    // without an async Bluetooth read. See CarBluetoothState.
     upsertReceiver(
       app,
       'com.gateauto.app.keepalive.BtConnectReceiver',
@@ -119,12 +146,30 @@ function withKeepAliveManifest(config) {
         {
           action: [
             { $: { 'android:name': 'android.bluetooth.device.action.ACL_CONNECTED' } },
+            { $: { 'android:name': 'android.bluetooth.device.action.ACL_DISCONNECTED' } },
             { $: { 'android:name': 'android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED' } },
             { $: { 'android:name': 'android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED' } },
           ],
         },
       ],
     );
+    const btReceiver = (app.receiver ?? []).find(
+      (r) => r?.$?.['android:name'] === 'com.gateauto.app.keepalive.BtConnectReceiver',
+    );
+    const btActions = btReceiver?.['intent-filter']?.[0]?.action ?? [];
+    if (
+      btReceiver &&
+      !btActions.some(
+        (a) =>
+          a?.$?.['android:name'] ===
+          'android.bluetooth.device.action.ACL_DISCONNECTED',
+      )
+    ) {
+      btActions.push({
+        $: { 'android:name': 'android.bluetooth.device.action.ACL_DISCONNECTED' },
+      });
+      btReceiver['intent-filter'][0].action = btActions;
+    }
 
     upsertService(app, 'com.gateauto.app.keepalive.KeepAliveService', {
       'android:exported': 'false',
@@ -141,6 +186,30 @@ function withKeepAliveManifest(config) {
       'android:foregroundServiceType': 'location',
       'android:stopWithTask': 'false',
     });
+
+    // Non-location process-hold FGS. specialUse (not location) so it can be
+    // started from a background broadcast without Samsung stripping GPS.
+    upsertService(
+      app,
+      'com.gateauto.app.keepalive.HoldService',
+      {
+        'android:exported': 'false',
+        'android:foregroundServiceType': 'specialUse',
+        'android:stopWithTask': 'false',
+      },
+      {
+        property: [
+          {
+            $: {
+              'android:name':
+                'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE',
+              'android:value':
+                'Keeps the auto-open process warm so a configured gate opens instantly on arrival without a cold restart.',
+            },
+          },
+        ],
+      },
+    );
 
     const locationService = (app.service ?? []).find(
       (s) =>
@@ -175,6 +244,16 @@ function withKeepAlivePackage(config) {
           'add(GateAutoCarBluetoothPackage())',
           'add(GateAutoCarBluetoothPackage())\n              add(KeepAlivePackage())',
         );
+      } else if (contents.includes('add(StreetViewPackage())')) {
+        contents = contents.replace(
+          'add(StreetViewPackage())',
+          'add(KeepAlivePackage())\n              add(StreetViewPackage())',
+        );
+      } else if (contents.includes('PackageList(this).packages.apply')) {
+        contents = contents.replace(
+          /PackageList\(this\)\.packages\.apply\s*\{/,
+          (match) => `${match}\n              add(KeepAlivePackage())`,
+        );
       }
     }
     if (
@@ -184,6 +263,19 @@ function withKeepAlivePackage(config) {
       contents = contents.replace(
         'KeepAliveScheduler.start(this)',
         'KeepAliveScheduler.start(this)\n      GeofenceRegistrar.register(this, false)',
+      );
+    }
+    // Hold the process with a non-location FGS on every (possibly cold-started)
+    // process start when armed, so it cannot drop to cached/empty between
+    // arrivals. HoldService.ensure self-guards on armed and requests no GPS.
+    const holdEnsure = 'com.gateauto.app.keepalive.HoldService.ensure(this)';
+    if (
+      !contents.includes(holdEnsure) &&
+      contents.includes('ApplicationLifecycleDispatcher.onApplicationCreate(this)')
+    ) {
+      contents = contents.replace(
+        'ApplicationLifecycleDispatcher.onApplicationCreate(this)',
+        `ApplicationLifecycleDispatcher.onApplicationCreate(this)\n    ${holdEnsure}`,
       );
     }
     cfg.modResults.contents = contents;
@@ -199,6 +291,12 @@ function withPlayServicesLocation(config) {
         `dependencies {\n    implementation("com.google.android.gms:play-services-location:21.3.0")`,
       );
     }
+    if (!cfg.modResults.contents.includes('firebase-analytics')) {
+      cfg.modResults.contents = cfg.modResults.contents.replace(
+        /dependencies\s*\{/,
+        `dependencies {\n    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))\n    implementation("com.google.firebase:firebase-crashlytics")\n    implementation("com.google.firebase:firebase-analytics")`,
+      );
+    }
     return cfg;
   });
 }
@@ -208,6 +306,7 @@ function withAndroidKeepAlive(config) {
     'android.permission.SCHEDULE_EXACT_ALARM',
     'android.permission.FOREGROUND_SERVICE_SHORT_SERVICE',
     'android.permission.FOREGROUND_SERVICE_LOCATION',
+    'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
     'android.permission.WAKE_LOCK',
     'android.permission.RECEIVE_BOOT_COMPLETED',
   ]);
@@ -221,5 +320,5 @@ function withAndroidKeepAlive(config) {
 module.exports = createRunOncePlugin(
   withAndroidKeepAlive,
   'gateauto-android-keep-alive',
-  '1.8.0',
+  '1.17.0',
 );

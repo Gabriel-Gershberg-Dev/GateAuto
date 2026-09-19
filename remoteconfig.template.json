@@ -1,28 +1,60 @@
 {
   "parameters": {
     "latest_version_code": {
-      "defaultValue": { "value": "7" },
+      "defaultValue": {
+        "value": "31"
+      },
       "valueType": "NUMBER",
-      "description": "Android versionCode of the latest sideload APK. Must be greater than the installed versionCode to offer an update."
+      "description": "PRODUCTION family channel. Do not bump on a routine/dev publish — only when explicitly asked."
     },
     "latest_version_name": {
-      "defaultValue": { "value": "1.0.6" },
+      "defaultValue": {
+        "value": "1.0.30"
+      },
       "valueType": "STRING",
-      "description": "User-facing version name shown in the update sheet."
+      "description": "PRODUCTION family channel. Leave unchanged unless promoting a build to family."
     },
     "apk_url": {
       "defaultValue": {
-        "value": "https://firebasestorage.googleapis.com/v0/b/gateauto-app.firebasestorage.app/o/releases%2FGateAuto-release.apk?alt=media&token=3ac2eea9-a873-4ba6-8b92-c0bf41a9a723"
+        "value": "https://firebasestorage.googleapis.com/v0/b/gateauto-app.firebasestorage.app/o/releases%2FGateAuto-release.apk?alt=media&token=4b39a052-6d0c-433f-9803-890c39f0c15d"
       },
       "valueType": "STRING",
-      "description": "HTTPS URL of the latest APK (Firebase Storage or any HTTPS host). Leave empty until an APK is uploaded."
+      "description": "PRODUCTION family channel. Default publish must not point this at a beta object."
     },
     "release_notes": {
       "defaultValue": {
-        "value": "Owner unlink disables shared copies (Remove only). Language on login. Settings language stays on Settings. PalGate unlink per system. Pending invites on Gates. Light theme default, darker cabin contrast. BT-off inside opens via native pollNearby."
+        "value": "More reliable automatic opening when your phone is locked. You can hide the searching notification in Settings, and get a notice when an update is ready."
       },
       "valueType": "STRING",
-      "description": "Optional what's-new text for the in-app update sheet."
+      "description": "PRODUCTION family channel. Optional what's-new text for the in-app update sheet."
+    },
+    "beta_version_code": {
+      "defaultValue": {
+        "value": "47"
+      },
+      "valueType": "NUMBER",
+      "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
+    },
+    "beta_version_name": {
+      "defaultValue": {
+        "value": "1.0.46"
+      },
+      "valueType": "STRING",
+      "description": "BETA channel. User-facing version name for Check for beta updates."
+    },
+    "beta_apk_url": {
+      "defaultValue": {
+        "value": "https://firebasestorage.googleapis.com/v0/b/gateauto-app.firebasestorage.app/o/releases%2FGateAuto-beta.apk?alt=media&token=f4728f02-23a5-40f8-8643-3536c293f1c3"
+      },
+      "valueType": "STRING",
+      "description": "BETA channel. HTTPS URL of the beta APK (separate Storage object so family production URL is not overwritten)."
+    },
+    "beta_release_notes": {
+      "defaultValue": {
+        "value": "List cards no longer have Open. Nested gates sit inside the rounded card. Selection bar stays on one row."
+      },
+      "valueType": "STRING",
+      "description": "BETA channel. Optional what's-new text shown only after unlock."
     }
   }
 }

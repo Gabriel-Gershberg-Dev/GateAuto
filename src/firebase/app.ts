@@ -35,6 +35,10 @@ function reactNativePersistence(): Persistence {
 }
 
 function ensureApp() {
+  // JS SDK (Auth / Firestore / Remote Config) uses the web app id.
+  // @react-native-firebase Crashlytics/Analytics use the Android app from
+  // google-services.json. Separate registries — do not pass this app into
+  // getCrashlytics() / getAnalytics().
   return getApps().length > 0 ? getApp() : initializeApp(firebaseWebConfig);
 }
 

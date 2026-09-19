@@ -29,6 +29,13 @@ public final class GeofenceRegistrar {
   private static final String TAG = "GateAutoKeepAlive";
   private static final String PREF = "gateauto_keepalive";
   private static final String KEY_REGIONS = "regionsJson";
+  /**
+   * Play Services rarely delivers ENTER for fences smaller than ~100m while the
+   * phone is locked (GPS error is larger than a 25–40m pin). Detect with at
+   * least this; {@link PalGateNativeOpen} still only opens at the user radius.
+   */
+  public static final double DETECT_MIN_M = 100.0;
+  public static final double DETECT_MAX_M = 250.0;
   /** Enabled fence geometry last given to Play (id|lat|lng|radius). */
   private static final String KEY_FENCE_SIG = "registeredFenceSig";
   /** elapsedRealtime when that signature was written — detects reboot. */
@@ -108,6 +115,20 @@ public final class GeofenceRegistrar {
     if (!name.isEmpty()) return name;
     String deviceId = gate.optString("deviceId", "").trim();
     return deviceId.isEmpty() ? "Gate" : deviceId;
+  }
+
+  /**
+   * Play detect fence for a user radius. Open stays at the user radius — this
+   * is only so ENTER actually fires while locked.
+   */
+  public static double detectRadiusMeters(double userRadius) {
+    if (!(userRadius > 0) || !Double.isFinite(userRadius)) return 0;
+    return Math.min(DETECT_MAX_M, Math.max(userRadius, DETECT_MIN_M));
+  }
+
+  public static double detectRadiusMeters(JSONObject gate) {
+    if (gate == null) return 0;
+    return detectRadiusMeters(gate.optDouble("radius", Double.NaN));
   }
 
   public static String regionsJson(Context context) {
@@ -282,11 +303,15 @@ public final class GeofenceRegistrar {
         if (!isAutoEnabled(o)) {
           continue;
         }
+        double detect = detectRadiusMeters(radius);
         out.add(
           new Geofence.Builder()
             .setRequestId(id)
-            .setCircularRegion(lat, lng, (float) radius)
+            .setCircularRegion(lat, lng, (float) detect)
             .setExpirationDuration(Geofence.NEVER_EXPIRE)
+            // 0 = fastest best-effort. Unset defaults to 5s; Samsung often
+            // batches closer to 20–30s. Do not add DWELL / loiteringDelay.
+            .setNotificationResponsiveness(0)
             .setTransitionTypes(
               Geofence.GEOFENCE_TRANSITION_ENTER | Geofence.GEOFENCE_TRANSITION_EXIT)
             .build()
@@ -299,8 +324,10 @@ public final class GeofenceRegistrar {
   }
 
   /**
-   * Stable id|lat|lng|radius for enabled pins only. Rename / BT-check / display
-   * name do not change this — those must not tear down Play fences.
+   * Stable id|lat|lng|userRadius|detectRadius for enabled pins only. Rename /
+   * BT-check / display name do not change this — those must not tear down Play
+   * fences. Detect radius is in the signature so a build that raises the 100m
+   * floor actually re-registers.
    */
   static String fenceSignature(String json) {
     List<String> parts = new ArrayList<>();
@@ -318,7 +345,17 @@ public final class GeofenceRegistrar {
           continue;
         }
         if (!isAutoEnabled(o)) continue;
-        parts.add(String.format(Locale.US, "%s|%.7f|%.7f|%.2f", id, lat, lng, radius));
+        parts.add(
+          String.format(
+            Locale.US,
+            "%s|%.7f|%.7f|%.2f|d%.0f|nr0",
+            id,
+            lat,
+            lng,
+            radius,
+            detectRadiusMeters(radius)
+          )
+        );
       }
     } catch (Exception e) {
       Log.w(TAG, "fenceSignature failed", e);

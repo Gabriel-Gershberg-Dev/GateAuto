@@ -7,9 +7,14 @@ import { useAppI18n } from '../i18n/I18nProvider';
 import { loadGates } from '../data/gatesStore';
 import { listSystems } from '../data/palgateSystems';
 import { initialHubRoute } from '../data/vaultRecoverLogic';
-import { consumeResumeRoute } from './resumeRoute';
+import {
+  clearResumeRoute,
+  consumeResumeRoute,
+  shouldResumeSettings,
+} from './resumeRoute';
 import { listIncomingPendingInvites } from '../share/invites';
 import { StartupScreen } from '../ui/components/StartupScreen';
+import { PermissionSetupHost } from '../ui/components/PermissionSetupHost';
 import { useTheme } from '../ui/ThemeProvider';
 import { GateSystemsScreen } from '../ui/screens/GateSystemsScreen';
 import { GatesListScreen } from '../ui/screens/GatesListScreen';
@@ -29,6 +34,7 @@ export type RootStackParamList = {
   ShareGate: { gateId?: string; gateIds?: string[] };
   Monitoring: undefined;
   Settings: undefined;
+  Notifications: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -44,9 +50,11 @@ export function RootNavigator() {
   const [resumeSettings, setResumeSettings] = useState(false);
 
   useEffect(() => {
-    if (!ready || !user) {
+    if (!ready) return;
+    if (!user) {
       setHubRoute(null);
       setResumeSettings(false);
+      void clearResumeRoute();
       return;
     }
     let cancelled = false;
@@ -58,7 +66,7 @@ export function RootNavigator() {
         listIncomingPendingInvites().catch(() => []),
       ]);
       if (!cancelled) {
-        setResumeSettings(resume === 'Settings');
+        setResumeSettings(shouldResumeSettings(true, resume));
         setHubRoute(
           initialHubRoute({
             gateCount: gates.length,
@@ -85,19 +93,21 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer
-      key={user?.uid ?? 'signed-out'}
-      theme={navigationTheme}
-      direction={isRtl ? 'rtl' : 'ltr'}
-      initialState={
-        resumeSettings && hubRoute
-          ? {
-              index: 1,
-              routes: [{ name: hubRoute }, { name: 'Settings' }],
-            }
-          : undefined
-      }
-    >
+    <>
+      <NavigationContainer
+        key={user?.uid ?? 'signed-out'}
+        theme={navigationTheme}
+        direction={isRtl ? 'rtl' : 'ltr'}
+        initialState={
+          shouldResumeSettings(Boolean(user), resumeSettings ? 'Settings' : null) &&
+          hubRoute
+            ? {
+                index: 1,
+                routes: [{ name: hubRoute }, { name: 'Settings' }],
+              }
+            : undefined
+        }
+      >
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{
@@ -169,7 +179,16 @@ export function RootNavigator() {
           }
           options={{ title: t('nav.settings') }}
         />
+        <Stack.Screen
+          name="Notifications"
+          getComponent={() =>
+            require('../ui/screens/NotificationsScreen').NotificationsScreen
+          }
+          options={{ title: t('nav.notifications') }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
+      {user ? <PermissionSetupHost /> : null}
+    </>
   );
 }

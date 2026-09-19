@@ -85,7 +85,7 @@ export function palGateDeviceKey(row: {
   id?: string | null;
 }): string {
   const deviceId = String(row.deviceId ?? '').trim();
-  if (deviceId) return deviceId;
+  if (deviceId && !deviceId.startsWith('share:')) return deviceId;
   const id = String(row.id ?? '').trim();
   if (id && !id.startsWith('share:')) return id;
   return '';
@@ -145,6 +145,31 @@ export function toShareGateMap(gate: SharedGatePayload): SharedGatePayload {
     ...toInviteGateMap(gate),
     bluetooth: shareBluetoothOff(),
   };
+}
+
+/** Owners can share; invitees / revoked copies cannot. */
+export function canShareGate(gate: {
+  origin?: string | null;
+  shareDisabled?: boolean | null;
+}): boolean {
+  if (gate.origin === 'shared') return false;
+  if (gate.shareDisabled) return false;
+  return true;
+}
+
+/** Selected owner gates the HUD Share pill may send. Invitees stay off this list. */
+export function shareableSelectedIds(
+  gates: Array<{
+    id: string;
+    origin?: string | null;
+    shareDisabled?: boolean | null;
+  }>,
+  selectedIds: Iterable<string>,
+): string[] {
+  const picked = new Set(selectedIds);
+  return gates
+    .filter((gate) => picked.has(gate.id) && canShareGate(gate))
+    .map((gate) => gate.id);
 }
 
 export function parseSharedGate(raw: unknown): SharedGatePayload {

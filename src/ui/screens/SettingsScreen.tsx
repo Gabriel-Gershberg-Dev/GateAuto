@@ -1,7 +1,17 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useMemo, useState } from 'react';
+import Constants from 'expo-constants';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  ToastAndroid,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../auth/AuthProvider';
 import { promptGoogleIdToken } from '../../auth/googleNative';
@@ -17,6 +27,12 @@ import { tryStopGeofencing, trySyncGeofences } from '../../integrations/optional
 import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { checkAppUpdate } from '../../updates/checkUpdate';
+import {
+  loadDevOptionsUnlocked,
+  setDevOptionsUnlocked,
+  verifyDevUnlockPassword,
+} from '../../updates/devUnlock';
+import { onDevVersionTap } from '../../updates/unlockLogic';
 import { SHOW_EXPORT_UI } from '../flags';
 import { AppearancePicker } from '../components/AppearancePicker';
 import { AutoOpenSettings } from '../components/AutoOpenSettings';
@@ -26,6 +42,7 @@ import { FormSheet } from '../components/FormSheet';
 import { Group, Hairline } from '../components/Group';
 import { LanguagePicker } from '../components/LanguagePicker';
 import {
+  IconBell,
   IconChevronRight,
   IconDownload,
   IconExport,
@@ -36,8 +53,9 @@ import {
   IconTrash,
 } from '../icons';
 import { useTheme } from '../ThemeProvider';
-import { spacing, type ThemeColors } from '../theme';
+import { radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -60,6 +78,76 @@ export function SettingsScreen({ navigation }: Props) {
     null,
   );
   const [hasGate, setHasGate] = useState(false);
+  const [devUnlocked, setDevUnlocked] = useState(false);
+  const [devTaps, setDevTaps] = useState(0);
+  const [devPasswordOpen, setDevPasswordOpen] = useState(false);
+  const [devPassword, setDevPassword] = useState('');
+  const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
+  const [turnOffDevOpen, setTurnOffDevOpen] = useState(false);
+
+  const versionName = Constants.expoConfig?.version ?? '';
+  const versionCode =
+    Constants.expoConfig?.android?.versionCode ??
+    (
+      Constants.expoConfig?.extra as
+        | { androidVersionCode?: number }
+        | undefined
+    )?.androidVersionCode ??
+    '';
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadDevOptionsUnlocked().then((on) => {
+      if (!cancelled) setDevUnlocked(on);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const showDevToast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    }
+  };
+
+  const onVersionRowPress = () => {
+    if (Platform.OS !== 'android') return;
+    const { taps, result } = onDevVersionTap({
+      unlocked: devUnlocked,
+      tapsBefore: devTaps,
+    });
+    setDevTaps(taps);
+    if (result.kind === 'already') {
+      showDevToast(t('settings.devAlready'));
+      return;
+    }
+    if (result.kind === 'countdown') {
+      showDevToast(t('settings.devStepsAway', { count: result.remaining }));
+      return;
+    }
+    if (result.kind === 'askPassword') {
+      setDevPassword('');
+      setDevPasswordError(null);
+      setDevPasswordOpen(true);
+    }
+  };
+
+  const submitDevPassword = () => {
+    setDevPasswordError(null);
+    void verifyDevUnlockPassword(devPassword).then((ok) => {
+      if (!ok) {
+        setDevPasswordError(t('settings.devPasswordWrong'));
+        return;
+      }
+      void setDevOptionsUnlocked(true).then(() => {
+        setDevUnlocked(true);
+        setDevPasswordOpen(false);
+        setDevPassword('');
+        showDevToast(t('settings.devNow'));
+      });
+    });
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -150,15 +238,7 @@ export function SettingsScreen({ navigation }: Props) {
       {hasGate ? <AutoOpenSettings /> : null}
       {hasGate ? <SafetyLockSettings /> : null}
       <AppearancePicker />
-      <LanguagePicker
-        resumeOnRtl="Settings"
-        onRtlMayNeedRestart={() =>
-          setInfo({
-            title: t('lang.restartTitle'),
-            message: t('lang.restartBody'),
-          })
-        }
-      />
+      <LanguagePicker resumeOnRtl="Settings" />
 
       <Group>
         <SettingsRow
@@ -172,10 +252,43 @@ export function SettingsScreen({ navigation }: Props) {
           <>
             <Hairline inset={56} />
             <SettingsRow
+              icon={<IconBell color={colors.primary} />}
+              label={t('settings.notifications')}
+              detail={t('settings.notificationsDetail')}
+              onPress={() => navigation.navigate('Notifications')}
+              colors={colors}
+            />
+            <Hairline inset={56} />
+            <SettingsRow
               icon={<IconDownload color={colors.primary} />}
               label={t('settings.checkUpdate')}
               detail={t('settings.checkUpdateDetail')}
               onPress={() => void checkAppUpdate('settings')}
+              colors={colors}
+            />
+          </>
+        ) : null}
+        {Platform.OS === 'android' && devUnlocked ? (
+          <>
+            <Hairline inset={56} />
+            <View style={styles.betaNote}>
+              <Text style={styles.betaTitle}>{t('settings.betaTitle')}</Text>
+              <Text style={styles.betaDetail}>{t('settings.betaNote')}</Text>
+            </View>
+            <Hairline inset={56} />
+            <SettingsRow
+              icon={<IconDownload color={colors.primary} />}
+              label={t('settings.checkBetaUpdate')}
+              detail={t('settings.checkBetaUpdateDetail')}
+              onPress={() => void checkAppUpdate('beta')}
+              colors={colors}
+            />
+            <Hairline inset={56} />
+            <SettingsRow
+              icon={<IconShield color={colors.muted} />}
+              label={t('settings.turnOffDev')}
+              detail={t('settings.turnOffDevDetail')}
+              onPress={() => setTurnOffDevOpen(true)}
               colors={colors}
             />
           </>
@@ -217,6 +330,21 @@ export function SettingsScreen({ navigation }: Props) {
           destructive
         />
       </Group>
+
+      <Group>
+        <SettingsRow
+          icon={<IconShield color={colors.primary} />}
+          label={t('settings.appVersion')}
+          detail={
+            versionCode
+              ? `${versionName} (${versionCode})`
+              : versionName
+          }
+          onPress={onVersionRowPress}
+          colors={colors}
+          showChevron={false}
+        />
+      </Group>
     </ScrollView>
     <ConfirmSheet
       visible={removeAllOpen}
@@ -240,6 +368,56 @@ export function SettingsScreen({ navigation }: Props) {
       onConfirm={() => {
         setSignOutOpen(false);
         void auth.signOut();
+      }}
+    />
+    <ConfirmSheet
+      visible={devPasswordOpen}
+      title={t('settings.devPasswordTitle')}
+      message={t('settings.devPasswordMsg')}
+      cancelLabel={t('common.cancel')}
+      confirmLabel={t('settings.devPasswordConfirm')}
+      confirmDisabled={!devPassword}
+      onCancel={() => {
+        setDevPasswordOpen(false);
+        setDevPassword('');
+        setDevPasswordError(null);
+      }}
+      onConfirm={submitDevPassword}
+    >
+      <TextInput
+        value={devPassword}
+        onChangeText={(text) => {
+          setDevPassword(text);
+          if (devPasswordError) setDevPasswordError(null);
+        }}
+        placeholder={t('common.password')}
+        placeholderTextColor={colors.muted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        importantForAutofill="no"
+        secureTextEntry
+        autoFocus
+        onSubmitEditing={submitDevPassword}
+        style={styles.devPasswordInput}
+      />
+      {devPasswordError ? (
+        <Text style={styles.devPasswordError}>{devPasswordError}</Text>
+      ) : null}
+    </ConfirmSheet>
+    <ConfirmSheet
+      visible={turnOffDevOpen}
+      title={t('settings.turnOffDevTitle')}
+      message={t('settings.turnOffDevMsg')}
+      cancelLabel={t('common.cancel')}
+      confirmLabel={t('settings.turnOffDevConfirm')}
+      onCancel={() => setTurnOffDevOpen(false)}
+      onConfirm={() => {
+        setTurnOffDevOpen(false);
+        void setDevOptionsUnlocked(false).then(() => {
+          setDevUnlocked(false);
+          setDevTaps(0);
+        });
       }}
     />
     <FormSheet
@@ -396,6 +574,7 @@ function SettingsRow({
   onPress,
   colors,
   destructive,
+  showChevron = true,
 }: {
   icon: ReactNode;
   label: string;
@@ -403,14 +582,16 @@ function SettingsRow({
   onPress: () => void;
   colors: ThemeColors;
   destructive?: boolean;
+  showChevron?: boolean;
 }) {
+  const { row, writingDirection, textAlign } = useRtlLayout();
   return (
     <Pressable
       onPress={onPress}
       android_ripple={{ color: colors.surfacePressed }}
       style={({ pressed }) => [
         {
-          flexDirection: 'row',
+          flexDirection: row,
           alignItems: 'center',
           gap: 14,
           paddingVertical: 16,
@@ -419,23 +600,44 @@ function SettingsRow({
         },
       ]}
     >
-      <View style={{ width: 28, alignItems: 'center' }}>{icon}</View>
+      <View style={{ width: 28, alignItems: 'center', flexShrink: 0 }}>
+        {icon}
+      </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text
+          numberOfLines={2}
+          ellipsizeMode="tail"
           style={{
             fontSize: 17,
             fontWeight: '600',
             color: destructive ? colors.danger : colors.text,
             letterSpacing: -0.2,
+            writingDirection,
+            textAlign,
           }}
         >
           {label}
         </Text>
-        <Text style={{ fontSize: 13, color: colors.muted }}>{detail}</Text>
+        <Text
+          numberOfLines={3}
+          ellipsizeMode="tail"
+          style={{
+            fontSize: 13,
+            color: colors.muted,
+            writingDirection,
+            textAlign,
+          }}
+        >
+          {detail}
+        </Text>
       </View>
-      <IconChevronRight
-        color={destructive ? colors.danger : colors.muted}
-      />
+      {showChevron ? (
+        <View style={{ flexShrink: 0 }}>
+          <IconChevronRight
+            color={destructive ? colors.danger : colors.muted}
+          />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -447,6 +649,37 @@ function createStyles(c: ThemeColors) {
       gap: spacing.md,
       paddingBottom: spacing.lg,
       backgroundColor: c.background,
+    },
+    betaNote: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 2,
+      backgroundColor: c.surface,
+    },
+    betaTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: c.text,
+      letterSpacing: -0.1,
+    },
+    betaDetail: {
+      fontSize: 13,
+      color: c.muted,
+      lineHeight: 18,
+    },
+    devPasswordInput: {
+      backgroundColor: c.background,
+      borderColor: c.border,
+      borderWidth: 1,
+      borderRadius: radii.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: 16,
+      color: c.text,
+    },
+    devPasswordError: {
+      fontSize: 13,
+      color: c.danger,
     },
   });
 }

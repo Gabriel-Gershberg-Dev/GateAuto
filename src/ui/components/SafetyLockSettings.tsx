@@ -246,6 +246,7 @@ function createStyles(c: ThemeColors) {
     },
     chip: {
       minWidth: 40,
+      justifyContent: 'center',
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: radii.pill,

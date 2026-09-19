@@ -6,10 +6,13 @@
  *     Play ENTER/EXIT + BT connect open PalGate in Java. Recover alarm /
  *     SCREEN_ON refreshes Play fences (INITIAL_TRIGGER 0) and pollNearby if
  *     last loc is inside radius (Samsung often never delivers ENTER locked).
+ *     Play fences are registered at max(user radius, 100m) so a 25m pin still
+ *     wakes the process; the open itself stays ≤ the user's radius.
  *   JS (foreground / Expo keep-alive when the process is actually alive):
- *   1) OS geofence ENTER → refine (≤ radius) → BT (retry) → open
- *   2) OS geofence EXIT → refine (≤ radius×2, absolute ≤250m) → BT (retry) → open
- *   3) Car Bluetooth connect → same proximity refine (≤ radius, ≤250m) → open
+ *   1) OS geofence ENTER → last/triggering loc ≤ configured radius (250m is
+ *      city-garbage cap only; no High GPS wait when already inside) → BT → open
+ *   2) OS geofence EXIT → same configured radius (not radius×2) → BT → open
+ *   3) Car Bluetooth connect → same proximity refine (≤ radius, ≤250m cap) → open
  *   4) Eligible-now on arm / app foreground → refine + currently-connected BT → open
  *   5) Eligibility poll (~30s FGS wake, or native cooldown wake) →
  *      inside radius + listed car if BT-required → open (poll_open)
@@ -35,7 +38,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { openGate, PalGateApiError } from '../palgate/api';
@@ -99,13 +102,18 @@ import {
   shouldRestartHoldFromAuto,
 } from './holdLogic';
 import { beginHoldAfterAutoOpen, peekJsHoldUntil } from './holdRuntime';
+import { haversineMeters } from './haversine';
 import {
   ABSOLUTE_MAX_OPEN_DISTANCE_M,
+  playDetectRadiusM,
+  playOpenAllowed,
   refineArrival,
+  type PlayOpenResult,
   type RefineOk,
   type RefineResult,
   type RefineTrigger,
 } from './refine';
+import { isExpectedPrePermissionNativeError } from './expectedNativeRejection';
 
 export const GEOFENCE_TASK_NAME = 'GATEAUTO_GEOFENCE_TASK';
 
@@ -153,10 +161,15 @@ type CarBluetoothRequirement = {
   address?: string;
 };
 
+type CarBluetoothConnectionState = 'connected' | 'not_connected' | 'unknown';
+
 type CarBluetoothModule = {
   isCarBluetoothConnected?: (
     required: CarBluetoothRequirement | CarBluetoothRequirement[],
   ) => Promise<boolean>;
+  readCarBluetoothConnection?: (
+    required: CarBluetoothRequirement | CarBluetoothRequirement[],
+  ) => Promise<CarBluetoothConnectionState>;
 };
 
 let lastGeofenceSyncAt = 0;
@@ -166,6 +179,9 @@ let eligibleNowRunning: Promise<void> | null = null;
 let lastPollAt = 0;
 let pollRunning: Promise<void> | null = null;
 const lastPollFarLogByGate = new Map<string, number>();
+const lastBtUnreadableLogByGate = new Map<string, number>();
+/** Throttle the "BT unreadable, opening on proximity" notice per gate. */
+const BT_UNREADABLE_LOG_MIN_MS = 5 * 60_000;
 
 /** Drop in-memory geofence debounce so a new uid does not inherit the last user’s sync time. */
 export function resetGeofenceSessionMemory(): void {
@@ -173,6 +189,7 @@ export function resetGeofenceSessionMemory(): void {
   lastEligibleNowCheckByGate.clear();
   lastPollAt = 0;
   lastPollFarLogByGate.clear();
+  lastBtUnreadableLogByGate.clear();
 }
 
 function loadCarBluetoothModule(): CarBluetoothModule | null {
@@ -241,6 +258,29 @@ async function getLastGeofenceSyncAt(): Promise<number> {
   return 0;
 }
 
+/**
+ * Note when a BT-required gate is allowed to open despite an UNREADABLE
+ * Bluetooth state (no native module, Nearby-devices/BLUETOOTH_CONNECT not
+ * granted, or a read error). We fall open rather than hard-block — proximity
+ * still gates the open — but surface the reason so the user can fix permissions.
+ * Throttled per gate so it does not flood the log during ENTER retries / polls.
+ */
+async function logBtUnreadableFallOpen(
+  gate: GateConfig,
+  label: string,
+  reason: string,
+): Promise<void> {
+  const now = Date.now();
+  const last = lastBtUnreadableLogByGate.get(gate.id) ?? 0;
+  if (now - last < BT_UNREADABLE_LOG_MIN_MS) return;
+  lastBtUnreadableLogByGate.set(gate.id, now);
+  await appendEvent({
+    kind: 'info',
+    gateId: gate.id,
+    message: `${label}: car Bluetooth could not be verified (${reason}) — opening on proximity alone. Grant Nearby devices (Bluetooth) so BT-required gates match reliably.`,
+  });
+}
+
 async function checkCarBluetooth(gate: GateConfig): Promise<'ok' | 'skipped_bt'> {
   if (!gate.bluetooth?.required) return 'ok';
 
@@ -252,26 +292,39 @@ async function checkCarBluetooth(gate: GateConfig): Promise<'ok' | 'skipped_bt'>
     }))
     .filter((d) => Boolean(d.name || d.address));
 
-  // Fail closed: required but no devices configured.
+  // Fail closed: required but no devices configured (a config problem, not a
+  // read failure — there is nothing to match a connected car against).
   if (requirements.length === 0) {
     console.log('[GateAuto] skipped_bt — required but no devices configured');
     return 'skipped_bt';
   }
 
+  const label = displayGateName(gate);
   const mod = loadCarBluetoothModule();
-  const helper = mod?.isCarBluetoothConnected;
-  if (typeof helper !== 'function') {
-    console.log('[GateAuto] skipped_bt — carBluetooth helper missing');
-    return 'skipped_bt';
+  const read = mod?.readCarBluetoothConnection;
+  if (typeof read !== 'function') {
+    // Old/missing helper — cannot read the state, so do not hard-block.
+    await logBtUnreadableFallOpen(gate, label, 'BT reader unavailable');
+    return 'ok';
   }
 
+  let state: CarBluetoothConnectionState;
   try {
-    const connected = await helper(requirements);
-    return connected ? 'ok' : 'skipped_bt';
+    state = await read(requirements);
   } catch (error) {
-    console.log('[GateAuto] skipped_bt — carBluetooth helper error', error);
-    return 'skipped_bt';
+    console.log('[GateAuto] car BT read error — falling open on proximity', error);
+    await logBtUnreadableFallOpen(gate, label, 'BT read error');
+    return 'ok';
   }
+
+  if (state === 'connected') return 'ok';
+  if (state === 'unknown') {
+    // Could not read connection state (e.g. Nearby devices / BLUETOOTH_CONNECT
+    // not granted returns an empty list). Do not block purely on a read gap.
+    await logBtUnreadableFallOpen(gate, label, 'Bluetooth state unreadable');
+    return 'ok';
+  }
+  return 'skipped_bt';
 }
 
 /** Retry BT for ~25–30s so late head-unit connects still open on ENTER/EXIT. */
@@ -346,7 +399,9 @@ function regionsFromGates(gates: GateConfig[]): Location.LocationRegion[] {
     identifier: g.id,
     latitude: g.lat as number,
     longitude: g.lng as number,
-    radius: g.radiusMeters,
+    // Larger detect fence so locked-phone ENTER actually fires; open still
+    // uses the user's configured radius.
+    radius: playDetectRadiusM(g.radiusMeters),
     notifyOnEnter: true,
     notifyOnExit: true,
   }));
@@ -358,11 +413,22 @@ function ensureBtConnectHandlerWired(): void {
   setBluetoothConnectHandler((device) => handleBluetoothDeviceConnected(device));
 }
 
+function isUiForeground(): boolean {
+  return AppState.currentState === 'active';
+}
+
 async function startBackgroundHelpers(): Promise<void> {
   ensureBtConnectHandlerWired();
   await startBluetoothConnectMonitor();
-  // Expo location FGS + native MonitoringService must start from this UI
-  // process. Alarm/SCREEN_ON cannot startForegroundService while locked.
+  // Location FGS only from the UI process. Samsung rejects
+  // startForegroundService after Home / lock. A settings save that
+  // finishes after the user backgrounds must not tear down or start FGS.
+  if (!isUiForeground()) {
+    console.log(
+      '[GateAuto] skip location FGS start — app not in foreground',
+    );
+    return;
+  }
   await startMonitoringKeepAlive();
   await startNativeLocationFgs();
 }
@@ -403,6 +469,46 @@ async function isMonitoringLive(): Promise<boolean> {
   return readMonitoringFlag();
 }
 
+async function expoGeofencingStarted(): Promise<boolean> {
+  try {
+    return await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME);
+  } catch (error) {
+    if (!isExpectedPrePermissionNativeError(error)) {
+      console.warn('[GateAuto] hasStartedGeofencingAsync failed', error);
+    }
+    return false;
+  }
+}
+
+async function stopExpoGeofencing(): Promise<void> {
+  try {
+    if (await expoGeofencingStarted()) {
+      await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
+    }
+  } catch (error) {
+    if (!isExpectedPrePermissionNativeError(error)) {
+      console.warn('[GateAuto] stopGeofencingAsync failed', error);
+    }
+  }
+}
+
+async function startExpoGeofencing(
+  regions: Location.LocationRegion[],
+): Promise<void> {
+  try {
+    await Location.startGeofencingAsync(GEOFENCE_TASK_NAME, regions);
+  } catch (error) {
+    console.warn('[GateAuto] startGeofencingAsync failed', error);
+    if (!isExpectedPrePermissionNativeError(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      await appendEvent({
+        kind: 'error',
+        message: `Failed to start OS geofencing: ${message}`,
+      });
+    }
+  }
+}
+
 /** Live arming snapshot for Monitoring UI (flag vs OS geofences vs BT watch). */
 export async function getMonitoringArmStatus(): Promise<MonitoringArmStatus> {
   const flagOn = await isMonitoringLive();
@@ -410,7 +516,7 @@ export async function getMonitoringArmStatus(): Promise<MonitoringArmStatus> {
   let geofencingActive = false;
   let keepAliveOn = false;
   try {
-    geofencingActive = await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME);
+    geofencingActive = await expoGeofencingStarted();
   } catch {
     geofencingActive = false;
   }
@@ -474,9 +580,7 @@ export async function syncGeofences(): Promise<void> {
   await syncNativeMonitoring(monitoring, nativeRegions);
 
   if (!monitoring) {
-    if (await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME)) {
-      await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
-    }
+    await stopExpoGeofencing();
     await stopBackgroundHelpers();
     await dismissArmedSticky();
     return;
@@ -486,17 +590,12 @@ export async function syncGeofences(): Promise<void> {
   await dismissArmedSticky();
 
   if (enabled.length === 0) {
-    if (await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME)) {
-      await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
-    }
+    await stopExpoGeofencing();
     await startBackgroundHelpers();
     return;
   }
 
-  await Location.startGeofencingAsync(
-    GEOFENCE_TASK_NAME,
-    regionsFromGates(enabled),
-  );
+  await startExpoGeofencing(regionsFromGates(enabled));
   await startBackgroundHelpers();
 }
 
@@ -512,12 +611,17 @@ export async function startMonitoring(): Promise<void> {
     await persistArmedAt();
     await markGeofenceSynced();
     await logMonitoringArmed('startMonitoring');
+    void import('../telemetry/bootstrap').then((m) => m.refreshCrashKeys());
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await appendEvent({
-      kind: 'error',
-      message: `Failed to arm monitoring: ${message}`,
-    });
+    if (isExpectedPrePermissionNativeError(error)) {
+      console.warn('[GateAuto] arm monitoring skipped — permissions not granted yet', error);
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      await appendEvent({
+        kind: 'error',
+        message: `Failed to arm monitoring: ${message}`,
+      });
+    }
   }
   // Already inside + BT already connected produces no ENTER/ACL event —
   // evaluate in the background so turning Auto-open on is not blocked by GPS.
@@ -533,9 +637,7 @@ export async function startMonitoring(): Promise<void> {
 export async function stopMonitoring(): Promise<void> {
   await setMonitoringEnabled(false);
   await setNativeKeepAliveArmed(false);
-  if (await Location.hasStartedGeofencingAsync(GEOFENCE_TASK_NAME)) {
-    await Location.stopGeofencingAsync(GEOFENCE_TASK_NAME);
-  }
+  await stopExpoGeofencing();
   await stopLegacyLocationWatch();
   await stopBackgroundHelpers();
   await dismissArmedSticky();
@@ -544,6 +646,7 @@ export async function stopMonitoring(): Promise<void> {
     message:
       'Monitoring stopped — geofences and BT connect watch cleared. Auto-open will not run until you turn Monitoring on again.',
   });
+  void import('../telemetry/bootstrap').then((m) => m.refreshCrashKeys());
 }
 
 export async function isMonitoringEnabled(): Promise<boolean> {
@@ -604,6 +707,50 @@ function refineGeoFields(refine: RefineResult): {
         : undefined,
     trigger: refine.trigger,
   };
+}
+
+async function lastKnownDistanceM(gate: GateConfig): Promise<number | null> {
+  if (
+    typeof gate.lat !== 'number' ||
+    typeof gate.lng !== 'number' ||
+    !Number.isFinite(gate.lat) ||
+    !Number.isFinite(gate.lng)
+  ) {
+    return null;
+  }
+  try {
+    const pos = await Location.getLastKnownPositionAsync();
+    if (!pos) return null;
+    return haversineMeters(
+      { lat: gate.lat, lng: gate.lng },
+      { lat: pos.coords.latitude, lng: pos.coords.longitude },
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Play ENTER/EXIT: last-known vs configured radius. No High GPS wait when
+ * already inside. Expo tasks have no triggering location — native Java does.
+ */
+async function evaluatePlayTransition(
+  gate: GateConfig,
+  label: string,
+  trigger: 'enter' | 'exit',
+): Promise<Extract<PlayOpenResult, { ok: true }> | null> {
+  const lastM = await lastKnownDistanceM(gate);
+  const play = playOpenAllowed(gate.radiusMeters, null, lastM);
+  if (play.ok) return play;
+  await appendEvent({
+    kind: 'skipped_refine',
+    gateId: gate.id,
+    message: `${label}: ${trigger.toUpperCase()} ${play.detail}`,
+    trigger,
+    distanceM: play.distanceM,
+  });
+  await patchGate(gate.id, { lastResult: 'skipped_refine' });
+  return null;
 }
 
 async function runProximityRefine(
@@ -749,6 +896,13 @@ async function performOpen(
 
   try {
     // Must await — never log open before a successful validated API response.
+    void import('../telemetry').then((t) =>
+      t.breadcrumb(
+        `try ${geo?.trigger ?? 'open'} ${t.hashGateId(gate.id)} ${
+          geo?.distanceM != null ? Math.round(geo.distanceM) : '?'
+        }m`,
+      ),
+    );
     const apiResult = await openGate(credentials, deviceId);
     const apiSnippet =
       apiResult && typeof apiResult === 'object'
@@ -788,6 +942,11 @@ async function performOpen(
     await patchGate(gate.id, { lastResult: 'error' });
     publishOpenResult(gate.id, label, false, message);
     await notifyOpenFailure(label, message);
+    if (!(error instanceof PalGateApiError)) {
+      void import('../telemetry').then((t) =>
+        t.recordUnexpected(error, 'performOpen'),
+      );
+    }
   }
   } finally {
     void releaseNativeClaim(gate.id);
@@ -797,7 +956,9 @@ async function performOpen(
 
 /**
  * Open pipeline for a single geofence ENTER:
- * debounce after sync → safety lock → cooldown → proximity refine → BT → open.
+ * debounce after sync → safety lock → cooldown → last loc ≤ configured radius
+ * (250m is city-garbage cap only; no High GPS wait when already inside) → BT
+ * → re-check radius → open. Play ENTER alone is not enough.
  */
 export async function handleGeofenceEnter(regionIdentifier: string): Promise<void> {
   if (!(await isMonitoringLive())) return;
@@ -848,10 +1009,17 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
 
   if (!(await checkCooldown(gate, label, 'enter'))) return;
 
-  const refine = await runProximityRefine(gate, label, 'enter');
-  if (!refine) return;
+  const inside = await evaluatePlayTransition(gate, label, 'enter');
+  if (!inside) return;
 
-  const geo = refineGeoFields(refine);
+  const geo: {
+    distanceM?: number;
+    accuracyM?: number;
+    trigger: RefineTrigger;
+  } = {
+    trigger: 'enter',
+    distanceM: inside.distanceM,
+  };
   const bt = await checkCarBluetoothWithRetry(gate, 'enter');
   if (bt === 'skipped_bt') {
     await appendEvent({
@@ -864,10 +1032,14 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
     return;
   }
 
+  const afterBt = await evaluatePlayTransition(gate, label, 'enter');
+  if (!afterBt) return;
+
+  geo.distanceM = afterBt.distanceM;
   await performOpen(
     gate,
     label,
-    `ENTER — accuracy ${refine.accuracy.toFixed(1)}m, distance ${refine.distanceM.toFixed(1)}m`,
+    `ENTER — Play geofence, ${afterBt.source} loc ${afterBt.distanceM.toFixed(1)}m ≤ radius ${afterBt.maxDistanceM.toFixed(1)}m (no High GPS wait)`,
     'opened',
     geo,
   );
@@ -875,9 +1047,8 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
 
 /**
  * Open pipeline for a single geofence EXIT (leaving home toward the gate):
- * safety lock → cooldown → proximity refine → BT (retry) → open.
- * Native EXIT is the locked path (250m city cap; missing last loc allowed).
- * JS refine still runs when the process is alive so a far-away OS EXIT cannot open.
+ * safety lock → cooldown → last loc ≤ configured radius (same as ENTER; not
+ * radius×2) → BT → re-check radius → open. No High GPS wait when already inside.
  */
 export async function handleGeofenceExit(regionIdentifier: string): Promise<void> {
   if (!(await isMonitoringLive())) return;
@@ -911,10 +1082,17 @@ export async function handleGeofenceExit(regionIdentifier: string): Promise<void
 
   if (!(await checkCooldown(gate, label, 'exit'))) return;
 
-  const refine = await runProximityRefine(gate, label, 'exit');
-  if (!refine) return;
+  const inside = await evaluatePlayTransition(gate, label, 'exit');
+  if (!inside) return;
 
-  const geo = refineGeoFields(refine);
+  const geo: {
+    distanceM?: number;
+    accuracyM?: number;
+    trigger: RefineTrigger;
+  } = {
+    trigger: 'exit',
+    distanceM: inside.distanceM,
+  };
   const bt = await checkCarBluetoothWithRetry(gate, 'exit');
   if (bt === 'skipped_bt') {
     await appendEvent({
@@ -927,10 +1105,14 @@ export async function handleGeofenceExit(regionIdentifier: string): Promise<void
     return;
   }
 
+  const afterBt = await evaluatePlayTransition(gate, label, 'exit');
+  if (!afterBt) return;
+
+  geo.distanceM = afterBt.distanceM;
   await performOpen(
     gate,
     label,
-    `EXIT — accuracy ${refine.accuracy.toFixed(1)}m, distance ${refine.distanceM.toFixed(1)}m`,
+    `EXIT — ${afterBt.source} loc ${afterBt.distanceM.toFixed(1)}m ≤ radius ${afterBt.maxDistanceM.toFixed(1)}m (no High GPS wait)`,
     'exit_open',
     geo,
   );

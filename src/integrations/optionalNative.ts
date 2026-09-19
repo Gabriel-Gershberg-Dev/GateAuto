@@ -145,6 +145,19 @@ export async function tryGetBtPickerDevices(): Promise<BtPickerLists> {
   }
 }
 
+async function runGeoBestEffort(
+  label: string,
+  run: () => Promise<void>,
+): Promise<boolean> {
+  try {
+    await run();
+    return true;
+  } catch (error) {
+    console.warn(`[GateAuto] ${label} failed`, error);
+    return false;
+  }
+}
+
 /**
  * Start/sync geofences. Returns whether a real geo module handled the call.
  */
@@ -154,16 +167,14 @@ export async function tryStartGeofencing(_gates?: GateConfig[]): Promise<boolean
   if (!api) return false;
 
   if (api.startMonitoring) {
-    await api.startMonitoring();
-    return true;
+    return runGeoBestEffort('startMonitoring', () => api.startMonitoring!());
   }
   if (api.syncGeofences) {
-    await api.syncGeofences();
-    return true;
+    return runGeoBestEffort('syncGeofences', () => api.syncGeofences!());
   }
   if (api.startGeofencing && _gates) {
-    await api.startGeofencing(_gates);
-    return true;
+    const gates = _gates;
+    return runGeoBestEffort('startGeofencing', () => api.startGeofencing!(gates));
   }
   return false;
 }
@@ -174,12 +185,10 @@ export async function tryStopGeofencing(): Promise<boolean> {
   if (!api) return false;
 
   if (api.stopMonitoring) {
-    await api.stopMonitoring();
-    return true;
+    return runGeoBestEffort('stopMonitoring', () => api.stopMonitoring!());
   }
   if (api.stopGeofencing) {
-    await api.stopGeofencing();
-    return true;
+    return runGeoBestEffort('stopGeofencing', () => api.stopGeofencing!());
   }
   return false;
 }
@@ -189,6 +198,5 @@ export async function trySyncGeofences(): Promise<boolean> {
   ensureAutoLoad();
   const api = geofencingApi;
   if (!api?.syncGeofences) return false;
-  await api.syncGeofences();
-  return true;
+  return runGeoBestEffort('syncGeofences', () => api.syncGeofences!());
 }

@@ -53,6 +53,27 @@ describe('matchesCarBluetooth / OR list', () => {
     );
   });
 
+  it('matches by name when the address is not exposed at read time (OR, not address-only)', () => {
+    // Gate saved both name + address, but the connected profile device only
+    // reports a name (no MAC). Must still match by name instead of failing
+    // closed on the missing address — the moshe-sne BT-required false negative.
+    assert.equal(
+      matchesCarBluetooth(
+        { name: 'Audi MMI' },
+        { name: 'Audi MMI', address: 'AA:BB:CC:DD:EE:FF' },
+      ),
+      true,
+    );
+    // Neither identifier matches → still no match.
+    assert.equal(
+      matchesCarBluetooth(
+        { name: 'Random', address: '00:00:00:00:00:00' },
+        { name: 'Audi MMI', address: 'AA:BB:CC:DD:EE:FF' },
+      ),
+      false,
+    );
+  });
+
   it('OR: any listed car is enough', () => {
     assert.equal(deviceMatchesGateBluetooth(carB, [carA, carB]), true);
     assert.equal(
@@ -114,6 +135,36 @@ describe('listedCarIsConnected (native poll BT contract)', () => {
         listedAddresses: ['AA:BB:CC:DD:EE:FF'],
         listedNames: [],
         connectedAddresses: [car],
+        connectedNames: [],
+      }),
+      true,
+    );
+  });
+
+  it('matches an HFP/HEADSET-only car by name when the GATT-only address query is empty', () => {
+    // Device-grounded (SM-S908E dumpsys): a car head unit connects on A2DP /
+    // HEADSET (HFP). BluetoothManager.getConnectedDevices only supports GATT, so
+    // the address set from that query is empty; the car is seen only once the
+    // A2DP/HEADSET profile proxy is read. The listed car must still match by name.
+    assert.equal(
+      listedCarIsConnected({
+        required: true,
+        listedAddresses: ['AA:BB:CC:DD:54:0F'],
+        listedNames: ['GRUNDIG'],
+        connectedAddresses: [],
+        connectedNames: ['grundig'],
+      }),
+      true,
+    );
+  });
+
+  it('matches a HEADSET-connected car by MAC across separator/case differences', () => {
+    assert.equal(
+      listedCarIsConnected({
+        required: true,
+        listedAddresses: ['aa:bb:cc:dd:54:0f'],
+        listedNames: [],
+        connectedAddresses: ['AA-BB-CC-DD-54-0F'],
         connectedNames: [],
       }),
       true,

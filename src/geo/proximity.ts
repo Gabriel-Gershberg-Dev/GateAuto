@@ -10,11 +10,11 @@ export const REFINE_RADIUS_FACTOR = 1.15;
 export const OPEN_RADIUS_FACTOR = 1.0;
 
 /**
- * EXIT (JS fresh GPS): allow overshoot past the fence edge. Native EXIT uses
- * the 250m city cap instead of this factor (last loc while locked is stale).
- * Far-away protection still comes from ABSOLUTE_MAX_OPEN_DISTANCE_M.
+ * EXIT uses the same configured radius as ENTER. A 25m pin must not silently
+ * open (or log) against 50m. Play may still fire EXIT early; the open check
+ * stays fail-closed to the user’s radius (250m is only a garbage cap).
  */
-export const EXIT_RADIUS_FACTOR = 2.0;
+export const EXIT_RADIUS_FACTOR = 1.0;
 
 /** Always reject fixes worse than this (meters). */
 export const MAX_REFINE_ACCURACY_M = 60;
@@ -27,10 +27,26 @@ export const MAX_REFINE_ACCURACY_M = 60;
 export const GOOD_REFINE_ACCURACY_M = 50;
 
 /**
- * Absolute sanity cap: never auto-open if GPS says you are farther than this
- * from the pin, regardless of a misconfigured huge radius.
+ * Absolute sanity cap for garbage fixes (wrong city / hours-old last loc).
+ * This is NOT the open threshold — auto-open must still be ≤ configured radius.
  */
 export const ABSOLUTE_MAX_OPEN_DISTANCE_M = 250;
+
+/**
+ * Play Services geofences smaller than ~100m often never fire while the phone
+ * is locked (GPS accuracy is worse than a 25–40m pin). Detect with at least
+ * this radius; still only OPEN at the user's configured radius.
+ */
+export const MIN_PLAY_DETECT_RADIUS_M = 100;
+
+/** Play detect fence: max(user radius, 100m), capped at the 250m city limit. */
+export function playDetectRadiusM(userRadiusM: number): number {
+  if (!Number.isFinite(userRadiusM) || userRadiusM <= 0) return 0;
+  return Math.min(
+    ABSOLUTE_MAX_OPEN_DISTANCE_M,
+    Math.max(userRadiusM, MIN_PLAY_DETECT_RADIUS_M),
+  );
+}
 
 /**
  * Reject fixes older than this. Background wakes often return a slightly aged
@@ -76,26 +92,153 @@ export type GateProximityTarget = {
   radiusMeters: number;
 };
 
+/**
+ * High GPS wait is for ENTER / EXIT / BT / manual test when the last fix is
+ * still outside the pin. Poll must never wait — a hung High request from
+ * headless JS blocks the 30s check ticker (Samsung). Already-inside last loc
+ * also skips High (open at the configured radius edge; do not wait to get closer).
+ */
+export function shouldWaitForHighGps(
+  trigger: RefineTrigger,
+  alreadyInsideRadius: boolean,
+): boolean {
+  if (trigger === 'poll') return false;
+  if (alreadyInsideRadius) return false;
+  return true;
+}
+
 export function maxOpenDistanceM(
   radiusM: number,
   trigger: RefineTrigger,
 ): number {
   const factor =
     trigger === 'exit' ? EXIT_RADIUS_FACTOR : OPEN_RADIUS_FACTOR;
-  return Math.min(radiusM * factor, ABSOLUTE_MAX_OPEN_DISTANCE_M);
+  return configuredOpenMaxM(radiusM * factor);
+}
+
+/** User radius, capped only by the 250m city-garbage limit. */
+export function configuredOpenMaxM(radiusM: number): number {
+  if (!Number.isFinite(radiusM) || radiusM <= 0) return 0;
+  return Math.min(radiusM, ABSOLUTE_MAX_OPEN_DISTANCE_M);
+}
+
+export type PlayLocSource = 'triggering' | 'last';
+
+export type PlayOpenOk = {
+  ok: true;
+  distanceM: number;
+  source: PlayLocSource;
+  maxDistanceM: number;
+};
+
+export type PlayOpenFail = {
+  ok: false;
+  distanceM?: number;
+  source?: PlayLocSource;
+  maxDistanceM: number;
+  detail: string;
+};
+
+export type PlayOpenResult = PlayOpenOk | PlayOpenFail;
+
+function finiteMeters(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /**
- * Native EXIT (Play, INITIAL_TRIGGER off). Play already decided they left —
- * do not require a prior ENTER mark. Missing last loc is allowed. If last loc
- * exists, only the 250m city cap applies (not radius×1.1 fail-closed).
+ * Play ENTER/EXIT open gate. 250m is only a far-away sanity cap.
+ * Prefer Play triggering location when it is ≤ configured radius.
+ * If last loc and triggering loc are both missing or both > radius → skip.
+ * Do not open “because Play said ENTER”.
  */
-export function nativeExitOpenAllowed(
+export function playOpenAllowed(
+  radiusMeters: number,
+  triggeringMeters: number | null | undefined,
+  lastMeters: number | null | undefined,
+): PlayOpenResult {
+  const maxDistanceM = configuredOpenMaxM(radiusMeters);
+  const samples: { meters: number; source: PlayLocSource }[] = [];
+  const triggering = finiteMeters(triggeringMeters);
+  const last = finiteMeters(lastMeters);
+  if (triggering != null) samples.push({ meters: triggering, source: 'triggering' });
+  if (last != null) samples.push({ meters: last, source: 'last' });
+
+  if (samples.length === 0) {
+    return {
+      ok: false,
+      maxDistanceM,
+      detail: `skipped — no location (Play ENTER/EXIT is not enough; need fix ≤ radius ${maxDistanceM.toFixed(1)}m)`,
+    };
+  }
+
+  const inside = samples.filter((s) => s.meters <= maxDistanceM);
+  if (inside.length > 0) {
+    const preferred =
+      inside.find((s) => s.source === 'triggering') ?? inside[0];
+    return {
+      ok: true,
+      distanceM: preferred.meters,
+      source: preferred.source,
+      maxDistanceM,
+    };
+  }
+
+  const closest = samples.reduce((a, b) => (a.meters <= b.meters ? a : b));
+  const city = closest.meters > ABSOLUTE_MAX_OPEN_DISTANCE_M;
+  const detail = city
+    ? `skipped — ${closest.source} loc ${closest.meters.toFixed(1)}m > ${ABSOLUTE_MAX_OPEN_DISTANCE_M}m city cap`
+    : `skipped — ${closest.source} loc ${closest.meters.toFixed(1)}m > radius ${maxDistanceM.toFixed(1)}m`;
+  return {
+    ok: false,
+    distanceM: closest.meters,
+    source: closest.source,
+    maxDistanceM,
+    detail,
+  };
+}
+
+/** @see playOpenAllowed — last-loc only (JS Expo task has no triggering fix). */
+export function nativePlayTransitionOpenAllowed(
+  radiusMeters: number,
   lastLocMissing: boolean,
   lastLocMeters: number,
+  triggeringMeters?: number | null,
 ): boolean {
-  if (lastLocMissing || !Number.isFinite(lastLocMeters)) return true;
-  return lastLocMeters <= ABSOLUTE_MAX_OPEN_DISTANCE_M;
+  return playOpenAllowed(
+    radiusMeters,
+    triggeringMeters,
+    lastLocMissing ? null : lastLocMeters,
+  ).ok;
+}
+
+/** @see playOpenAllowed */
+export function nativeExitOpenAllowed(
+  radiusMeters: number,
+  lastLocMissing: boolean,
+  lastLocMeters: number,
+  triggeringMeters?: number | null,
+): boolean {
+  return nativePlayTransitionOpenAllowed(
+    radiusMeters,
+    lastLocMissing,
+    lastLocMeters,
+    triggeringMeters,
+  );
+}
+
+/** @see playOpenAllowed */
+export function nativeEnterOpenAllowed(
+  radiusMeters: number,
+  lastLocMissing: boolean,
+  lastLocMeters: number,
+  triggeringMeters?: number | null,
+): boolean {
+  return nativePlayTransitionOpenAllowed(
+    radiusMeters,
+    lastLocMissing,
+    lastLocMeters,
+    triggeringMeters,
+  );
 }
 
 /**

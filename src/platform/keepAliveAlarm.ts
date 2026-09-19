@@ -30,6 +30,34 @@ type GateAutoKeepAliveNative = {
   getSafetyLocksJson?(): Promise<string>;
   clearSafetyLocks?(): Promise<boolean>;
   syncSafetyLockSettings?(burstCount: number, lockMs: number): Promise<boolean>;
+  setMonitorNoticeEnabled?(enabled: boolean): Promise<boolean>;
+  isMonitorNoticeEnabled?(): Promise<boolean>;
+  setNoticesEnabled?(enabled: boolean): Promise<boolean>;
+  isNoticesEnabled?(): Promise<boolean>;
+  setGateOpenNoticeEnabled?(enabled: boolean): Promise<boolean>;
+  isGateOpenNoticeEnabled?(): Promise<boolean>;
+  getNotificationPrefs?(): Promise<{
+    all?: boolean;
+    monitor?: boolean;
+    gateOpen?: boolean;
+  }>;
+  recreateActivity?(): Promise<boolean>;
+  isIgnoringBatteryOptimizations?(): Promise<boolean>;
+  isBatteryUnrestricted?(): Promise<boolean>;
+  getAutoOpenOsStatus?(): Promise<Record<string, unknown>>;
+};
+
+export type AutoOpenOsStatus = {
+  sdkInt: number;
+  batteryUnrestricted: boolean;
+  ignoringBatteryOptimizations: boolean;
+  backgroundRestricted: boolean;
+  powerRestrictionExempt: boolean;
+  samsungNeverSleeping: boolean;
+  standbyExempt: boolean;
+  bluetoothConnectGranted: boolean;
+  bluetoothScanGranted: boolean;
+  bluetoothAdapterEnabled: boolean;
 };
 
 function getNative(): GateAutoKeepAliveNative | null {
@@ -42,6 +70,85 @@ function getNative(): GateAutoKeepAliveNative | null {
 
 export function hasNativeKeepAlive(): boolean {
   return getNative() != null;
+}
+
+function asBool(value: unknown, fallback = false): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function asInt(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.trunc(value)
+    : fallback;
+}
+
+/** AOSP Doze allowlist only. Prefer {@link isBatteryUnrestricted} for the UI. */
+export async function isIgnoringBatteryOptimizations(): Promise<boolean | null> {
+  if (Platform.OS !== 'android') return true;
+  const native = getNative();
+  if (!native?.isIgnoringBatteryOptimizations) return null;
+  try {
+    return Boolean(await native.isIgnoringBatteryOptimizations());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Apps → GateAuto → Battery → Unrestricted (Samsung never-sleep / power-exempt
+ * as well as the AOSP ignore-optimizations allowlist).
+ */
+export async function isBatteryUnrestricted(): Promise<boolean | null> {
+  if (Platform.OS !== 'android') return true;
+  const native = getNative();
+  if (native?.isBatteryUnrestricted) {
+    try {
+      return Boolean(await native.isBatteryUnrestricted());
+    } catch {
+      // Fall through to snapshot / AOSP allowlist.
+    }
+  }
+  const snap = await getAutoOpenOsStatus();
+  if (snap) return snap.batteryUnrestricted;
+  return isIgnoringBatteryOptimizations();
+}
+
+/** One native snapshot: Unrestricted battery + Bluetooth CONNECT/SCAN + adapter. */
+export async function getAutoOpenOsStatus(): Promise<AutoOpenOsStatus | null> {
+  if (Platform.OS !== 'android') {
+    return {
+      sdkInt: 0,
+      batteryUnrestricted: true,
+      ignoringBatteryOptimizations: true,
+      backgroundRestricted: false,
+      powerRestrictionExempt: false,
+      samsungNeverSleeping: false,
+      standbyExempt: false,
+      bluetoothConnectGranted: true,
+      bluetoothScanGranted: true,
+      bluetoothAdapterEnabled: false,
+    };
+  }
+  const native = getNative();
+  if (!native?.getAutoOpenOsStatus) return null;
+  try {
+    const raw = await native.getAutoOpenOsStatus();
+    if (!raw || typeof raw !== 'object') return null;
+    return {
+      sdkInt: asInt(raw.sdkInt),
+      batteryUnrestricted: asBool(raw.batteryUnrestricted),
+      ignoringBatteryOptimizations: asBool(raw.ignoringBatteryOptimizations),
+      backgroundRestricted: asBool(raw.backgroundRestricted),
+      powerRestrictionExempt: asBool(raw.powerRestrictionExempt),
+      samsungNeverSleeping: asBool(raw.samsungNeverSleeping),
+      standbyExempt: asBool(raw.standbyExempt),
+      bluetoothConnectGranted: asBool(raw.bluetoothConnectGranted),
+      bluetoothScanGranted: asBool(raw.bluetoothScanGranted),
+      bluetoothAdapterEnabled: asBool(raw.bluetoothAdapterEnabled),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Start native location FGS from the UI process (no-op if background / missing). */
@@ -237,16 +344,18 @@ export async function importNativeOpenEvents(): Promise<number> {
       const e = parsed[i];
       if (!e || typeof e.message !== 'string' || !e.message.trim()) continue;
       const kind = (e.kind || 'poll_open') as
-        | 'opened'
-        | 'exit_open'
-        | 'bt_connect_open'
-        | 'poll_open'
-        | 'safety_lock'
-        | 'info';
+                    | 'opened'
+                    | 'exit_open'
+                    | 'bt_connect_open'
+                    | 'poll_open'
+                    | 'skipped_refine'
+                    | 'safety_lock'
+                    | 'info';
       await appendEvent({
         kind,
         gateId: e.gateId || undefined,
         message: e.message,
+        skipTelemetry: true,
         trigger:
           e.trigger === 'enter' ||
           e.trigger === 'exit' ||
@@ -311,6 +420,77 @@ export async function writeNativeSafetyLockSettings(
     await native.syncSafetyLockSettings(burstCount, lockMs);
   } catch (error) {
     console.warn('[GateAuto] writeNativeSafetyLockSettings failed', error);
+  }
+}
+
+/** Hide or restore the searching FGS notice. Does not stop monitoring. */
+export async function setNativeMonitorNoticeEnabled(
+  enabled: boolean,
+): Promise<void> {
+  const native = getNative();
+  if (!native?.setMonitorNoticeEnabled) return;
+  try {
+    await native.setMonitorNoticeEnabled(enabled);
+  } catch (error) {
+    console.warn('[GateAuto] setNativeMonitorNoticeEnabled failed', error);
+  }
+}
+
+/** Default on when the native module or pref is missing. */
+export async function getNativeMonitorNoticeEnabled(): Promise<boolean> {
+  const native = getNative();
+  if (!native?.isMonitorNoticeEnabled) return true;
+  try {
+    return Boolean(await native.isMonitorNoticeEnabled());
+  } catch {
+    return true;
+  }
+}
+
+export type NativeNotificationPrefs = {
+  all: boolean;
+  monitor: boolean;
+  gateOpen: boolean;
+};
+
+/** Native shade prefs. Missing module = everything on. */
+export async function getNativeNotificationPrefs(): Promise<NativeNotificationPrefs> {
+  const native = getNative();
+  if (!native?.getNotificationPrefs) {
+    return { all: true, monitor: true, gateOpen: true };
+  }
+  try {
+    const raw = await native.getNotificationPrefs();
+    return {
+      all: asBool(raw?.all, true),
+      monitor: asBool(raw?.monitor, true),
+      gateOpen: asBool(raw?.gateOpen, true),
+    };
+  } catch {
+    return { all: true, monitor: true, gateOpen: true };
+  }
+}
+
+/** Master shade switch. Does not stop Auto-open. */
+export async function setNativeNoticesEnabled(enabled: boolean): Promise<void> {
+  const native = getNative();
+  if (!native?.setNoticesEnabled) return;
+  try {
+    await native.setNoticesEnabled(enabled);
+  } catch (error) {
+    console.warn('[GateAuto] setNativeNoticesEnabled failed', error);
+  }
+}
+
+export async function setNativeGateOpenNoticeEnabled(
+  enabled: boolean,
+): Promise<void> {
+  const native = getNative();
+  if (!native?.setGateOpenNoticeEnabled) return;
+  try {
+    await native.setGateOpenNoticeEnabled(enabled);
+  } catch (error) {
+    console.warn('[GateAuto] setNativeGateOpenNoticeEnabled failed', error);
   }
 }
 

@@ -21,5 +21,14 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "react-native": {
+    "crashlytics_auto_collection_enabled": true,
+    "crashlytics_ndk_enabled": true,
+    "crashlytics_debug_enabled": false,
+    "crashlytics_javascript_exception_handler_chaining_enabled": false,
+    "analytics_auto_collection_enabled": true,
+    "google_analytics_adid_collection_enabled": false,
+    "google_analytics_ssaid_collection_enabled": false
   }
 }

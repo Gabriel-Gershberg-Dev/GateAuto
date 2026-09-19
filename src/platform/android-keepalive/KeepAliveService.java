@@ -8,9 +8,13 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.facebook.react.HeadlessJsTaskService;
 import com.facebook.react.bridge.Arguments;
@@ -24,6 +28,13 @@ public class KeepAliveService extends HeadlessJsTaskService {
   private static final String CHANNEL_ID = "gateauto-keepalive";
   private static final int NOTIF_ID = 41002;
   public static final String TASK_NAME = "GateAutoKeepAliveSync";
+  /** Headless High-GPS can hang far past RN's 90s timeout on Samsung. */
+  private static final long HUNG_WATCHDOG_MS = 25_000L;
+  private static final AtomicBoolean running = new AtomicBoolean(false);
+
+  public static boolean isRunning() {
+    return running.get();
+  }
 
   public static void startJs(
     Context context,
@@ -32,6 +43,11 @@ public class KeepAliveService extends HeadlessJsTaskService {
     @Nullable String name,
     @Nullable String address
   ) {
+    if (!running.compareAndSet(false, true)) {
+      android.util.Log.i("GateAutoKeepAlive", "KeepAliveService.startJs skip — already running");
+      GateAutoTelemetry.keepaliveTick(context, "skip");
+      return;
+    }
     Intent service = new Intent(context, KeepAliveService.class);
     service.putExtra("reason", reason == null ? "poll" : reason);
     if (identifier != null) service.putExtra("identifier", identifier);
@@ -45,6 +61,7 @@ public class KeepAliveService extends HeadlessJsTaskService {
         context.startService(service);
       }
     } catch (Exception e) {
+      running.set(false);
       android.util.Log.w("GateAutoKeepAlive", "KeepAliveService.startJs failed", e);
     }
   }
@@ -52,6 +69,29 @@ public class KeepAliveService extends HeadlessJsTaskService {
   @Override
   public void onCreate() {
     super.onCreate();
+    running.set(true);
+    new Handler(Looper.getMainLooper())
+      .postDelayed(
+        () -> {
+          if (running.get()) {
+            android.util.Log.w(
+              "GateAutoKeepAlive",
+              "KeepAliveService watchdog — stopping hung headless JS"
+            );
+            GateAutoTelemetry.keepaliveTick(KeepAliveService.this, "hung_killed");
+            GateAutoTelemetry.autoSkip(
+              KeepAliveService.this,
+              "hung",
+              "poll",
+              "",
+              null,
+              null
+            );
+            stopSelf();
+          }
+        },
+        HUNG_WATCHDOG_MS
+      );
     ensureChannel();
     Notification notification =
       new NotificationCompat.Builder(this, CHANNEL_ID)
@@ -98,5 +138,11 @@ public class KeepAliveService extends HeadlessJsTaskService {
       90_000,
       true
     );
+  }
+
+  @Override
+  public void onDestroy() {
+    running.set(false);
+    super.onDestroy();
   }
 }

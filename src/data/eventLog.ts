@@ -68,7 +68,11 @@ export async function loadEvents(): Promise<LogEvent[]> {
 }
 
 export async function appendEvent(
-  partial: Omit<LogEvent, 'id' | 'ts'> & { ts?: number },
+  partial: Omit<LogEvent, 'id' | 'ts'> & {
+    ts?: number;
+    /** Native already sent Analytics for this row. */
+    skipTelemetry?: boolean;
+  },
 ): Promise<LogEvent[]> {
   const events = await loadEvents();
   const next: LogEvent = {
@@ -83,6 +87,14 @@ export async function appendEvent(
   };
   const merged = [next, ...events].slice(0, MAX_EVENTS);
   await AsyncStorage.setItem(logKey(), JSON.stringify(merged));
+  if (!partial.skipTelemetry) {
+    try {
+      const { reportFromLogEvent } = await import('../telemetry/fromLogEvent');
+      reportFromLogEvent(next);
+    } catch {
+      // Telemetry must never break the in-app log.
+    }
+  }
   return merged;
 }
 

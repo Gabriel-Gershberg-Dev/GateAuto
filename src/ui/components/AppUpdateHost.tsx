@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthProvider';
+import { dismissUpdateNotification } from '../../notifications/notify';
 import {
   beginDownloadAndInstall,
   checkAppUpdate,
@@ -10,6 +12,10 @@ import {
   subscribeUpdateUi,
   type UpdateOffer,
 } from '../../updates/checkUpdate';
+import {
+  UPDATE_NOTICE_KIND,
+  notifyUpdateAvailable,
+} from '../../updates/updateNotice';
 import { BusySheet, ConfirmSheet, InfoSheet } from './ConfirmSheet';
 import { IconDownload } from '../icons';
 import { useTheme } from '../ThemeProvider';
@@ -25,16 +31,36 @@ export function AppUpdateHost() {
   const { ready } = useAuth();
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
   const [checking, setChecking] = useState(false);
+  const [checkingChannel, setCheckingChannel] = useState<'production' | 'beta'>(
+    'production',
+  );
   const [downloading, setDownloading] = useState(false);
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
   const [allowInstalls, setAllowInstalls] = useState(false);
+  const handledResponse = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      const id = response.notification.request.identifier;
+      if (handledResponse.current === id) return;
+      const kind = response.notification.request.content.data?.kind;
+      if (kind !== UPDATE_NOTICE_KIND) return;
+      handledResponse.current = id;
+      void checkAppUpdate('settings');
+    };
+    const sub =
+      Notifications.addNotificationResponseReceivedListener(handleResponse);
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     return subscribeUpdateUi((event) => {
       if (event.kind === 'checking') {
         setChecking(true);
+        setCheckingChannel(event.channel);
         setOffer(null);
         return;
       }
@@ -45,9 +71,12 @@ export function AppUpdateHost() {
       }
       if (event.kind === 'up-to-date') {
         setOffer(null);
+        const beta = event.channel === 'beta';
         setInfo({
           title: t('update.upToDateTitle'),
-          message: t('update.upToDateMsg', { name: event.versionName }),
+          message: t(beta ? 'update.betaUpToDateMsg' : 'update.upToDateMsg', {
+            name: event.versionName,
+          }),
         });
         return;
       }
@@ -70,6 +99,10 @@ export function AppUpdateHost() {
 
   const notes = offer?.remote.releaseNotes?.trim() ?? '';
   const versionName = offer?.remote.latestVersionName || String(offer?.remote.latestVersionCode ?? '');
+  const betaOffer = offer?.channel === 'beta';
+  const availableTitle = betaOffer
+    ? t('update.betaAvailableTitle')
+    : t('update.availableTitle');
   const message = notes
     ? t('update.availableMsg', {
         name: versionName,
@@ -86,18 +119,21 @@ export function AppUpdateHost() {
       <ConfirmSheet
         visible={offer != null && !downloading && !allowInstalls}
         icon={<IconDownload color={colors.primary} />}
-        title={t('update.availableTitle')}
+        title={availableTitle}
         message={message}
         cancelLabel={t('common.notNow')}
         confirmLabel={t('update.download')}
         onCancel={() => {
+          const pending = offer;
           dismissLaunchUpdatePrompt();
           setOffer(null);
+          if (pending) void notifyUpdateAvailable(pending);
         }}
         onConfirm={() => {
           const url = offer?.remote.apkUrl;
           if (!url) return;
           setDownloading(true);
+          void dismissUpdateNotification();
           void beginDownloadAndInstall(url)
             .catch((e) => {
               if (e instanceof Error && e.message === 'ALLOW_INSTALLS') {
@@ -130,7 +166,13 @@ export function AppUpdateHost() {
       />
       <BusySheet
         visible={checking || downloading}
-        title={checking ? t('settings.checkUpdate') : t('update.availableTitle')}
+        title={
+          checking
+            ? checkingChannel === 'beta'
+              ? t('settings.checkBetaUpdate')
+              : t('settings.checkUpdate')
+            : availableTitle
+        }
         message={checking ? t('update.checking') : t('update.downloading')}
       />
       <InfoSheet

@@ -229,6 +229,10 @@ export function ShareGateScreen({ navigation, route }: Props) {
             onChange: setEmail,
             placeholder: t('share.friendEmail'),
             keyboardType: 'email-address',
+            autoFocus: true,
+            autoComplete: 'email',
+            returnKeyType: 'send',
+            onSubmitEditing: () => void makeCode(email),
           },
         ]}
         cancelLabel={t('common.cancel')}

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useTheme } from '../ThemeProvider';
+import { HUD_TEAL } from '../theme';
+import { useReduceMotion } from '../useReduceMotion';
 
 /**
  * Brand barrier. Arm only rises for a real open.
@@ -26,7 +28,9 @@ export function BarrierMark({
   pinned?: boolean;
 }) {
   const { colors } = useTheme();
+  const reduceMotion = useReduceMotion();
   const tint = color ?? colors.primary;
+  const lamp = HUD_TEAL;
   const arm = useRef(new Animated.Value(brand ? 0.45 : 0)).current;
   const pulse = useRef(new Animated.Value(0.45)).current;
 
@@ -49,18 +53,22 @@ export function BarrierMark({
       pulse.setValue(0);
       return;
     }
-    pulse.setValue(0.55);
+    if (reduceMotion) {
+      pulse.setValue(0.72);
+      return;
+    }
+    pulse.setValue(0.4);
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 1100,
+          duration: 1400,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(pulse, {
-          toValue: 0.4,
-          duration: 1100,
+          toValue: 0.35,
+          duration: 1400,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
@@ -68,9 +76,10 @@ export function BarrierMark({
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse, watching]);
+  }, [pulse, reduceMotion, watching]);
 
   const s = size / 24;
+  const lampStroke = Math.max(StyleSheet.hairlineWidth * 2, 1);
   const postW = 2.6 * s;
   const postH = 13 * s;
   const postTop = 8.2 * s;
@@ -95,10 +104,10 @@ export function BarrierMark({
               top: 1.2 * s,
               width: 9 * s,
               height: 5 * s,
-              borderColor: tint,
-              borderTopWidth: 1.6 * s,
-              borderLeftWidth: 1.6 * s,
-              borderRightWidth: 1.6 * s,
+              borderColor: lamp,
+              borderTopWidth: lampStroke,
+              borderLeftWidth: lampStroke,
+              borderRightWidth: lampStroke,
               borderBottomWidth: 0,
               borderTopLeftRadius: 8 * s,
               borderTopRightRadius: 8 * s,
@@ -112,14 +121,17 @@ export function BarrierMark({
               top: 3.4 * s,
               width: 5.6 * s,
               height: 3.2 * s,
-              borderColor: tint,
-              borderTopWidth: 1.6 * s,
-              borderLeftWidth: 1.6 * s,
-              borderRightWidth: 1.6 * s,
+              borderColor: lamp,
+              borderTopWidth: lampStroke,
+              borderLeftWidth: lampStroke,
+              borderRightWidth: lampStroke,
               borderBottomWidth: 0,
               borderTopLeftRadius: 6 * s,
               borderTopRightRadius: 6 * s,
-              opacity: pulse,
+              opacity: pulse.interpolate({
+                inputRange: [0.35, 1],
+                outputRange: [0.85, 0.4],
+              }),
             }}
           />
         </>

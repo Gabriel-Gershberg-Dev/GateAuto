@@ -48,3 +48,8 @@ remoteconfig.live.json
 
 # Built sideload APKs — host on Firebase Storage, do not commit
 *.apk
+
+# Editor / one-off junk
+.cursor/
+/-
+tmp-aaos-*.png

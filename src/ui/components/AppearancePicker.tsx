@@ -28,7 +28,10 @@ export function AppearancePicker() {
               style={[styles.chip, selected && styles.chipSelected]}
               onPress={() => setPreference(opt)}
             >
-              <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+              <Text
+                style={[styles.chipText, selected && styles.chipTextSelected]}
+                numberOfLines={1}
+              >
                 {labelFor(opt)}
               </Text>
             </Pressable>
@@ -60,9 +63,12 @@ function createStyles(c: ThemeColors) {
     },
     chip: {
       flex: 1,
+      minWidth: 0,
       paddingVertical: 8,
+      paddingHorizontal: 6,
       borderRadius: radii.sm - 2,
       alignItems: 'center',
+      justifyContent: 'center',
     },
     chipSelected: {
       backgroundColor: c.surface,

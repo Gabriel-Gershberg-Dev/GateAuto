@@ -8,10 +8,14 @@ import {
 } from '../firebase/config';
 import {
   isFetchedUpdateConfig,
-  parseRemoteUpdateConfig,
+  parseRemoteUpdateChannels,
   readRemoteConfigEntries,
+  RC_BETA_KEYS,
+  RC_PRODUCTION_KEYS,
+  RC_UPDATE_KEYS,
+  REMOTE_UPDATE_CHANNELS_DEFAULTS,
   REMOTE_UPDATE_DEFAULTS,
-  type RemoteUpdateConfig,
+  type RemoteUpdateChannels,
 } from './updateLogic';
 
 const LOG = '[GateAuto update]';
@@ -19,13 +23,42 @@ const LOG = '[GateAuto update]';
 const INSTANCE_KEY = 'gateauto.rc.appInstanceId';
 const ANDROID_APP_ID = '1:312116795772:android:3ada4aa772eb622990acf9';
 
+/**
+ * Production: latest_version_code, latest_version_name, apk_url, release_notes
+ * Beta:       beta_version_code, beta_version_name, beta_apk_url, beta_release_notes
+ *
+ * Default publish (scripts/publish-update.mjs) updates beta only.
+ * Do not bump production until the owner explicitly asks — family phones
+ * only see production Check for update / enter / foreground offers.
+ */
 function defaultsMap(): Record<string, string | number> {
   return {
-    latest_version_code: REMOTE_UPDATE_DEFAULTS.latestVersionCode,
-    latest_version_name: REMOTE_UPDATE_DEFAULTS.latestVersionName,
-    apk_url: REMOTE_UPDATE_DEFAULTS.apkUrl,
-    release_notes: REMOTE_UPDATE_DEFAULTS.releaseNotes,
+    [RC_PRODUCTION_KEYS.code]: REMOTE_UPDATE_DEFAULTS.latestVersionCode,
+    [RC_PRODUCTION_KEYS.name]: REMOTE_UPDATE_DEFAULTS.latestVersionName,
+    [RC_PRODUCTION_KEYS.url]: REMOTE_UPDATE_DEFAULTS.apkUrl,
+    [RC_PRODUCTION_KEYS.notes]: REMOTE_UPDATE_DEFAULTS.releaseNotes,
+    [RC_BETA_KEYS.code]: 0,
+    [RC_BETA_KEYS.name]: '',
+    [RC_BETA_KEYS.url]: '',
+    [RC_BETA_KEYS.notes]: '',
   };
+}
+
+function rcEntryString(
+  rc: ReturnType<typeof getRemoteConfig>,
+  key: string,
+  numericFallback: boolean,
+): string {
+  const value = getValue(rc, key);
+  const asString = value.asString();
+  if (asString) return asString;
+  if (numericFallback) {
+    const asNumber = value.asNumber();
+    if (Number.isFinite(asNumber) && asNumber > 0) {
+      return String(Math.trunc(asNumber));
+    }
+  }
+  return '';
 }
 
 async function appInstanceId(): Promise<string> {
@@ -64,19 +97,12 @@ async function fetchViaJsSdk(minimumFetchIntervalMillis: number) {
   rc.settings.minimumFetchIntervalMillis = minimumFetchIntervalMillis;
   rc.defaultConfig = defaultsMap();
   await fetchAndActivate(rc);
-  const codeValue = getValue(rc, 'latest_version_code');
-  const codeAsString = codeValue.asString();
-  const codeAsNumber = codeValue.asNumber();
-  return parseRemoteUpdateConfig({
-    latest_version_code:
-      codeAsString ||
-      (Number.isFinite(codeAsNumber) && codeAsNumber > 0
-        ? String(Math.trunc(codeAsNumber))
-        : ''),
-    latest_version_name: getValue(rc, 'latest_version_name').asString(),
-    apk_url: getValue(rc, 'apk_url').asString(),
-    release_notes: getValue(rc, 'release_notes').asString(),
-  });
+  const values: Record<string, string> = {};
+  for (const key of RC_UPDATE_KEYS) {
+    const numeric = key === RC_PRODUCTION_KEYS.code || key === RC_BETA_KEYS.code;
+    values[key] = rcEntryString(rc, key, numeric);
+  }
+  return parseRemoteUpdateChannels(values);
 }
 
 type FetchBody = {
@@ -84,7 +110,7 @@ type FetchBody = {
   state?: string;
 };
 
-async function fetchViaRest(): Promise<RemoteUpdateConfig> {
+async function fetchViaRest(): Promise<RemoteUpdateChannels> {
   const instanceId = await appInstanceId();
   const url = `https://firebaseremoteconfig.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/namespaces/firebase:fetch?key=${encodeURIComponent(firebaseWebConfig.apiKey)}`;
   const res = await fetch(url, {
@@ -103,8 +129,8 @@ async function fetchViaRest(): Promise<RemoteUpdateConfig> {
   }
   const body = (await res.json()) as FetchBody;
   const values = readRemoteConfigEntries(body.entries);
-  const parsed = parseRemoteUpdateConfig(values);
-  if (!isFetchedUpdateConfig(parsed)) {
+  const parsed = parseRemoteUpdateChannels(values);
+  if (!isFetchedUpdateConfig(parsed.production)) {
     throw new Error(
       `Remote Config incomplete (state=${body.state ?? 'unknown'})`,
     );
@@ -112,22 +138,30 @@ async function fetchViaRest(): Promise<RemoteUpdateConfig> {
   return parsed;
 }
 
+function logChannels(source: string, channels: RemoteUpdateChannels) {
+  console.log(
+    LOG,
+    source,
+    'prod',
+    channels.production.latestVersionCode,
+    channels.production.latestVersionName,
+    'beta',
+    channels.beta.latestVersionCode || 0,
+    channels.beta.latestVersionName || '-',
+  );
+}
+
 /** Fetch does not touch geofences, PalGate, or Auto-open. */
 export async function fetchRemoteUpdateConfig(opts?: {
   force?: boolean;
-}): Promise<RemoteUpdateConfig> {
+}): Promise<RemoteUpdateChannels> {
   const force = Boolean(opts?.force);
   const interval = force ? 0 : 60 * 60 * 1000;
   const errors: string[] = [];
 
   try {
     const remote = await withTimeout(fetchViaRest(), 10_000);
-    console.log(
-      LOG,
-      'REST',
-      remote.latestVersionCode,
-      remote.latestVersionName,
-    );
+    logChannels('REST', remote);
     return remote;
   } catch (e) {
     const message = e instanceof Error ? e.message : 'REST failed';
@@ -137,15 +171,10 @@ export async function fetchRemoteUpdateConfig(opts?: {
 
   try {
     const remote = await withTimeout(fetchViaJsSdk(interval), 10_000);
-    if (!isFetchedUpdateConfig(remote)) {
+    if (!isFetchedUpdateConfig(remote.production)) {
       throw new Error('JS SDK returned in-app defaults');
     }
-    console.log(
-      LOG,
-      'JS SDK',
-      remote.latestVersionCode,
-      remote.latestVersionName,
-    );
+    logChannels('JS SDK', remote);
     return remote;
   } catch (e) {
     const message = e instanceof Error ? e.message : 'JS SDK failed';
@@ -157,5 +186,5 @@ export async function fetchRemoteUpdateConfig(opts?: {
     throw new Error(errors.join('; ') || 'Remote Config fetch failed');
   }
   console.log(LOG, 'using in-app defaults');
-  return REMOTE_UPDATE_DEFAULTS;
+  return REMOTE_UPDATE_CHANNELS_DEFAULTS;
 }

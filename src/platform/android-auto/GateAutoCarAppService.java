@@ -24,7 +24,7 @@ public class GateAutoCarAppService extends CarAppService {
   @NonNull
   @Override
   public Session onCreateSession() {
-    Log.i(TAG, "onCreateSession — Android Auto bound GateAuto");
+    Log.i(TAG, "onCreateSession — car host bound GateAuto");
     return new GateAutoCarSession();
   }
 }

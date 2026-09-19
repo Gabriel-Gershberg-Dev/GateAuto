@@ -41,6 +41,7 @@ import { IconPin } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GateEditor'>;
 
@@ -123,6 +124,7 @@ function toGateBtDevice(device: ConnectedBtDevice): GateBluetoothDevice | null {
 export function GateEditorScreen({ navigation, route }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { row } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { gateId } = route.params;
   const [gate, setGate] = useState<GateConfig | null>(null);
@@ -198,6 +200,21 @@ export function GateEditorScreen({ navigation, route }: Props) {
     await upsertGate(next);
     savedRef.current = next;
     setGate((prev) => (prev ? { ...prev, ...next, name: next.name } : next));
+    if (saved) {
+      const radiusChanged = saved.radiusMeters !== next.radiusMeters;
+      const btChanged =
+        JSON.stringify(saved.bluetooth) !== JSON.stringify(next.bluetooth);
+      if (radiusChanged || btChanged) {
+        void import('../../telemetry').then((t) =>
+          t.logSettingsSave({
+            changedRadius: radiusChanged,
+            changedBt: btChanged,
+            radiusM: next.radiusMeters,
+            btRequired: Boolean(next.bluetooth?.required),
+          }),
+        );
+      }
+    }
     if (syncGeo) {
       await trySyncGeofences();
     }
@@ -436,6 +453,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
         kind: 'opened',
         gateId: gate.id,
         message: t('editor.testOk'),
+        skipTelemetry: true,
       });
       setTestFlash('Opened');
       setTimeout(() => setTestFlash(null), 1600);
@@ -454,6 +472,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
         kind: 'error',
         gateId: gate.id,
         message: t('editor.testFail', { message }),
+        skipTelemetry: true,
       });
       setTestFlash('Failed');
       setTimeout(() => setTestFlash(null), 1800);
@@ -517,14 +536,18 @@ export function GateEditorScreen({ navigation, route }: Props) {
       <RadiusSlider value={radiusMeters} onChange={setRadiusMeters} />
 
       <Text style={styles.section}>{t('editor.carBt')}</Text>
-      <View style={styles.rowBetween}>
-        <Text style={styles.label}>{t('editor.requireBt')}</Text>
-        <Switch
-          value={btRequired}
-          onValueChange={setBtRequired}
-          trackColor={{ false: colors.border, true: colors.primaryMuted }}
-          thumbColor={btRequired ? colors.primary : colors.switchThumbOff}
-        />
+      <View style={[styles.rowBetween, { flexDirection: row }]}>
+        <Text style={[styles.label, styles.labelGrow]} numberOfLines={2}>
+          {t('editor.requireBt')}
+        </Text>
+        <View style={styles.switchSlot}>
+          <Switch
+            value={btRequired}
+            onValueChange={setBtRequired}
+            trackColor={{ false: colors.border, true: colors.primaryMuted }}
+            thumbColor={btRequired ? colors.primary : colors.switchThumbOff}
+          />
+        </View>
       </View>
       <Text style={styles.meta}>
         {t('editor.btHint')}
@@ -776,9 +799,17 @@ function createStyles(c: ThemeColors) {
       color: c.text,
     },
     rowBetween: {
-      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      minWidth: 0,
+      gap: 12,
+    },
+    labelGrow: {
+      flex: 1,
+      minWidth: 0,
+    },
+    switchSlot: {
+      flexShrink: 0,
     },
     button: {
       backgroundColor: c.primary,
@@ -842,6 +873,7 @@ function createStyles(c: ThemeColors) {
     },
     selectedDeviceInfo: {
       flex: 1,
+      minWidth: 0,
       gap: 2,
     },
     deviceName: {

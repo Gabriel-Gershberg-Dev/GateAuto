@@ -39,6 +39,8 @@ public final class KeepAliveScheduler {
     Context app = context.getApplicationContext();
     registerScreenReceiver(app);
     scheduleNext(app, FIRST_DELAY_MS);
+    // Hold the process immediately on arm / boot with a non-location FGS.
+    HoldService.ensure(app);
     Log.i(TAG, "keep-alive alarm armed");
   }
 

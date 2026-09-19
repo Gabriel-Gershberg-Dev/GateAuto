@@ -15,6 +15,11 @@ import {
   isBluetoothNativeAvailable,
 } from './rnBluetoothClassic';
 import type { CarBluetoothDevice, CarBluetoothRequirement } from './types';
+import { getAutoOpenOsStatus } from '../platform/keepAliveAlarm';
+import {
+  bluetoothPermissionGranted,
+  needsRuntimeBluetoothPermission,
+} from '../permissions/permissionStatusLogic';
 
 export type { CarBluetoothDevice, CarBluetoothRequirement };
 export {
@@ -80,6 +85,30 @@ async function isAndroidPermissionGranted(
   }
 }
 
+/** True when car-BT matching can read connected / bonded devices without a new prompt. */
+export async function hasBluetoothPermissions(): Promise<boolean> {
+  try {
+    if (Platform.OS !== 'android') {
+      // iOS prompts on first native access; do not treat as a blocking gap.
+      return true;
+    }
+    const os = await getAutoOpenOsStatus();
+    if (os) {
+      return bluetoothPermissionGranted({
+        sdkInt: os.sdkInt,
+        connectGranted: os.bluetoothConnectGranted,
+        adapterEnabled: os.bluetoothAdapterEnabled,
+      });
+    }
+    if (!needsRuntimeBluetoothPermission(androidApiLevel())) return true;
+    const connect = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
+    if (typeof connect !== 'string' || !connect) return false;
+    return await isAndroidPermissionGranted(connect);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Request runtime Bluetooth permissions needed to read connected / bonded devices.
  * - Android 12+: BLUETOOTH_CONNECT (+ SCAN)
@@ -92,7 +121,7 @@ async function isAndroidPermissionGranted(
 export async function requestBluetoothPermissions(): Promise<boolean> {
   try {
     if (Platform.OS === 'android') {
-      if (androidApiLevel() < 31) {
+      if (!needsRuntimeBluetoothPermission(androidApiLevel())) {
         // Pre-Android 12: BLUETOOTH / BLUETOOTH_ADMIN are install-time permissions.
         return true;
       }
@@ -298,26 +327,43 @@ function hasMatchCriteria(required: CarBluetoothRequirement): boolean {
 }
 
 /**
- * Whether any required car Bluetooth device is among currently connected devices (OR).
- * Prefers MAC `address` (Android), falls back to case-insensitive `name` (iOS / Android).
- * Accepts a single requirement or a list. Returns false when native BT is unavailable,
- * criteria are empty, or no configured device matches.
+ * Tri-state car-BT read:
+ * - `connected`: a listed car (OR list) is currently connected.
+ * - `not_connected`: the connected-device list was read successfully and no
+ *   listed car is in it.
+ * - `unknown`: the connection state could NOT be read — no native BT module,
+ *   `BLUETOOTH_CONNECT` not granted (Android 12+ returns empty/throws without
+ *   it, which is indistinguishable from "car not connected"), or a read
+ *   exception. Callers must not hard-block a BT-required open on `unknown`
+ *   alone; proximity still gates the open.
  */
-export async function isCarBluetoothConnected(
+export type CarBluetoothConnectionState =
+  | 'connected'
+  | 'not_connected'
+  | 'unknown';
+
+export async function readCarBluetoothConnection(
   required: CarBluetoothRequirement | CarBluetoothRequirement[],
-): Promise<boolean> {
+): Promise<CarBluetoothConnectionState> {
   const requirements = (Array.isArray(required) ? required : [required]).filter(
     hasMatchCriteria,
   );
   if (requirements.length === 0) {
-    return false;
+    // Nothing to match against — a config problem, not a read failure.
+    return 'not_connected';
   }
 
-  if (
-    !isBluetoothNativeAvailable() &&
-    !isAndroidProfileBluetoothAvailable()
-  ) {
-    return false;
+  if (!isBluetoothNativeAvailable() && !isAndroidProfileBluetoothAvailable()) {
+    // No way to read connection state (Expo Go / no prebuild).
+    return 'unknown';
+  }
+
+  // Android 12+: without BLUETOOTH_CONNECT the connected/bonded queries return
+  // empty or throw. That looks identical to "not connected", so a missing
+  // permission would silently block every BT-required open. Report unknown so
+  // the caller can fall open on proximity instead of hard-blocking.
+  if (Platform.OS === 'android' && !(await hasBluetoothPermissions())) {
+    return 'unknown';
   }
 
   try {
@@ -328,7 +374,7 @@ export async function isCarBluetoothConnected(
         if (!address) continue;
         try {
           if (await bt.isDeviceConnected(address)) {
-            return true;
+            return 'connected';
           }
         } catch {
           // Fall through to list matching (profile + classic).
@@ -337,10 +383,25 @@ export async function isCarBluetoothConnected(
     }
 
     const connected = await getConnectedCarDevices();
-    return requirements.some((req) =>
+    const matched = requirements.some((req) =>
       connected.some((device) => matchesCarBluetooth(device, req)),
     );
+    return matched ? 'connected' : 'not_connected';
   } catch {
-    return false;
+    return 'unknown';
   }
+}
+
+/**
+ * Whether any required car Bluetooth device is among currently connected devices (OR).
+ * Prefers MAC `address` (Android), falls back to case-insensitive `name` (iOS / Android).
+ * Accepts a single requirement or a list. Returns false when native BT is unavailable,
+ * criteria are empty, or no configured device matches. Prefer
+ * {@link readCarBluetoothConnection} when you need to distinguish
+ * "not connected" from "could not read".
+ */
+export async function isCarBluetoothConnected(
+  required: CarBluetoothRequirement | CarBluetoothRequirement[],
+): Promise<boolean> {
+  return (await readCarBluetoothConnection(required)) === 'connected';
 }

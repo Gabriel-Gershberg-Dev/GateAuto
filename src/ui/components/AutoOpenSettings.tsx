@@ -19,10 +19,12 @@ import { IconInfo } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { paddedCardStyle, radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 
 export function AutoOpenSettings() {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { row, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [enabled, setEnabled] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -113,11 +115,16 @@ export function AutoOpenSettings() {
   return (
     <>
       <View style={styles.card}>
-        <View style={styles.row}>
+        <View style={[styles.row, { flexDirection: row }]}>
           <BarrierMark watching={enabled} size={28} />
           <View style={styles.copy}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>{t('autoOpen.title')}</Text>
+            <View style={[styles.titleRow, { flexDirection: row }]}>
+              <Text
+                style={[styles.title, { writingDirection, textAlign }]}
+                numberOfLines={2}
+              >
+                {t('autoOpen.title')}
+              </Text>
               <Pressable
                 onPress={() => setInfoOpen(true)}
                 hitSlop={10}
@@ -127,14 +134,21 @@ export function AutoOpenSettings() {
                 <IconInfo color={colors.muted} size={18} />
               </Pressable>
             </View>
-            <Text style={styles.meta}>{t('autoOpen.meta')}</Text>
+            <Text
+              style={[styles.meta, { writingDirection, textAlign }]}
+              numberOfLines={3}
+            >
+              {t('autoOpen.meta')}
+            </Text>
           </View>
+          <View style={styles.switchSlot}>
           <Switch
             value={enabled}
             onValueChange={(v) => void onToggle(v)}
             trackColor={{ false: colors.border, true: colors.primaryMuted }}
             thumbColor={enabled ? colors.primary : colors.switchThumbOff}
           />
+          </View>
         </View>
         {armStatus ? (
           <Text
@@ -178,15 +192,22 @@ function createStyles(c: ThemeColors) {
       gap: 2,
     },
     titleRow: {
-      flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      minWidth: 0,
+      flexShrink: 1,
     },
     title: {
+      flex: 1,
+      minWidth: 0,
       fontSize: 17,
       fontWeight: '600',
       color: c.text,
       letterSpacing: -0.2,
+    },
+    switchSlot: {
+      flexShrink: 0,
+      justifyContent: 'center',
     },
     infoBtn: {
       padding: 2,
@@ -199,7 +220,7 @@ function createStyles(c: ThemeColors) {
       fontSize: 13,
       color: c.muted,
       fontWeight: '600',
-      marginLeft: 40,
+      marginStart: 40,
     },
     statusOk: {
       color: c.success,
@@ -215,7 +236,7 @@ function createStyles(c: ThemeColors) {
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.sm,
       borderRadius: radii.sm,
-      marginLeft: 40,
+      marginStart: 40,
     },
   });
 }

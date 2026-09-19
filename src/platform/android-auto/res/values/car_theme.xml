@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark cockpit + phosphor cyan. Android Auto still paints the wallpaper;
+         these colors tint PRIMARY/SECONDARY, spinners, and AAOS chrome. -->
+    <style name="GateAutoCarTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/car_surface</item>
+        <item name="android:colorBackground">@color/car_surface</item>
+        <item name="carColorPrimary">@color/car_primary</item>
+        <item name="carColorPrimaryDark">@color/car_primary_dark</item>
+        <item name="carColorSecondary">@color/car_secondary</item>
+        <item name="carColorSecondaryDark">@color/car_secondary_dark</item>
+    </style>
+</resources>

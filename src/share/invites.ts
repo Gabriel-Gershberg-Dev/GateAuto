@@ -50,7 +50,7 @@ import {
 } from './inviteLogic';
 import type { PalGateCredentials } from '../palgate/types';
 import {
-  disableSharedGatesFromRevoke,
+  applyShareRevokeState,
   inviteMatchesUnlinkedSystem,
   palgateFingerprint,
   type RevokedShareHint,
@@ -67,6 +67,8 @@ export type InviteDoc = {
   acceptedAt: Timestamp | null;
   gate: SharedGatePayload;
   gates: SharedGatePayload[];
+  /** Set when the owner unlinks that PalGate. Invite-only revoke is false. */
+  systemUnlinked?: boolean | null;
 };
 
 async function requireSharingUser(): Promise<{ uid: string }> {
@@ -275,6 +277,12 @@ function parseInvite(id: string, data: Record<string, unknown>): InviteDoc & { c
     acceptedAt: (data.acceptedAt as Timestamp) ?? null,
     gate: gates[0] ?? fallback,
     gates,
+    systemUnlinked:
+      data.systemUnlinked === true
+        ? true
+        : data.systemUnlinked === false
+          ? false
+          : null,
   };
 }
 
@@ -482,13 +490,19 @@ export async function declineInvite(rawCode: string): Promise<void> {
   });
 }
 
-export async function revokeInvite(code: string): Promise<void> {
+export async function revokeInvite(
+  code: string,
+  options?: { systemUnlinked?: boolean },
+): Promise<void> {
   const uid = requireUid();
   const invite = await getInviteByCode(code);
   if (!invite) return;
   if (invite.fromUid !== uid) throw new Error(i18n.t('share.errRevokeOther'));
   if (invite.status === 'declined') return;
-  await updateDoc(doc(db, 'invites', code), { status: 'revoked' });
+  await updateDoc(doc(db, 'invites', code), {
+    status: 'revoked',
+    systemUnlinked: Boolean(options?.systemUnlinked),
+  });
   await deleteDoc(doc(db, 'inviteCreds', code)).catch(() => undefined);
 }
 
@@ -496,16 +510,36 @@ export async function syncRevokedShares(): Promise<string[]> {
   const uid = auth.currentUser?.uid;
   if (!uid) return [];
   const accepted = await listAcceptedInvites();
-  const revoked = accepted.filter((i) => i.status === 'revoked');
-  const hints: RevokedShareHint[] = revoked.map((inv) => {
+  const hintFromInvite = (
+    inv: InviteDoc & { code: string },
+  ): { code: string; deviceIds: string[] } => {
     const payloads = inv.gates.length ? inv.gates : [inv.gate];
     return {
       code: inv.code,
-      deviceIds: payloads.map((p) => String(p.deviceId ?? '').trim()).filter(Boolean),
+      deviceIds: payloads
+        .map((p) => String(p.deviceId ?? '').trim())
+        .filter((id) => Boolean(id) && !id.startsWith('share:')),
     };
-  });
+  };
+  const revoked: RevokedShareHint[] = accepted
+    .filter((i) => i.status === 'revoked')
+    .map((inv) => ({
+      ...hintFromInvite(inv),
+      systemUnlinked: inv.systemUnlinked,
+    }));
+  const live = accepted
+    .filter((i) => i.status === 'accepted')
+    .map(hintFromInvite);
+  const systems = (await listSystems())
+    .filter((s) => s.origin === 'shared')
+    .map((s) => ({ id: s.id, allowedDeviceIds: s.allowedDeviceIds }));
   const before = await loadGates();
-  const { gates: next, changedIds } = disableSharedGatesFromRevoke(before, hints);
+  const { gates: next, changedIds } = applyShareRevokeState(
+    before,
+    revoked,
+    live,
+    systems,
+  );
   if (changedIds.length > 0) {
     await saveGates(next);
     void import('../data/accountSync')
@@ -555,7 +589,7 @@ export async function revokeOutgoingInvitesForSystem(input: {
     ) {
       continue;
     }
-    await revokeInvite(inv.code);
+    await revokeInvite(inv.code, { systemUnlinked: true });
     n += 1;
   }
   return n;

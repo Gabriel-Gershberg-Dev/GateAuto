@@ -1,5 +1,17 @@
 import { DarkTheme, DefaultTheme, type Theme } from '@react-navigation/native';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
+
+/** Cabin-HUD lamp — hint frame, selection rail, auto-on arcs. */
+export const HUD_TEAL = '#3AA99C';
+export const HUD_TEAL_LINE = 'rgba(58, 169, 156, 0.28)';
+
+export function hudFrameStyle() {
+  return {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: HUD_TEAL,
+    overflow: 'hidden' as const,
+  };
+}
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 

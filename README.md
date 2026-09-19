@@ -4,6 +4,10 @@ GateAuto is an Expo (Development Client) React Native app that auto-opens PalGat
 
 Primary target: **Galaxy S25 Ultra**. Same codebase builds for **iOS**.
 
+## History
+
+Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.46`** is the current source. Family production is still **1.0.30**; beta is **1.0.46**.
+
 ## Project location
 
 This project lives at **`C:\dev\GateAuto`**. Do not develop from a SynologyDrive (or other synced) copy—file ops there have caused `EPERM` rename failures during Expo prebuild/scaffold. Keep Cursor’s workspace pointed here.
@@ -136,25 +140,23 @@ Tune radius and cooldown from the Monitoring event log.
 
 GateAuto is not on Play Store. After you ship a new APK, the app can offer **Download and install** via Firebase Remote Config (project `gateauto-app`). Auto-open is not blocked by this check.
 
-1. Bump `expo.android.versionCode` in `app.json` (and usually `expo.version`) **before** `assembleRelease`. This APK is `versionCode` **2** / `1.0.1`.
+There are two channels. **Default publish is beta only** (`node scripts/publish-update.mjs --apk-url …`). Do not bump production `latest_version_*` unless the owner is satisfied and family should see it (`--production`).
+
+1. Bump `expo.android.versionCode` in `app.json` (and usually `expo.version`) **before** `assembleRelease`.
 2. Build: `android\gradlew.bat assembleRelease`. Copy the artifact to `C:\dev\GateAuto\GateAuto-release.apk` if you want a stable path. **Do not git-commit the APK.**
-3. Upload that APK to Firebase Storage (or any HTTPS host) and copy the HTTPS URL.
-4. In Firebase Console → Remote Config (or `remoteconfig.template.json`), set:
-   - `latest_version_code` — integer, must be **greater** than phones already installed
-   - `latest_version_name` — e.g. `1.0.2`
-   - `apk_url` — HTTPS URL from step 3
-   - `release_notes` — optional
-5. **Publish** the Remote Config template.
+3. Upload that APK to Firebase Storage. Use `releases/GateAuto-beta.apk` for beta; do not overwrite `releases/GateAuto-release.apk` unless promoting to family.
+4. Publish Remote Config:
+   - **Beta (default):** `beta_version_code`, `beta_version_name`, `beta_apk_url`, `beta_release_notes`
+   - **Production (explicit):** `latest_version_code`, `latest_version_name`, `apk_url`, `release_notes` — family Check for update / enter offers use **only** these
+5. Unlock beta on a phone: Settings → app version row → 7 taps → password. Family never sees beta without that.
 
-Phones on an older `versionCode` show a cabin-teal sheet on launch (after sign-in is ready) and from Settings → **Check for update**. Android may ask to allow GateAuto to install unknown apps.
-
-To push the parameter keys the first time (empty `apk_url`, same version as this APK so nobody is prompted):
+To push parameter keys:
 
 ```bash
 npx firebase-tools deploy --only remoteconfig --project gateauto-app
 ```
 
-Review `remoteconfig.template.json` before that deploy if you already have live Remote Config values.
+Or `node scripts/publish-update.mjs --apk-url URL --notes "…"`. Review `remoteconfig.template.json` before a production deploy.
 
 ## iOS (brief)
 
@@ -170,6 +172,5 @@ Grant **Always** location and background location usage. Geofencing works via th
 
 ## License / privacy notes
 
-- No GateAuto cloud backend; credentials stay on-device (`expo-secure-store`).
-- Opens go over HTTPS to PalGate’s API only.
-- Not an official PalGate product.
+- PalGate session tokens stay in `expo-secure-store` and (when signed in) a uid-scoped Firestore vault. Opens go over HTTPS to PalGate’s API only.
+- Firebase also hosts Auth, share invites, Crashlytics, and the sideload update Remote Config. Not an official PalGate product.

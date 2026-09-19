@@ -8,7 +8,15 @@ function normalizeAddress(value: string | undefined): string {
   return (value ?? '').trim().toLowerCase().replace(/-/g, ':');
 }
 
-/** True when `device` satisfies the saved address (preferred) or name. */
+/**
+ * True when `device` satisfies the saved address OR name.
+ *
+ * Address is the strongest signal, but a connected device seen only through a
+ * profile that does not expose a MAC (name-only) must still match by name — and
+ * this mirrors the native {@code bluetoothMatches} OR contract. Matching by
+ * either avoids a BT-required false negative when one identifier is missing at
+ * read time.
+ */
 export function matchesCarBluetooth(
   device: CarBluetoothDevice,
   required: CarBluetoothRequirement,
@@ -16,12 +24,14 @@ export function matchesCarBluetooth(
   const requiredAddress = normalizeAddress(required.address);
   if (requiredAddress.length > 0) {
     const deviceAddress = normalizeAddress(device.address ?? device.id);
-    return deviceAddress.length > 0 && deviceAddress === requiredAddress;
+    if (deviceAddress.length > 0 && deviceAddress === requiredAddress) {
+      return true;
+    }
   }
 
   const requiredName = normalize(required.name);
-  if (requiredName.length > 0) {
-    return normalize(device.name) === requiredName;
+  if (requiredName.length > 0 && normalize(device.name) === requiredName) {
+    return true;
   }
 
   return false;

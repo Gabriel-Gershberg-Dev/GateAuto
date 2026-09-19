@@ -1,14 +1,91 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppI18n } from '../../i18n/I18nProvider';
-import type { LanguagePreference } from '../../i18n/locale';
+import { readDeviceLanguageTag } from '../../i18n/deviceLocale';
+import {
+  isRtlLanguage,
+  resolveLanguage,
+  type LanguagePreference,
+} from '../../i18n/locale';
+import { preferenceFlipsDirection } from '../../i18n/rtl';
 import { rememberResumeRoute, type ResumeRouteName } from '../../navigation/resumeRoute';
+import { reloadAppForLayout } from '../../platform/reloadApp';
+import { ConfirmSheet } from './ConfirmSheet';
+import { IconGlobe } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { paddedCardStyle, radii, spacing, type ThemeColors } from '../theme';
 
 const OPTIONS: LanguagePreference[] = ['system', 'en', 'he', 'ru'];
+
+/**
+ * Confirm-before-apply for the one switch that needs a full reload: crossing the
+ * left-to-right / right-to-left boundary. Same-direction picks (English↔Russian)
+ * apply instantly; a direction flip stages the choice so the confirm sheet can
+ * explain the restart, then applies + reloads atomically — the app never lingers
+ * half-mirrored.
+ */
+function useLanguageSwitch(resumeOnRtl?: ResumeRouteName) {
+  const { setPreference } = useAppI18n();
+  const [pending, setPending] = useState<LanguagePreference | null>(null);
+
+  const choose = useCallback(
+    (opt: LanguagePreference, afterApplied?: () => void) => {
+      if (preferenceFlipsDirection(opt)) {
+        setPending(opt);
+        return;
+      }
+      void setPreference(opt).then(() => afterApplied?.());
+    },
+    [setPreference],
+  );
+
+  const confirm = useCallback(() => {
+    const opt = pending;
+    setPending(null);
+    if (!opt) return;
+    void (async () => {
+      await setPreference(opt);
+      if (resumeOnRtl) await rememberResumeRoute(resumeOnRtl);
+      await reloadAppForLayout();
+    })();
+  }, [pending, resumeOnRtl, setPreference]);
+
+  const cancel = useCallback(() => setPending(null), []);
+
+  return { pending, choose, confirm, cancel };
+}
+
+function LanguageRestartSheet({
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  pending: LanguagePreference | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const { colors } = useTheme();
+  const toRtl = pending
+    ? isRtlLanguage(resolveLanguage(pending, readDeviceLanguageTag()))
+    : false;
+
+  return (
+    <ConfirmSheet
+      visible={pending != null}
+      compact
+      icon={<IconGlobe color={colors.primary} size={22} />}
+      title={t('lang.restartTitle')}
+      message={toRtl ? t('lang.restartToRtl') : t('lang.restartToLtr')}
+      cancelLabel={t('lang.restartLater')}
+      confirmLabel={t('lang.restartNow')}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  );
+}
 
 export function languageLabel(
   t: (key: string) => string,
@@ -27,16 +104,15 @@ export function languageLabel(
 }
 
 export function LanguagePicker({
-  onRtlMayNeedRestart,
   resumeOnRtl,
 }: {
-  onRtlMayNeedRestart?: () => void;
   resumeOnRtl?: ResumeRouteName;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { preference, setPreference } = useAppI18n();
+  const { preference } = useAppI18n();
   const styles = useMemo(() => createPickerStyles(colors), [colors]);
+  const { pending, choose, confirm, cancel } = useLanguageSwitch(resumeOnRtl);
 
   return (
     <View style={styles.card}>
@@ -48,31 +124,28 @@ export function LanguagePicker({
             <Pressable
               key={opt}
               style={[styles.chip, selected && styles.chipSelected]}
-              onPress={() => {
-                void setPreference(opt).then((needsRestart) => {
-                  if (needsRestart) {
-                    if (resumeOnRtl) void rememberResumeRoute(resumeOnRtl);
-                    onRtlMayNeedRestart?.();
-                  }
-                });
-              }}
+              onPress={() => choose(opt)}
             >
-              <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+              <Text
+                style={[styles.chipText, selected && styles.chipTextSelected]}
+                numberOfLines={1}
+              >
                 {languageLabel(t, opt)}
               </Text>
             </Pressable>
           );
         })}
       </View>
+      <LanguageRestartSheet
+        pending={pending}
+        onConfirm={confirm}
+        onCancel={cancel}
+      />
     </View>
   );
 }
 
-export function LanguageMenuButton({
-  onRtlMayNeedRestart,
-}: {
-  onRtlMayNeedRestart?: () => void;
-}) {
+export function LanguageMenuButton() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { preference } = useAppI18n();
@@ -93,7 +166,6 @@ export function LanguageMenuButton({
       <LanguageSheet
         visible={open}
         onDismiss={() => setOpen(false)}
-        onRtlMayNeedRestart={onRtlMayNeedRestart}
       />
     </>
   );
@@ -102,21 +174,21 @@ export function LanguageMenuButton({
 export function LanguageSheet({
   visible,
   onDismiss,
-  onRtlMayNeedRestart,
   resumeOnRtl,
 }: {
   visible: boolean;
   onDismiss: () => void;
-  onRtlMayNeedRestart?: () => void;
   resumeOnRtl?: ResumeRouteName;
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { preference, setPreference } = useAppI18n();
+  const { preference } = useAppI18n();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createSheetStyles(colors), [colors]);
+  const { pending, choose, confirm, cancel } = useLanguageSwitch(resumeOnRtl);
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent
@@ -140,13 +212,8 @@ export function LanguageSheet({
               <Pressable
                 key={opt}
                 onPress={() => {
-                  void setPreference(opt).then((needsRestart) => {
-                    if (needsRestart) {
-                      if (resumeOnRtl) void rememberResumeRoute(resumeOnRtl);
-                      onRtlMayNeedRestart?.();
-                    }
-                    onDismiss();
-                  });
+                  onDismiss();
+                  choose(opt);
                 }}
                 style={({ pressed }) => [
                   styles.row,
@@ -163,6 +230,12 @@ export function LanguageSheet({
         </View>
       </View>
     </Modal>
+    <LanguageRestartSheet
+      pending={pending}
+      onConfirm={confirm}
+      onCancel={cancel}
+    />
+    </>
   );
 }
 
@@ -189,6 +262,7 @@ function createPickerStyles(c: ThemeColors) {
     chip: {
       flexGrow: 1,
       minWidth: '22%',
+      justifyContent: 'center',
       paddingVertical: 8,
       paddingHorizontal: 6,
       borderRadius: radii.sm - 2,

@@ -14,7 +14,16 @@ import java.util.Set;
 public final class KeepAlivePrefs {
   private static final String PREF = "gateauto_keepalive";
   private static final String KEY_ARMED = "armed";
+  /** Master shade switch. Default on. Does not arm or disarm Auto-open. */
+  private static final String KEY_NOTICES = "noticesEnabled";
+  /** User toggle: hide the searching FGS notice. Default on (missing key = shown). */
+  private static final String KEY_MONITOR_NOTICE = "monitorNoticeEnabled";
+  /** User toggle: "Gate opened" / open-failed pings. Default on. */
+  private static final String KEY_GATE_OPEN_NOTICE = "gateOpenNoticeEnabled";
+  /** Android Auto home layout. Default false = grid. */
+  private static final String KEY_CAR_LIST_LAYOUT = "carListLayout";
   private static final String KEY_LAST_RUN_AT = "lastRunAt";
+  private static final String KEY_MONITOR_CHECK_AT = "monitorCheckAt";
   private static final String KEY_GEOFENCE_SYNC_AT = "geofenceSyncAt";
   private static final String KEY_SESSION = "sessionToken";
   private static final String KEY_PHONE = "phoneNumber";
@@ -23,6 +32,8 @@ public final class KeepAlivePrefs {
   private static final String KEY_EVENTS = "nativeEventsJson";
   private static final String KEY_BURST_COUNT = "burstCount";
   private static final String KEY_GATE_LOCK_MS = "gateLockMs";
+  private static final String KEY_CAR_BT_DEVICES = "carBtConnectedJson";
+  private static final String KEY_CAR_BT_SEEDED_AT = "carBtSeededAt";
   private static final int MAX_NATIVE_EVENTS = 40;
   private static final int MIN_BURST_COUNT = 3;
   private static final int MAX_BURST_COUNT = 20;
@@ -32,6 +43,7 @@ public final class KeepAlivePrefs {
   private static final long DEFAULT_GATE_LOCK_MS = 15L * 60L * 1000L;
   private static final Set<String> IN_FLIGHT = new HashSet<>();
   private static volatile long geofenceSyncAtMem;
+  private static volatile long monitorCheckAtMem;
 
   private KeepAlivePrefs() {}
 
@@ -43,12 +55,82 @@ public final class KeepAlivePrefs {
     return prefs(context).getBoolean(KEY_ARMED, false);
   }
 
+  /**
+   * Master shade switch. Off hides searching, gate-opened, and (via JS) update
+   * notices. Auto-open itself is unchanged.
+   */
+  public static void setNoticesEnabled(Context context, boolean enabled) {
+    prefs(context).edit().putBoolean(KEY_NOTICES, enabled).commit();
+  }
+
+  public static boolean noticesEnabled(Context context) {
+    return prefs(context).getBoolean(KEY_NOTICES, true);
+  }
+
+  /**
+   * Whether the live searching / monitoring notice may stay in the shade.
+   * Does not arm or disarm Auto-open — only the notification.
+   */
+  public static void setMonitorNoticeEnabled(Context context, boolean enabled) {
+    prefs(context).edit().putBoolean(KEY_MONITOR_NOTICE, enabled).commit();
+  }
+
+  public static boolean monitorNoticeEnabled(Context context) {
+    return prefs(context).getBoolean(KEY_MONITOR_NOTICE, true);
+  }
+
+  /** Effective searching-notice visibility (master AND the searching toggle). */
+  public static boolean monitorNoticeVisible(Context context) {
+    return noticesEnabled(context) && monitorNoticeEnabled(context);
+  }
+
+  public static void setGateOpenNoticeEnabled(Context context, boolean enabled) {
+    prefs(context).edit().putBoolean(KEY_GATE_OPEN_NOTICE, enabled).commit();
+  }
+
+  public static boolean gateOpenNoticeEnabled(Context context) {
+    return prefs(context).getBoolean(KEY_GATE_OPEN_NOTICE, true);
+  }
+
+  /** Effective "Gate opened" ping (master AND the gate-open toggle). */
+  public static boolean gateOpenNoticeVisible(Context context) {
+    return noticesEnabled(context) && gateOpenNoticeEnabled(context);
+  }
+
+  /** Android Auto home: false = grid (default), true = list. */
+  public static boolean isCarListLayout(Context context) {
+    return prefs(context).getBoolean(KEY_CAR_LIST_LAYOUT, false);
+  }
+
+  public static void setCarListLayout(Context context, boolean list) {
+    prefs(context).edit().putBoolean(KEY_CAR_LIST_LAYOUT, list).commit();
+  }
+
   public static void markRun(Context context) {
     prefs(context).edit().putLong(KEY_LAST_RUN_AT, System.currentTimeMillis()).apply();
   }
 
   public static long lastRunAt(Context context) {
     return prefs(context).getLong(KEY_LAST_RUN_AT, 0L);
+  }
+
+  /**
+   * A monitoring check just ran (location tick / native poll). Only feeds the
+   * live text of the monitoring notice — nothing schedules off this.
+   */
+  public static void markMonitorCheck(Context context) {
+    monitorCheckAtMem = System.currentTimeMillis();
+    prefs(context).edit().putLong(KEY_MONITOR_CHECK_AT, monitorCheckAtMem).apply();
+  }
+
+  public static long lastMonitorCheckAt(Context context) {
+    return Math.max(monitorCheckAtMem, prefs(context).getLong(KEY_MONITOR_CHECK_AT, 0L));
+  }
+
+  /** Disarm: drop the stale age so a later re-arm starts at "starting…". */
+  public static void clearMonitorCheck(Context context) {
+    monitorCheckAtMem = 0L;
+    prefs(context).edit().remove(KEY_MONITOR_CHECK_AT).apply();
   }
 
   public static void markGeofenceSync(Context context) {
@@ -63,7 +145,8 @@ public final class KeepAlivePrefs {
 
   /**
    * Optional already-inside mark (ENTER / poll / BT). EXIT no longer requires
-   * this — Play EXIT + 250m city cap is enough. Still useful for logging.
+   * this. Still useful for logging. Open itself uses the user radius, not this
+   * mark and not the 250m city cap.
    */
   public static boolean isInside(Context context, String gateId) {
     if (gateId == null || gateId.isEmpty()) return false;
@@ -91,6 +174,38 @@ public final class KeepAlivePrefs {
       }
     }
     if (any) ed.apply();
+  }
+
+  /**
+   * Last known connected car Bluetooth devices, so a cold-started process can
+   * answer "is the car connected?" instantly instead of blocking an open on an
+   * async profile read. {@code seededAt} is the time of the last <em>complete</em>
+   * profile read, or 0 when the set has never been fully read — see
+   * {@link CarBluetoothState}.
+   */
+  public static void setCarBtSnapshot(Context context, String json, long seededAt) {
+    prefs(context)
+      .edit()
+      .putString(KEY_CAR_BT_DEVICES, json == null || json.trim().isEmpty() ? "[]" : json)
+      .putLong(KEY_CAR_BT_SEEDED_AT, seededAt)
+      .apply();
+  }
+
+  public static String carBtSnapshotJson(Context context) {
+    String raw = prefs(context).getString(KEY_CAR_BT_DEVICES, "[]");
+    return raw == null || raw.trim().isEmpty() ? "[]" : raw;
+  }
+
+  public static long carBtSnapshotAt(Context context) {
+    return prefs(context).getLong(KEY_CAR_BT_SEEDED_AT, 0L);
+  }
+
+  public static void clearCarBtSnapshot(Context context) {
+    prefs(context)
+      .edit()
+      .remove(KEY_CAR_BT_DEVICES)
+      .remove(KEY_CAR_BT_SEEDED_AT)
+      .apply();
   }
 
   public static void setCredentials(
@@ -307,6 +422,31 @@ public final class KeepAlivePrefs {
     return true;
   }
 
+  /** Why {@link #tryClaimOpen} would fail — cooldown vs safety lock vs other. */
+  public static String peekOpenBlockReason(
+    Context context,
+    String gateId,
+    long cooldownMs
+  ) {
+    if (gateId == null || gateId.isEmpty()) return "other";
+    long now = System.currentTimeMillis();
+    if (lockUntil(context, gateId) > now) return "safety_lock";
+    JSONObject gate = GeofenceRegistrar.gateById(context, gateId);
+    String deviceId =
+      gate != null ? gate.optString("deviceId", gateId).trim() : gateId;
+    if (deviceId.isEmpty()) deviceId = gateId;
+    long holdUntilMs = holdUntil(context, deviceId);
+    long last = lastOpenedAt(context, gateId);
+    long cooldownStart = Math.max(last, holdUntilMs);
+    if (holdUntilMs <= now) {
+      if (cooldownMs > 0 && cooldownStart > 0 && now - cooldownStart < cooldownMs) {
+        return "cooldown";
+      }
+    }
+    if (IN_FLIGHT.contains(gateId)) return "other";
+    return "other";
+  }
+
   public static int burstCount(Context context) {
     int n = prefs(context).getInt(KEY_BURST_COUNT, DEFAULT_BURST_COUNT);
     if (n < MIN_BURST_COUNT) return MIN_BURST_COUNT;
@@ -358,6 +498,18 @@ public final class KeepAlivePrefs {
     String trigger,
     long ts
   ) {
+    appendNativeEvent(context, kind, gateId, message, trigger, ts, null);
+  }
+
+  public static synchronized void appendNativeEvent(
+    Context context,
+    String kind,
+    String gateId,
+    String message,
+    String trigger,
+    long ts,
+    Double distanceM
+  ) {
     try {
       JSONArray prev = new JSONArray(prefs(context).getString(KEY_EVENTS, "[]"));
       JSONObject o = new JSONObject();
@@ -366,6 +518,9 @@ public final class KeepAlivePrefs {
       o.put("message", message == null ? "" : message);
       o.put("trigger", trigger == null ? "poll" : trigger);
       o.put("ts", ts > 0 ? ts : System.currentTimeMillis());
+      if (distanceM != null && Double.isFinite(distanceM)) {
+        o.put("distanceM", distanceM);
+      }
       JSONArray next = new JSONArray();
       next.put(o);
       for (int i = 0; i < prev.length() && next.length() < MAX_NATIVE_EVENTS; i++) {

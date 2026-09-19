@@ -34,6 +34,7 @@ import {
 } from '../data/accountVault';
 import { hydrateSignedInAccount } from '../data/accountSync';
 import { syncNativeFromSystems } from '../data/palgateSystems';
+import { clearResumeRoute } from '../navigation/resumeRoute';
 
 export type AuthUserView = {
   uid: string;
@@ -221,8 +222,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const epoch = ++authEpoch;
       if (!next) {
         leaveAccountVault();
+        void clearResumeRoute();
         setFirebaseUser(null);
         setReady(true);
+        void import('../telemetry').then((t) => t.setTelemetryUser(null));
         return;
       }
       void (async () => {
@@ -239,6 +242,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (epoch !== authEpoch) return;
           if (!auth.currentUser || auth.currentUser.uid !== next.uid) return;
           setFirebaseUser(auth.currentUser ?? settled);
+          void import('../telemetry').then((t) =>
+            t.setTelemetryUser(next.uid),
+          );
           void syncNativeFromSystems().then(async () => {
             const { loadGates } = await import('../data/gatesStore');
             const gates = await loadGates();
@@ -251,6 +257,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (epoch !== authEpoch) return;
           if (auth.currentUser?.uid === next.uid) {
             setFirebaseUser(auth.currentUser ?? next);
+            void import('../telemetry').then((t) =>
+              t.setTelemetryUser(next.uid),
+            );
             void syncNativeFromSystems();
           }
         } finally {
@@ -383,6 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(null);
         authEpoch += 1;
         leaveAccountVault();
+        await clearResumeRoute();
         setFirebaseUser(null);
         setReady(true);
         signOutGoogleQuietly();

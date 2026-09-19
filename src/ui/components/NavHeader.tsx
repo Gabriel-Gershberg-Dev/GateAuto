@@ -60,6 +60,7 @@ export function NavHeader({
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
+            maxFontSizeMultiplier={1.2}
             style={[
               styles.title,
               { color: colors.text, writingDirection, textAlign },
@@ -95,7 +96,7 @@ export function HeaderIconButton({
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={10}
+      hitSlop={12}
       accessibilityLabel={accessibilityLabel}
       style={[styles.iconBtn, wide && styles.iconBtnWide]}
     >
@@ -133,8 +134,9 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   iconBtn: {
-    minWidth: 36,
-    height: 36,
+    minWidth: 44,
+    minHeight: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

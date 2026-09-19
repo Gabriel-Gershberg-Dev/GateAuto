@@ -27,6 +27,7 @@ service cloud.firestore {
     //   - gate: first gate map (compat)
     //   - gates: list of 1-12 gate maps (name, pin, radius, cooldown, BT,
     //     systemLabel, credIndex) — no PalGate tokens
+    //   - systemUnlinked: bool (optional) — owner unlinked that PalGate
     //
     // Collection: inviteCreds
     // Document ID: same invite code
@@ -293,7 +294,8 @@ service cloud.firestore {
     function isValidInvite(data) {
       return data.keys().hasOnly([
           'fromUid', 'fromName', 'toEmailLower', 'status',
-          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedAt', 'gate', 'gates'
+          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedAt', 'gate', 'gates',
+          'systemUnlinked'
         ]) &&
         data.fromUid is string && data.fromUid.size() > 0 && data.fromUid.size() <= 128 &&
         data.fromName is string && data.fromName.size() >= 1 && data.fromName.size() <= 80 &&
@@ -304,7 +306,8 @@ service cloud.firestore {
         (data.acceptedByUid == null || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128)) &&
         (data.acceptedAt == null || data.acceptedAt is timestamp) &&
         isValidGateMap(data.gate) &&
-        isValidGateList(data.gates);
+        isValidGateList(data.gates) &&
+        (!('systemUnlinked' in data) || data.systemUnlinked is bool);
     }
 
     function isValidCredPack(p) {
@@ -431,19 +434,28 @@ service cloud.firestore {
             resource.data.status == 'pending' &&
             request.resource.data.status == 'accepted' &&
             request.auth.uid != resource.data.fromUid &&
-            request.resource.data.acceptedByUid == request.auth.uid
+            request.resource.data.acceptedByUid == request.auth.uid &&
+            (
+              (!('systemUnlinked' in resource.data) && !('systemUnlinked' in request.resource.data)) ||
+              request.resource.data.systemUnlinked == resource.data.systemUnlinked
+            )
           ) ||
           (
             resource.data.status == 'pending' &&
             request.resource.data.status == 'declined' &&
             request.auth.uid != resource.data.fromUid &&
-            request.resource.data.acceptedByUid == request.auth.uid
+            request.resource.data.acceptedByUid == request.auth.uid &&
+            (
+              (!('systemUnlinked' in resource.data) && !('systemUnlinked' in request.resource.data)) ||
+              request.resource.data.systemUnlinked == resource.data.systemUnlinked
+            )
           ) ||
           (
             resource.data.status in ['pending', 'accepted'] &&
             request.resource.data.status == 'revoked' &&
             request.auth.uid == resource.data.fromUid &&
-            request.resource.data.acceptedByUid == resource.data.acceptedByUid
+            request.resource.data.acceptedByUid == resource.data.acceptedByUid &&
+            (!('systemUnlinked' in request.resource.data) || request.resource.data.systemUnlinked is bool)
           )
         );
 
