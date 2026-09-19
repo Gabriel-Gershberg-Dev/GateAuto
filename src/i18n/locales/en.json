@@ -263,6 +263,10 @@
     "listUngroupTitle": "Ungroup this list?",
     "listUngroupMsg": "The gates stay. They go back to the main list.",
     "listRename": "Rename",
+    "listAdd": "Add",
+    "listAddTitle": "Add to a list",
+    "listAddMsg": "A gate lives in one list. Pick where these go.",
+    "listAddNew": "New list",
     "listA11yExpand": "Expand list",
     "listA11yCollapse": "Collapse list"
   },

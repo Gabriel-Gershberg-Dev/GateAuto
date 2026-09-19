@@ -17,6 +17,8 @@ type Props = {
   showShare: boolean;
   showRemove: boolean;
   showList?: boolean;
+  /** List is on for 2+ gates, or 1+ when a list already exists. */
+  listEnabled?: boolean;
   onShare: () => void;
   onRemove: () => void;
   onList?: () => void;
@@ -31,11 +33,13 @@ export function SelectionHud({
   showShare,
   showRemove,
   showList = false,
+  listEnabled,
   onShare,
   onRemove,
   onList,
   onCancel,
 }: Props) {
+  const canList = listEnabled ?? count >= 2;
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { isRtl, row, writingDirection } = useRtlLayout();
@@ -155,11 +159,11 @@ export function SelectionHud({
               writingDirection={writingDirection}
               styles={styles}
               tone="teal"
-              disabled={count < 2}
+              disabled={!canList}
               label={t('gates.listAction')}
-              a11y={t('gates.listMake')}
+              a11y={canList ? t('gates.listAddTitle') : t('gates.listMake')}
               onPress={onList}
-              icon={<IconLayers color={count < 2 ? colors.muted : HUD_TEAL} size={18} />}
+              icon={<IconLayers color={canList ? HUD_TEAL : colors.muted} size={18} />}
             />
           ) : null}
           {showShare && shareFade ? (

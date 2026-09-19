@@ -291,31 +291,36 @@ export function ActionSheet({
               {message}
             </Text>
           ) : null}
-          <View style={styles.actionList}>
-            {actions.map((action, index) => (
-              <View key={action.key}>
-                {index > 0 ? <View style={styles.listHair} /> : null}
-                <Pressable
-                  onPress={action.onPress}
-                  style={({ pressed }) => [
-                    styles.listRow,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.listRowText,
-                      { writingDirection, textAlign },
-                      action.destructive && styles.listRowDanger,
+          <ScrollView
+            style={styles.actionScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.actionList}>
+              {actions.map((action, index) => (
+                <View key={action.key}>
+                  {index > 0 ? <View style={styles.listHair} /> : null}
+                  <Pressable
+                    onPress={action.onPress}
+                    style={({ pressed }) => [
+                      styles.listRow,
+                      pressed && styles.pressed,
                     ]}
-                    numberOfLines={1}
                   >
-                    {action.label}
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
+                    <Text
+                      style={[
+                        styles.listRowText,
+                        { writingDirection, textAlign },
+                        action.destructive && styles.listRowDanger,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {action.label}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
           <View style={[styles.compactRow, { flexDirection: row }]}>
             <Pressable
               onPress={onCancel}
@@ -462,6 +467,9 @@ function createStyles(c: ThemeColors) {
       fontWeight: '700',
       fontSize: 15,
       textAlign: 'center',
+    },
+    actionScroll: {
+      maxHeight: 320,
     },
     actionList: {
       marginTop: 2,

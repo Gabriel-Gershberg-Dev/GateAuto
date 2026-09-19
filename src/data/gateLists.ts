@@ -163,6 +163,37 @@ export function ungroupGateList(lists: GateList[], listId: string): GateList[] {
   return lists.filter((list) => list.id !== listId);
 }
 
+/** Move gates onto an existing list. A gate stays in at most one list. */
+export function addGatesToList(
+  lists: GateList[],
+  listId: string,
+  gateIds: Iterable<string>,
+): GateList[] {
+  const ids = uniqueIds([...gateIds].map((id) => String(id).trim()));
+  if (ids.length === 0) return lists;
+  if (!lists.some((list) => list.id === listId)) return lists;
+  const moving = new Set(ids);
+  const next: GateList[] = [];
+  for (const list of lists) {
+    if (list.id === listId) {
+      next.push({
+        ...list,
+        gateIds: uniqueIds([...list.gateIds, ...ids]),
+        expanded: true,
+      });
+      continue;
+    }
+    const remaining = list.gateIds.filter((id) => !moving.has(id));
+    if (remaining.length === 0) continue;
+    next.push(
+      remaining.length === list.gateIds.length
+        ? list
+        : { ...list, gateIds: remaining },
+    );
+  }
+  return next;
+}
+
 export function reorderUngrouped(
   all: GateConfig[],
   lists: GateList[],

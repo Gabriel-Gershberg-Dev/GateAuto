@@ -19,6 +19,7 @@ type Props = {
   onLongPress?: () => void;
   onUngroup: () => void;
   onRename: () => void;
+  onAdd?: () => void;
 };
 
 export function GateListCard({
@@ -31,6 +32,7 @@ export function GateListCard({
   onLongPress,
   onUngroup,
   onRename,
+  onAdd,
 }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -99,6 +101,15 @@ export function GateListCard({
             <View style={styles.well}>{children}</View>
           </View>
           <View style={[styles.footer, { flexDirection: row }]}>
+            {onAdd ? (
+              <Pressable
+                onPress={onAdd}
+                hitSlop={8}
+                style={({ pressed }) => [styles.footerBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.footerText}>{t('gates.listAdd')}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={onRename}
               hitSlop={8}

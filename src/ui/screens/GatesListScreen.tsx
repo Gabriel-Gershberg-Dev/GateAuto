@@ -18,6 +18,7 @@ import { loadCredentialsForGate } from '../../data/credentials';
 import { appendEvent } from '../../data/eventLog';
 import { moveToIndex } from '../../data/gateOrder';
 import {
+  addGatesToList,
   createGateList,
   gatesInList,
   loadGateLists,
@@ -65,7 +66,7 @@ import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { getDevices, openGate, PalGateApiError } from '../../palgate/api';
 import { BarrierMark } from '../components/BarrierMark';
-import { ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
+import { ActionSheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { FormSheet } from '../components/FormSheet';
 import { PermissionWarningBanner } from '../components/PermissionSetupHost';
 import { GateListCard } from '../components/GateListCard';
@@ -84,6 +85,7 @@ import {
 import { useTheme } from '../ThemeProvider';
 import { HUD_TEAL, hudFrameStyle, radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
+import { isolateBidiText } from '../../i18n/bidi';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
 import { requestOpenPermissionSetup, refreshPermissionStatus } from '../../permissions/autoOpenPermissions';
 
@@ -101,7 +103,7 @@ export function GatesListScreen({ navigation }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { row, writingDirection } = useRtlLayout();
+  const { isRtl, row, writingDirection } = useRtlLayout();
   const auth = useAuth();
   const { user } = auth;
   const [gates, setGates] = useState<GateConfig[]>([]);
@@ -110,6 +112,8 @@ export function GatesListScreen({ navigation }: Props) {
   const [listName, setListName] = useState('');
   const [renameListId, setRenameListId] = useState<string | null>(null);
   const [ungroupId, setUngroupId] = useState<string | null>(null);
+  const [listPickOpen, setListPickOpen] = useState(false);
+  const [addToListId, setAddToListId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -341,6 +345,8 @@ export function GatesListScreen({ navigation }: Props) {
   const exitSelect = useCallback(() => {
     setSelectMode('off');
     setSelectedIds(new Set());
+    setListPickOpen(false);
+    setAddToListId(null);
     setCardFingerDown(false);
     cardHoldRef.current = false;
     listRef.current?.setNativeProps({ scrollEnabled: true });
@@ -416,13 +422,13 @@ export function GatesListScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    if (selectMode === 'off' || removeOpen || upgradeOpen) return;
+    if (selectMode === 'off' || removeOpen || upgradeOpen || listPickOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       exitSelect();
       return true;
     });
     return () => sub.remove();
-  }, [exitSelect, removeOpen, selectMode, upgradeOpen]);
+  }, [exitSelect, listPickOpen, removeOpen, selectMode, upgradeOpen]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -802,6 +808,11 @@ export function GatesListScreen({ navigation }: Props) {
                       setSelectMode('select');
                       setSelectedIds(new Set(list.gateIds));
                     }}
+                    onAdd={() => {
+                      setAddToListId(list.id);
+                      setSelectMode('select');
+                      setSelectedIds(new Set());
+                    }}
                     onUngroup={() => setUngroupId(list.id)}
                     onRename={() => {
                       setRenameListId(list.id);
@@ -941,12 +952,26 @@ export function GatesListScreen({ navigation }: Props) {
         visible={selectMode !== 'off'}
         count={selectedIds.size}
         showList={selectMode === 'select'}
+        listEnabled={
+          selectedIds.size >= 2 ||
+          (selectedIds.size >= 1 && (lists.length > 0 || addToListId != null))
+        }
         showShare={
           selectMode === 'share' ||
           shareableSelectedIds(gates, selectedIds).length > 0
         }
         showRemove={selectMode === 'select'}
         onList={() => {
+          if (selectedIds.size === 0) return;
+          if (addToListId) {
+            void persistLists(addGatesToList(lists, addToListId, selectedIds));
+            exitSelect();
+            return;
+          }
+          if (lists.length > 0) {
+            setListPickOpen(true);
+            return;
+          }
           if (selectedIds.size < 2) return;
           setListName('');
           setRenameListId(null);
@@ -1081,6 +1106,41 @@ export function GatesListScreen({ navigation }: Props) {
           setAutoOpenBlockedOpen(false);
           navigation.navigate('Settings');
         }}
+      />
+      <ActionSheet
+        visible={listPickOpen}
+        title={t('gates.listAddTitle')}
+        message={t('gates.listAddMsg')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setListPickOpen(false)}
+        actions={[
+          ...lists.map((list) => ({
+            key: list.id,
+            label:
+              isolateBidiText(list.name.trim() || t('gates.listDefault'), isRtl) +
+              ' · ' +
+              t('gates.listCount', { count: list.gateIds.length }),
+            onPress: () => {
+              setListPickOpen(false);
+              void persistLists(addGatesToList(lists, list.id, selectedIds));
+              exitSelect();
+            },
+          })),
+          ...(selectedIds.size >= 2
+            ? [
+                {
+                  key: 'new',
+                  label: t('gates.listAddNew'),
+                  onPress: () => {
+                    setListPickOpen(false);
+                    setListName('');
+                    setRenameListId(null);
+                    setListSheet('create');
+                  },
+                },
+              ]
+            : []),
+        ]}
       />
       <FormSheet
         visible={listSheet != null}

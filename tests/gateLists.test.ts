@@ -9,6 +9,7 @@ import {
   renameGateList,
   reorderUngrouped,
   toggleGateListExpanded,
+  addGatesToList,
   ungroupGateList,
   ungroupedGates,
   type GateList,
@@ -103,6 +104,23 @@ describe('gate lists', () => {
     assert.equal(renameGateList(lists, 'a', '  Yard  ')[0]?.name, 'Yard');
     assert.equal(toggleGateListExpanded(lists, 'a')[0]?.expanded, false);
     assert.deepEqual(ungroupGateList(lists, 'a'), []);
+  });
+
+  it('adds gates to an existing list and moves them out of another', () => {
+    const lists: GateList[] = [
+      { id: 'home', name: 'Home', gateIds: ['g1'], expanded: false },
+      { id: 'work', name: 'Work', gateIds: ['g2', 'g9'], expanded: true },
+    ];
+    const next = addGatesToList(lists, 'home', ['g2', 'g3']);
+    assert.deepEqual(
+      next.map((list) => ({ id: list.id, gateIds: list.gateIds, expanded: list.expanded })),
+      [
+        { id: 'home', gateIds: ['g1', 'g2', 'g3'], expanded: true },
+        { id: 'work', gateIds: ['g9'], expanded: true },
+      ],
+    );
+    assert.equal(addGatesToList(lists, 'missing', ['g3']), lists);
+    assert.equal(addGatesToList(lists, 'home', []), lists);
   });
 
   it('reorders only ungrouped gates', () => {

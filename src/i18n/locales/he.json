@@ -266,6 +266,10 @@
     "listUngroupTitle": "לפרק את הרשימה?",
     "listUngroupMsg": "השערים נשארים. הם חוזרים לרשימה הראשית.",
     "listRename": "שינוי שם",
+    "listAdd": "הוספה",
+    "listAddTitle": "הוספה לרשימה",
+    "listAddMsg": "שער נמצא ברשימה אחת. בחרו לאן להעביר.",
+    "listAddNew": "רשימה חדשה",
     "listA11yExpand": "הרחבת רשימה",
     "listA11yCollapse": "כיווץ רשימה"
   },

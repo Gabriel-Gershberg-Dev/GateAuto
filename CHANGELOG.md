@@ -9,6 +9,10 @@ Channels:
 
 Git tags match source, not every sideload: `v1.0.6` and `v1.0.46`.
 
+## 1.0.47 — 2026-09-20 (beta)
+
+Add a gate to an existing list: long-press → List → pick a list, or expand a list and tap Add.
+
 ## 1.0.46 — 2026-09-20 (beta)
 
 List cards have no header Open (a list is a folder). Nested gates sit in a clipped rounded well. Selection bar stays one row: count, List / Share / Remove, close mark.
