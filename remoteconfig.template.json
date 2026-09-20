@@ -2,14 +2,14 @@
   "parameters": {
     "latest_version_code": {
       "defaultValue": {
-        "value": "31"
+        "value": "49"
       },
       "valueType": "NUMBER",
       "description": "PRODUCTION family channel. Do not bump on a routine/dev publish — only when explicitly asked."
     },
     "latest_version_name": {
       "defaultValue": {
-        "value": "1.0.30"
+        "value": "1.0.48"
       },
       "valueType": "STRING",
       "description": "PRODUCTION family channel. Leave unchanged unless promoting a build to family."
@@ -23,7 +23,7 @@
     },
     "release_notes": {
       "defaultValue": {
-        "value": "More reliable automatic opening when your phone is locked. You can hide the searching notification in Settings, and get a notice when an update is ready."
+        "value": "Group gates into lists. Take a gate out of a list without deleting it. Hide the searching notice. More reliable opening when the phone is locked."
       },
       "valueType": "STRING",
       "description": "PRODUCTION family channel. Optional what's-new text for the in-app update sheet."

@@ -1,17 +1,17 @@
 # Changelog
 
-GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.45** were shipped as APKs and Remote Config updates but were never committed one-by-one; those notes were reconstructed from publish logs (Cursor sessions + Firebase). The source tree at `v1.0.46` is the current app.
+GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.45** were shipped as APKs and Remote Config updates but were never committed one-by-one; those notes were reconstructed from publish logs (Cursor sessions + Firebase). The source tree at `v1.0.48` is the current app.
 
 Channels:
 
-- **Production** — family `Check for update`. Live: **1.0.30** (versionCode 31).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.46** (versionCode 47).
+- **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.48** (versionCode 49).
 
-Git tags match source, not every sideload: `v1.0.6` and `v1.0.46`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, and `v1.0.48`.
 
-## 1.0.48 — 2026-09-20 (beta)
+## 1.0.48 — 2026-09-20 — **production (family)**
 
-Take a gate out of a list without deleting it (**From list**). **Remove** still deletes the gate.
+Take a gate out of a list without deleting it (**From list**). **Remove** still deletes the gate. Also includes named lists, add-to-existing-list, notification settings, and locked-phone / Android Auto work shipped on beta after 1.0.30.
 
 ## 1.0.47 — 2026-09-20 (beta)
 
@@ -69,9 +69,9 @@ Tapping Open in the car no longer flashes “could not load.”
 
 Sideloaded Android Auto could not bind (`BIND_CAR_APP`). Restriction removed so DHU connects.
 
-## 1.0.30 — 2026-09 — **production (family)**
+## 1.0.30 — 2026-09 — production (later superseded)
 
-Settings → Notifications: hide searching notice; tray ping when an update is ready. Locked-phone auto-open left as in 1.0.27–1.0.29. Family `Check for update` still offers this build.
+Settings → Notifications: hide searching notice; tray ping when an update is ready. Locked-phone auto-open left as in 1.0.27–1.0.29. Family used this until 1.0.48.
 
 ## 1.0.29 — 2026-09 (beta)
 

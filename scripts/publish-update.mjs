@@ -9,6 +9,7 @@
  *
  * Production (family) only when explicitly asked:
  *   node scripts/publish-update.mjs --production --apk-url URL --notes "..."
+ *   Production publish must not point beta_apk_url at the family object.
  *
  * Usage:
  *   node scripts/publish-update.mjs --apk-url URL [--notes "..."]
@@ -35,15 +36,18 @@ function hasFlag(flag) {
 }
 
 function firebase(args) {
-  const result = spawnSync(
-    'npx',
-    ['-y', 'firebase-tools@latest', ...args, '--project', PROJECT, '--non-interactive'],
-    { cwd: ROOT, encoding: 'utf8', shell: true },
-  );
-  if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || `firebase ${args[0]} failed`);
+  let lastErr = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const result = spawnSync(
+      'npx',
+      ['-y', 'firebase-tools@latest', ...args, '--project', PROJECT, '--non-interactive'],
+      { cwd: ROOT, encoding: 'utf8', shell: true },
+    );
+    if (result.status === 0) return result.stdout;
+    lastErr = result.stderr || result.stdout || `firebase ${args[0]} failed`;
+    if (!String(lastErr).includes('UV_HANDLE_CLOSING')) break;
   }
-  return result.stdout;
+  throw new Error(lastErr);
 }
 
 function param(value, valueType, description) {
@@ -117,12 +121,16 @@ const next = {
       'BETA channel. User-facing version name for Check for beta updates.',
     ),
     beta_apk_url: param(
-      apkUrl || liveValue('beta_apk_url', ''),
+      production
+        ? liveValue('beta_apk_url', apkUrl || '')
+        : apkUrl || liveValue('beta_apk_url', ''),
       'STRING',
       'BETA channel. HTTPS URL of the beta APK (separate Storage object so family production URL is not overwritten).',
     ),
     beta_release_notes: param(
-      notes || liveValue('beta_release_notes', ''),
+      production
+        ? liveValue('beta_release_notes', notes || '')
+        : notes || liveValue('beta_release_notes', ''),
       'STRING',
       'BETA channel. Optional what\'s-new text shown only after unlock.',
     ),
