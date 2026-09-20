@@ -9,6 +9,10 @@ Channels:
 
 Git tags match source, not every sideload: `v1.0.6` and `v1.0.46`.
 
+## 1.0.48 — 2026-09-20 (beta)
+
+Take a gate out of a list without deleting it (**From list**). **Remove** still deletes the gate.
+
 ## 1.0.47 — 2026-09-20 (beta)
 
 Add a gate to an existing list: long-press → List → pick a list, or expand a list and tap Add.

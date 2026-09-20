@@ -3,7 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
-import { IconClose, IconLayers, IconShare, IconTrash } from '../icons';
+import { IconClose, IconLayers, IconShare, IconTrash, IconUnlink } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { HUD_TEAL, type, type ThemeColors } from '../theme';
 import { useReduceMotion } from '../useReduceMotion';
@@ -19,9 +19,11 @@ type Props = {
   showList?: boolean;
   /** List is on for 2+ gates, or 1+ when a list already exists. */
   listEnabled?: boolean;
+  showUngroup?: boolean;
   onShare: () => void;
   onRemove: () => void;
   onList?: () => void;
+  onUngroup?: () => void;
   onCancel: () => void;
 };
 
@@ -34,9 +36,11 @@ export function SelectionHud({
   showRemove,
   showList = false,
   listEnabled,
+  showUngroup = false,
   onShare,
   onRemove,
   onList,
+  onUngroup,
   onCancel,
 }: Props) {
   const canList = listEnabled ?? count >= 2;
@@ -94,6 +98,7 @@ export function SelectionHud({
 
   const readoutFade = nextFade();
   const listFade = showList ? nextFade() : null;
+  const ungroupFade = showUngroup ? nextFade() : null;
   const shareFade = showShare ? nextFade() : null;
   const removeFade = showRemove ? nextFade() : null;
   const closeFade = nextFade();
@@ -164,6 +169,19 @@ export function SelectionHud({
               a11y={canList ? t('gates.listAddTitle') : t('gates.listMake')}
               onPress={onList}
               icon={<IconLayers color={canList ? HUD_TEAL : colors.muted} size={18} />}
+            />
+          ) : null}
+          {showUngroup && ungroupFade ? (
+            <CommandKey
+              fade={ungroupFade}
+              writingDirection={writingDirection}
+              styles={styles}
+              tone="mute"
+              disabled={count === 0}
+              label={t('gates.listRemove')}
+              a11y={t('gates.listRemoveA11y')}
+              onPress={onUngroup}
+              icon={<IconUnlink color={colors.muted} size={18} />}
             />
           ) : null}
           {showShare && shareFade ? (

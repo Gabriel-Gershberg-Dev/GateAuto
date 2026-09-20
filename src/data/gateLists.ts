@@ -164,6 +164,30 @@ export function ungroupGateList(lists: GateList[], listId: string): GateList[] {
 }
 
 /** Move gates onto an existing list. A gate stays in at most one list. */
+/** Take gates out of their lists. The gates stay; empty lists drop. */
+export function removeGatesFromLists(
+  lists: GateList[],
+  gateIds: Iterable<string>,
+): GateList[] {
+  const removing = new Set(
+    uniqueIds([...gateIds].map((id) => String(id).trim())),
+  );
+  if (removing.size === 0) return lists;
+  let changed = false;
+  const next: GateList[] = [];
+  for (const list of lists) {
+    const remaining = list.gateIds.filter((id) => !removing.has(id));
+    if (remaining.length === list.gateIds.length) {
+      next.push(list);
+      continue;
+    }
+    changed = true;
+    if (remaining.length === 0) continue;
+    next.push({ ...list, gateIds: remaining });
+  }
+  return changed ? next : lists;
+}
+
 export function addGatesToList(
   lists: GateList[],
   listId: string,

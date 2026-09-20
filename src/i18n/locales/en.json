@@ -267,6 +267,8 @@
     "listAddTitle": "Add to a list",
     "listAddMsg": "A gate lives in one list. Pick where these go.",
     "listAddNew": "New list",
+    "listRemove": "From list",
+    "listRemoveA11y": "Remove from list, keep the gates",
     "listA11yExpand": "Expand list",
     "listA11yCollapse": "Collapse list"
   },

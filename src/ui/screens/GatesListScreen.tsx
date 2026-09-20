@@ -21,8 +21,10 @@ import {
   addGatesToList,
   createGateList,
   gatesInList,
+  listedGateIds,
   loadGateLists,
   pruneMissingGates,
+  removeGatesFromLists,
   renameGateList,
   reorderUngrouped,
   saveGateLists,
@@ -155,6 +157,10 @@ export function GatesListScreen({ navigation }: Props) {
   const listsRef = useRef(lists);
   listsRef.current = lists;
   const looseGates = useMemo(() => ungroupedGates(gates, lists), [gates, lists]);
+  const listedSelectedIds = useMemo(() => {
+    const listed = listedGateIds(lists);
+    return [...selectedIds].filter((id) => listed.has(id));
+  }, [lists, selectedIds]);
   const workingRef = useRef(gates);
   const dragY = useRef(new Animated.Value(0)).current;
   const dragScale = useRef(new Animated.Value(1)).current;
@@ -961,6 +967,12 @@ export function GatesListScreen({ navigation }: Props) {
           shareableSelectedIds(gates, selectedIds).length > 0
         }
         showRemove={selectMode === 'select'}
+        showUngroup={selectMode === 'select' && listedSelectedIds.length > 0}
+        onUngroup={() => {
+          if (listedSelectedIds.length === 0) return;
+          void persistLists(removeGatesFromLists(lists, listedSelectedIds));
+          exitSelect();
+        }}
         onList={() => {
           if (selectedIds.size === 0) return;
           if (addToListId) {
@@ -1136,6 +1148,21 @@ export function GatesListScreen({ navigation }: Props) {
                     setListName('');
                     setRenameListId(null);
                     setListSheet('create');
+                  },
+                },
+              ]
+            : []),
+          ...(listedSelectedIds.length > 0
+            ? [
+                {
+                  key: 'from-list',
+                  label: t('gates.listRemove'),
+                  onPress: () => {
+                    setListPickOpen(false);
+                    void persistLists(
+                      removeGatesFromLists(lists, listedSelectedIds),
+                    );
+                    exitSelect();
                   },
                 },
               ]
