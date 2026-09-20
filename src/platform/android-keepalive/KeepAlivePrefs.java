@@ -2,6 +2,7 @@ package com.gateauto.app.keepalive;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.location.Location;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -22,6 +23,15 @@ public final class KeepAlivePrefs {
   private static final String KEY_GATE_OPEN_NOTICE = "gateOpenNoticeEnabled";
   /** Android Auto home layout. Default false = grid. */
   private static final String KEY_CAR_LIST_LAYOUT = "carListLayout";
+  /** In-app language (en/he/ru) so the widget matches JS, not only the system. */
+  private static final String KEY_APP_LANG = "appLang";
+  private static final String KEY_WIDGET_LAST_CLOSEST = "widgetLastClosest";
+  private static final String KEY_WIDGET_STATUS = "widgetStatus";
+  private static final String KEY_WIDGET_STATUS_MSG = "widgetStatusMsg";
+  /** Last lat/lng for widget face only — not a fused request. */
+  private static final String KEY_WIDGET_LAST_LAT = "widgetLastLat";
+  private static final String KEY_WIDGET_LAST_LNG = "widgetLastLng";
+  private static final String KEY_WIDGET_LAST_FIX_AT = "widgetLastFixAt";
   private static final String KEY_LAST_RUN_AT = "lastRunAt";
   private static final String KEY_MONITOR_CHECK_AT = "monitorCheckAt";
   private static final String KEY_GEOFENCE_SYNC_AT = "geofenceSyncAt";
@@ -104,6 +114,81 @@ public final class KeepAlivePrefs {
 
   public static void setCarListLayout(Context context, boolean list) {
     prefs(context).edit().putBoolean(KEY_CAR_LIST_LAYOUT, list).commit();
+  }
+
+  public static void setAppLang(Context context, String lang) {
+    String value = lang == null ? "" : lang.trim();
+    prefs(context).edit().putString(KEY_APP_LANG, value).commit();
+  }
+
+  public static String appLang(Context context) {
+    String raw = prefs(context).getString(KEY_APP_LANG, "");
+    return raw == null ? "" : raw.trim();
+  }
+
+  public static void setWidgetLastClosest(Context context, String gateId) {
+    prefs(context)
+      .edit()
+      .putString(KEY_WIDGET_LAST_CLOSEST, gateId == null ? "" : gateId.trim())
+      .apply();
+  }
+
+  public static String widgetLastClosest(Context context) {
+    String raw = prefs(context).getString(KEY_WIDGET_LAST_CLOSEST, "");
+    return raw == null ? "" : raw.trim();
+  }
+
+  public static void setWidgetStatus(Context context, String status, String message) {
+    prefs(context)
+      .edit()
+      .putString(KEY_WIDGET_STATUS, status == null ? "idle" : status)
+      .putString(KEY_WIDGET_STATUS_MSG, message == null ? "" : message)
+      .commit();
+  }
+
+  public static String widgetStatus(Context context) {
+    String raw = prefs(context).getString(KEY_WIDGET_STATUS, "idle");
+    return raw == null || raw.isEmpty() ? "idle" : raw;
+  }
+
+  public static String widgetStatusMsg(Context context) {
+    String raw = prefs(context).getString(KEY_WIDGET_STATUS_MSG, "");
+    return raw == null ? "" : raw;
+  }
+
+  /**
+   * Persist a widget display fix. Callers must already have the Location
+   * (MonitoringService callback or tap {@code requestCurrentOrLast}). Never
+   * fetch fused from here.
+   */
+  public static void setWidgetLastFix(Context context, double lat, double lng, long atMs) {
+    if (!Double.isFinite(lat) || !Double.isFinite(lng)) return;
+    prefs(context)
+      .edit()
+      .putString(KEY_WIDGET_LAST_LAT, Double.toString(lat))
+      .putString(KEY_WIDGET_LAST_LNG, Double.toString(lng))
+      .putLong(KEY_WIDGET_LAST_FIX_AT, atMs > 0 ? atMs : System.currentTimeMillis())
+      .apply();
+  }
+
+  /** Cached widget fix, or null. Reconstructs a Location — does not query Play. */
+  public static Location widgetLastFix(Context context) {
+    String latS = prefs(context).getString(KEY_WIDGET_LAST_LAT, "");
+    String lngS = prefs(context).getString(KEY_WIDGET_LAST_LNG, "");
+    if (latS == null || latS.isEmpty() || lngS == null || lngS.isEmpty()) return null;
+    try {
+      double lat = Double.parseDouble(latS);
+      double lng = Double.parseDouble(lngS);
+      if (!Double.isFinite(lat) || !Double.isFinite(lng)) return null;
+      Location loc = new Location("widget-cache");
+      loc.setLatitude(lat);
+      loc.setLongitude(lng);
+      long at = prefs(context).getLong(KEY_WIDGET_LAST_FIX_AT, 0L);
+      if (at > 0) loc.setTime(at);
+      return loc;
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   public static void markRun(Context context) {

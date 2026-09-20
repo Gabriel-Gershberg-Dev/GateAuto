@@ -20,6 +20,7 @@ import {
   type LanguagePreference,
 } from './locale';
 import { syncRtl } from './rtl';
+import { setNativeAppLang } from '../platform/keepAliveAlarm';
 
 type I18nContextValue = {
   preference: LanguagePreference;
@@ -54,6 +55,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           await i18n.changeLanguage(next);
         }
         syncRtl(next);
+        void setNativeAppLang(next);
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -71,6 +73,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (i18n.language !== next) {
       await i18n.changeLanguage(next);
     }
+    void setNativeAppLang(next);
     return syncRtl(next);
   }, []);
 

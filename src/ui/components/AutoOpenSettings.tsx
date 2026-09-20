@@ -164,6 +164,12 @@ export function AutoOpenSettings() {
         {lockBanner ? (
           <Text style={styles.lockBanner}>{lockBanner}</Text>
         ) : null}
+        <Text
+          style={[styles.meta, { writingDirection, textAlign }]}
+          numberOfLines={3}
+        >
+          {t('widget.howAdd')}
+        </Text>
       </View>
       <InfoSheet
         visible={infoOpen}

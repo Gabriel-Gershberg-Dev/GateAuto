@@ -42,6 +42,7 @@ type GateAutoKeepAliveNative = {
     gateOpen?: boolean;
   }>;
   recreateActivity?(): Promise<boolean>;
+  setAppLang?(lang: string): Promise<boolean>;
   isIgnoringBatteryOptimizations?(): Promise<boolean>;
   isBatteryUnrestricted?(): Promise<boolean>;
   getAutoOpenOsStatus?(): Promise<Record<string, unknown>>;
@@ -491,6 +492,17 @@ export async function setNativeGateOpenNoticeEnabled(
     await native.setGateOpenNoticeEnabled(enabled);
   } catch (error) {
     console.warn('[GateAuto] setNativeGateOpenNoticeEnabled failed', error);
+  }
+}
+
+/** Widget + native toasts follow the in-app catalog, not only the system locale. */
+export async function setNativeAppLang(lang: string): Promise<void> {
+  const native = getNative();
+  if (!native?.setAppLang) return;
+  try {
+    await native.setAppLang(lang);
+  } catch (error) {
+    console.warn('[GateAuto] setNativeAppLang failed', error);
   }
 }
 

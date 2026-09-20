@@ -5,9 +5,21 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.48** (versionCode 49).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.51** (versionCode 52).
 
 Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, and `v1.0.48`.
+
+## 1.0.51 — 2026-09-20 (beta)
+
+Widget face ranks from a cached location (MonitoringService ticks / tap) instead of blocking on Play Services last-location. Screen-on and region-save paints are cache-only; tap still takes a current fix.
+
+## 1.0.50 — 2026-09-20 (beta)
+
+Widget face is mist glass (no teal box). Every gate cell has its own Open. Larger list rows.
+
+## 1.0.49 — 2026-09-20 (beta)
+
+Home-screen widget: closest pinned gate, three resize layouts. Tap opens that gate even if Auto-open is off.
 
 ## 1.0.48 — 2026-09-20 — **production (family)**
 

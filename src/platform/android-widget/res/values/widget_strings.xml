@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">GateAuto</string>
+    <string name="widget_description">Open the closest pinned gate</string>
+    <string name="widget_closest">Closest</string>
+    <string name="widget_open">Open</string>
+    <string name="widget_opening">Opening…</string>
+    <string name="widget_opened">Opened</string>
+    <string name="widget_open_failed">Open failed</string>
+    <string name="widget_open_app">Open app</string>
+    <string name="widget_empty">Pin a gate on the map</string>
+    <string name="widget_empty_eyebrow">No pin</string>
+    <string name="widget_meters">%d m</string>
+    <string name="widget_km">%s km</string>
+</resources>

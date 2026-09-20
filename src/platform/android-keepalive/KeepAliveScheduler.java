@@ -212,6 +212,8 @@ public final class KeepAliveScheduler {
             && !Intent.ACTION_USER_PRESENT.equals(action)) {
             return;
           }
+          // Widget SCREEN_ON paint is owned by WidgetRefresh (cache-only).
+          // Do not call updateAll here — that double-woke and peeked fused last-loc.
           if (!KeepAlivePrefs.isArmed(context)) return;
           KeepAliveReceiver.startSync(context, "screen");
         }

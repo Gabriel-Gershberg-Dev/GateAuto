@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">GateAuto</string>
+    <string name="widget_description">Открыть ближайшие ворота с меткой</string>
+    <string name="widget_closest">Ближайшие</string>
+    <string name="widget_open">Открыть</string>
+    <string name="widget_opening">Открытие…</string>
+    <string name="widget_opened">Открыто</string>
+    <string name="widget_open_failed">Не открылось</string>
+    <string name="widget_open_app">Открыть приложение</string>
+    <string name="widget_empty">Поставьте метку ворот на карте</string>
+    <string name="widget_empty_eyebrow">Нет метки</string>
+    <string name="widget_meters">%d м</string>
+    <string name="widget_km">%s км</string>
+</resources>

@@ -6,7 +6,7 @@ Primary target: **Galaxy S25 Ultra**. Same codebase builds for **iOS**.
 
 ## History
 
-Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.48`** is the current source. Family production and beta are both **1.0.48**.
+Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.48`** is family production. Beta is **1.0.51**.
 
 ## Project location
 

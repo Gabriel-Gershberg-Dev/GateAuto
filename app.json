@@ -2,7 +2,7 @@
   "expo": {
     "name": "GateAuto",
     "slug": "GateAuto",
-    "version": "1.0.48",
+    "version": "1.0.51",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,7 @@
     },
     "extra": {
       "supportsRTL": true,
-      "androidVersionCode": 49
+      "androidVersionCode": 52
     },
     "ios": {
       "supportsTablet": true,
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.gateauto.app",
-      "versionCode": 49,
+      "versionCode": 52,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0D3D42",
@@ -103,6 +103,7 @@
       "./src/platform/withAndroidBootSync",
       "./src/platform/withAndroidKeepAlive",
       "./src/platform/withAndroidAuto",
+      "./src/platform/withAndroidWidget",
       "./src/platform/withGoogleMaps",
       "./src/platform/withApkInstall",
       [

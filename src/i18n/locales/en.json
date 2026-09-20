@@ -191,6 +191,9 @@
     "disabledEvent": "Auto-open disabled",
     "auto": "Auto"
   },
+  "widget": {
+    "howAdd": "Long-press the home screen → Widgets → GateAuto. The closest pinned gate opens even if Auto-open is off."
+  },
   "gates": {
     "title": "Gates",
     "selectTitle": "Select gates",

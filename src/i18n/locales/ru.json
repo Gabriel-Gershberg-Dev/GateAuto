@@ -191,6 +191,9 @@
     "disabledEvent": "Auto-open выключен",
     "auto": "Auto"
   },
+  "widget": {
+    "howAdd": "Долгое нажатие на домашний экран → Виджеты → GateAuto. Ближайшие ворота с меткой открываются даже при выключенном Auto-open."
+  },
   "gates": {
     "title": "Ворота",
     "selectTitle": "Выберите ворота",

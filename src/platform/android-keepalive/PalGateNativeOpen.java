@@ -83,28 +83,49 @@ public final class PalGateNativeOpen {
    * @return null on success, otherwise a short error for CarToast
    */
   public static String openManual(Context context, String gateId) {
+    return openManual(context, gateId, "manual");
+  }
+
+  /**
+   * Deliberate open (Android Auto, home widget). No geofence, BT, cooldown, or
+   * auto safety lock. {@code source} is telemetry only — default {@code manual}.
+   */
+  public static String openManual(Context context, String gateId, String source) {
     JSONObject gate = GeofenceRegistrar.gateById(context, gateId);
     if (gate == null) return "Unknown gate";
     String deviceId = gate.optString("deviceId", "").trim();
     if (deviceId.isEmpty()) return "Missing deviceId";
     if (!KeepAlivePrefs.hasCredentialsForGate(context, gateId)) return "Not linked to PalGate";
+    String src = source == null || source.trim().isEmpty() ? "manual" : source.trim();
     try {
       httpOpen(context, deviceId, gateId);
       // Record last-open for auto cooldown, but do not applyBurst (auto-only lock).
       KeepAlivePrefs.setLastOpenedAt(context, gateId, System.currentTimeMillis());
       notifyOpened(context, GeofenceRegistrar.displayLabel(gate));
-      GateAutoTelemetry.autoOpen(context, "manual", gateId, null, gate);
-      Log.i(TAG, "native manual open OK " + gateId + " " + deviceId);
+      GateAutoTelemetry.autoOpen(context, src, gateId, null, gate);
+      Log.i(TAG, "native " + src + " open OK " + gateId + " " + deviceId);
       return null;
     } catch (Exception e) {
-      Log.w(TAG, "native manual open failed " + gateId, e);
-      GateAutoTelemetry.autoSkip(context, "other", "manual", gateId, null, gate);
+      Log.w(TAG, "native " + src + " open failed " + gateId, e);
+      GateAutoTelemetry.autoSkip(context, "other", src, gateId, null, gate);
       if (!isExpectedOpenFailure(e)) {
         GateAutoTelemetry.recordUnexpected(e);
       }
       String msg = e.getMessage();
       return msg == null || msg.trim().isEmpty() ? "Open failed" : msg;
     }
+  }
+
+  /** Last fused fix. May block up to 4s. Do not call on the main thread. */
+  public static Location peekLastLocation(Context context) {
+    return lastLocation(context);
+  }
+
+  /** User-initiated: prefer a current fix, else last. May block ~6s. */
+  public static Location requestCurrentOrLast(Context context) {
+    Location fresh = currentLocation(context, true);
+    if (fresh != null) return fresh;
+    return lastLocation(context);
   }
 
   public static void openFromGeofence(Context context, String gateId, String reason) {

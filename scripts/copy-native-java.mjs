@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Copy keepalive + Android Auto (+ streetview / apk-install) Java into the
- * gitignored android/ tree before assembleRelease. Mirrors Expo config plugins.
+ * Copy keepalive + Android Auto + widget (+ streetview / apk-install) Java
+ * into the gitignored android/ tree before assembleRelease. Mirrors Expo
+ * config plugins.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -102,4 +103,41 @@ copyDirFiles(
   ],
 );
 
-console.log('Copied keepalive, android-auto, streetview, apk-install into android/');
+copyDirFiles(
+  path.join(ROOT, 'src', 'platform', 'android-widget'),
+  path.join(ANDROID, 'app', 'src', 'main', 'java', 'com', 'gateauto', 'app', 'widget'),
+  [
+    'WidgetClosest.java',
+    'WidgetRefresh.java',
+    'WidgetRenderer.java',
+    'WidgetActionReceiver.java',
+    'GateAutoWidgetProvider.java',
+  ],
+);
+
+const widgetRes = [
+  ['res/xml/gateauto_widget_info.xml', 'xml/gateauto_widget_info.xml'],
+  ['res/layout/widget_hero.xml', 'layout/widget_hero.xml'],
+  ['res/layout/widget_row.xml', 'layout/widget_row.xml'],
+  ['res/layout/widget_list.xml', 'layout/widget_list.xml'],
+  ['res/drawable/widget_face.xml', 'drawable/widget_face.xml'],
+  ['res/drawable/widget_open_pill.xml', 'drawable/widget_open_pill.xml'],
+  ['res/drawable/widget_chip.xml', 'drawable/widget_chip.xml'],
+  ['res/drawable/widget_row_well.xml', 'drawable/widget_row_well.xml'],
+  ['res/drawable/ic_widget_gate.xml', 'drawable/ic_widget_gate.xml'],
+  ['res/values/widget_colors.xml', 'values/widget_colors.xml'],
+  ['res/values/widget_dimens.xml', 'values/widget_dimens.xml'],
+  ['res/values-v31/widget_dimens.xml', 'values-v31/widget_dimens.xml'],
+  ['res/values/widget_strings.xml', 'values/widget_strings.xml'],
+  ['res/values-he/widget_strings.xml', 'values-he/widget_strings.xml'],
+  ['res/values-ru/widget_strings.xml', 'values-ru/widget_strings.xml'],
+];
+const widgetSrc = path.join(ROOT, 'src', 'platform', 'android-widget');
+const resRoot = path.join(ANDROID, 'app', 'src', 'main', 'res');
+for (const [from, to] of widgetRes) {
+  const dest = path.join(resRoot, to);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(path.join(widgetSrc, from), dest);
+}
+
+console.log('Copied keepalive, android-auto, widget, streetview, apk-install into android/');

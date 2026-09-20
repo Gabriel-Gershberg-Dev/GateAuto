@@ -46,6 +46,8 @@ public class MonitoringService extends Service {
    * it pauses in Doze — which is exactly when nobody is reading the shade.
    */
   private static final long NOTICE_REFRESH_MS = 15_000L;
+  private static final long WIDGET_REFRESH_MIN_MS = 45_000L;
+  private static volatile long lastWidgetRefreshAt;
 
   private static volatile MonitoringService instance;
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -122,6 +124,7 @@ public class MonitoringService extends Service {
       // the 20s JS poll gap. Worker thread: pollNearby may HTTP-open.
       new Thread(() -> PalGateNativeOpen.pollNearby(app, "poll", loc), "gateauto-loc-poll")
         .start();
+      maybeRefreshWidget(app, loc);
       boolean near = PalGateNativeOpen.anyWithinDetect(MonitoringService.this, location);
       if (near != nearMode) {
         handler.post(() -> startLocationUpdates(near));
@@ -294,6 +297,24 @@ public class MonitoringService extends Service {
     }
     fused = null;
     nearMode = false;
+  }
+
+  /**
+   * Cache every FGS fix for the widget face. Paint at most every
+   * {@link #WIDGET_REFRESH_MIN_MS} — never 1 Hz in near-mode, never peek fused.
+   */
+  private static void maybeRefreshWidget(Context context, Location loc) {
+    try {
+      if (loc != null) {
+        com.gateauto.app.widget.WidgetRefresh.rememberFix(context, loc);
+      }
+      long now = System.currentTimeMillis();
+      if (now - lastWidgetRefreshAt < WIDGET_REFRESH_MIN_MS) return;
+      lastWidgetRefreshAt = now;
+      com.gateauto.app.widget.WidgetRefresh.renderNow(context, loc);
+    } catch (Throwable ignored) {
+      // Widget package missing in an older prebuild must not break FGS.
+    }
   }
 
   private void ensureChannel() {

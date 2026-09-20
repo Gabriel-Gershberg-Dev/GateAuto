@@ -404,6 +404,23 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     }
   }
 
+  /** In-app language so the home widget matches Hebrew / Russian, not only the OS. */
+  @ReactMethod
+  public void setAppLang(String lang, Promise promise) {
+    try {
+      Context ctx = getReactApplicationContext();
+      KeepAlivePrefs.setAppLang(ctx, lang);
+      try {
+        com.gateauto.app.widget.WidgetRefresh.updateAll(ctx);
+      } catch (Throwable ignored) {
+        // ignore
+      }
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_lang", e);
+    }
+  }
+
   /** Hide or restore the searching FGS notice. Monitoring itself is unchanged. */
   @ReactMethod
   public void setMonitorNoticeEnabled(boolean enabled, Promise promise) {

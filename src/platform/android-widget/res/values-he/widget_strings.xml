@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">GateAuto</string>
+    <string name="widget_description">פתיחת השער הקרוב עם סיכה</string>
+    <string name="widget_closest">הכי קרוב</string>
+    <string name="widget_open">פתיחה</string>
+    <string name="widget_opening">פותח…</string>
+    <string name="widget_opened">נפתח</string>
+    <string name="widget_open_failed">הפתיחה נכשלה</string>
+    <string name="widget_open_app">פתיחת האפליקציה</string>
+    <string name="widget_empty">סמנו שער על המפה</string>
+    <string name="widget_empty_eyebrow">אין סיכה</string>
+    <string name="widget_meters">%d מ׳</string>
+    <string name="widget_km">%s ק״מ</string>
+</resources>

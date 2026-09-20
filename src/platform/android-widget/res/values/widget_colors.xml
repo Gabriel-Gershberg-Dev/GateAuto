@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_void">#020809</color>
+    <!-- Translucent cabin mist — wallpaper can breathe through. No box stroke. -->
+    <color name="widget_cabin">#E00C2E32</color>
+    <color name="widget_well">#C2081618</color>
+    <color name="widget_sheen">#2AF2FFFB</color>
+    <color name="widget_sheen_fade">#00F2FFFB</color>
+    <!-- Range tick is the only accent. Quieter than the old neon-leaning teal. -->
+    <color name="widget_teal">#7ABBB2</color>
+    <color name="widget_ink">#E7EEEC</color>
+    <color name="widget_muted">#8AA8A4</color>
+    <color name="widget_open_fill">#4E9E94</color>
+    <color name="widget_open_on">#061618</color>
+</resources>

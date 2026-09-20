@@ -1,13 +1,13 @@
 {
   "name": "gateauto",
-  "version": "1.0.48",
+  "version": "1.0.51",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "tsx --test tests/autoOpenLogic.test.ts tests/configAndSafety.test.ts tests/streetName.test.ts tests/streetViewPin.test.ts tests/inviteLogic.test.ts tests/hubNavigation.test.ts tests/userScope.test.ts tests/vaultRecover.test.ts tests/sharedCatalog.test.ts tests/i18n.test.ts tests/appUpdate.test.ts tests/devUnlock.test.ts tests/holdLogic.test.ts tests/shareRevoke.test.ts tests/permissionOnboarding.test.ts tests/permissionStatus.test.ts tests/expectedNativeRejection.test.ts tests/gateCardFacts.test.ts tests/listRefreshLock.test.ts tests/telemetry.test.ts tests/monitoringNotice.test.ts tests/notificationPrefs.test.ts tests/androidAutoLauncher.test.ts tests/carBluetoothCache.test.ts tests/detectFence.test.ts tests/gateLists.test.ts",
+    "test": "tsx --test tests/autoOpenLogic.test.ts tests/configAndSafety.test.ts tests/streetName.test.ts tests/streetViewPin.test.ts tests/inviteLogic.test.ts tests/hubNavigation.test.ts tests/userScope.test.ts tests/vaultRecover.test.ts tests/sharedCatalog.test.ts tests/i18n.test.ts tests/appUpdate.test.ts tests/devUnlock.test.ts tests/holdLogic.test.ts tests/shareRevoke.test.ts tests/permissionOnboarding.test.ts tests/permissionStatus.test.ts tests/expectedNativeRejection.test.ts tests/gateCardFacts.test.ts tests/listRefreshLock.test.ts tests/telemetry.test.ts tests/monitoringNotice.test.ts tests/notificationPrefs.test.ts tests/androidAutoLauncher.test.ts tests/carBluetoothCache.test.ts tests/detectFence.test.ts tests/gateLists.test.ts tests/widgetClosest.test.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package"
   },

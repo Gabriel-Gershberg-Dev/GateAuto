@@ -59,6 +59,12 @@ public final class GeofenceRegistrar {
       // ignore
     }
     Log.i(TAG, "native regions saved: " + n + " gate(s), " + auto + " auto-open");
+    try {
+      // Cache-only widget paint — never peek fused last-location.
+      com.gateauto.app.widget.WidgetRefresh.updateAll(context);
+    } catch (Throwable ignored) {
+      // Widget package missing in an older prebuild must not break region sync.
+    }
   }
 
   public static JSONArray regionsArray(Context context) {
