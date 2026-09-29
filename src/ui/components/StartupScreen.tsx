@@ -3,20 +3,30 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { StartupNetPhase } from '../../firebase/startupNetwork';
 import { useTheme } from '../ThemeProvider';
-import { type as typeScale } from '../theme';
+import { radii, spacing, type as typeScale } from '../theme';
 
 /**
  * Cabin-teal arrival: boom rises once, then a lamp bloom breathes.
  * Replaces the startup ActivityIndicator. Does not wait extra — parent
  * still unmounts this as soon as auth / hub route is ready.
  */
-export function StartupScreen() {
+export function StartupScreen({
+  connection = 'quiet',
+  onRefresh,
+  onContinue,
+}: {
+  connection?: StartupNetPhase;
+  onRefresh?: () => void;
+  onContinue?: () => void;
+}) {
   const { t } = useTranslation();
   const { colors, scheme } = useTheme();
   const ink = scheme === 'dark' ? '#030607' : colors.background;
@@ -113,8 +123,10 @@ export function StartupScreen() {
   return (
     <View
       style={[styles.root, { backgroundColor: ink }]}
-      accessibilityRole="progressbar"
-      accessibilityLabel={t('startup.a11y')}
+      accessibilityRole={connection === 'needsRefresh' ? undefined : 'progressbar'}
+      accessibilityLabel={
+        connection === 'needsRefresh' ? t('startup.stuckTitle') : t('startup.a11y')
+      }
     >
       <View style={styles.stage}>
         <Animated.View
@@ -162,6 +174,45 @@ export function StartupScreen() {
           ]}
         />
       </View>
+      {connection === 'refreshing' ? (
+        <Text
+          style={[styles.status, { color: colors.muted }]}
+          accessibilityLiveRegion="polite"
+        >
+          {t('startup.refreshing')}
+        </Text>
+      ) : null}
+      {connection === 'needsRefresh' ? (
+        <View style={styles.notice} accessibilityLiveRegion="polite">
+          <Text style={[styles.noticeTitle, { color: colors.text }]}>
+            {t('startup.stuckTitle')}
+          </Text>
+          <Text style={[styles.noticeBody, { color: colors.muted }]}>
+            {t('startup.stuckBody')}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onRefresh}
+            style={({ pressed }) => [
+              styles.refresh,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },
+            ]}
+          >
+            <Text style={[styles.refreshText, { color: colors.primaryOn }]}>
+              {t('startup.refresh')}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onContinue}
+            style={styles.openAnyway}
+          >
+            <Text style={[styles.openAnywayText, { color: colors.primary }]}>
+              {t('startup.openAnyway')}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -171,6 +222,51 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  status: {
+    ...typeScale.meta,
+    marginTop: spacing.lg,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  notice: {
+    marginTop: spacing.lg,
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+  },
+  noticeTitle: {
+    ...typeScale.section,
+    textAlign: 'center',
+  },
+  noticeBody: {
+    ...typeScale.meta,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  refresh: {
+    marginTop: spacing.md,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshText: {
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  openAnyway: {
+    marginTop: spacing.sm,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openAnywayText: {
+    fontWeight: '700',
+    fontSize: 15,
   },
   stage: {
     alignItems: 'center',

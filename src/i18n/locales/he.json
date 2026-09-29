@@ -47,7 +47,12 @@
     "notifications": "התראות"
   },
   "startup": {
-    "a11y": "GateAuto נטען"
+    "a11y": "GateAuto נטען",
+    "refreshing": "מרענן את החיבור…",
+    "stuckTitle": "החיבור נתקע",
+    "stuckBody": "למכשיר יש אינטרנט. החיבור של GateAuto צריך איפוס. כבו את הנתונים הסלולריים והדליקו אותם, או לחצו על רענון.",
+    "refresh": "רענון חיבור",
+    "openAnyway": "פתח בכל זאת"
   },
   "lang": {
     "title": "שפה",

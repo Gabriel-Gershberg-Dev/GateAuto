@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth, type Auth, type Persistence } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
+import { Platform } from 'react-native';
 import { FIRESTORE_DATABASE_ID, firebaseWebConfig } from './config';
 
 const STORAGE_AVAILABLE_KEY = 'firebase-heartbeat-storage-available';
@@ -52,7 +53,23 @@ function ensureAuth(app: ReturnType<typeof ensureApp>): Auth {
   }
 }
 
+function ensureDb(app: ReturnType<typeof ensureApp>): Firestore {
+  try {
+    return initializeFirestore(
+      app,
+      // A stuck WebChannel stream survives a live radio. Long-polling closes
+      // each response so a dead socket can time out instead of holding startup.
+      Platform.OS === 'android' || Platform.OS === 'ios'
+        ? { experimentalForceLongPolling: true }
+        : {},
+      FIRESTORE_DATABASE_ID,
+    );
+  } catch {
+    return getFirestore(app, FIRESTORE_DATABASE_ID);
+  }
+}
+
 const app = ensureApp();
 export const firebaseApp = app;
 export const auth: Auth = ensureAuth(app);
-export const db: Firestore = getFirestore(app, FIRESTORE_DATABASE_ID);
+export const db: Firestore = ensureDb(app);

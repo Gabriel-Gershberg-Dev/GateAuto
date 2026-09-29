@@ -2,6 +2,8 @@ package com.gateauto.app.keepalive;
 
 import android.app.Activity;
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -514,6 +516,34 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       promise.resolve(map);
     } catch (Exception e) {
       promise.reject("keepalive_notice", e);
+    }
+  }
+
+  /**
+   * The radio can be up while this process still holds a dead socket.
+   * Asking the system to re-check the active network is the in-app equivalent
+   * of toggling mobile data: Android revalidates and drops stale connections.
+   */
+  @ReactMethod
+  public void reportStaleNetwork(Promise promise) {
+    try {
+      ConnectivityManager cm =
+        (ConnectivityManager)
+          getReactApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+      if (cm == null) {
+        promise.resolve(false);
+        return;
+      }
+      Network network = cm.getActiveNetwork();
+      if (network == null) {
+        promise.resolve(false);
+        return;
+      }
+      cm.reportNetworkConnectivity(network, false);
+      promise.resolve(true);
+    } catch (Throwable t) {
+      Log.w(NAME, "reportStaleNetwork failed", t);
+      promise.resolve(false);
     }
   }
 

@@ -1,6 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthProvider';
 import { useAppI18n } from '../i18n/I18nProvider';
@@ -12,6 +12,17 @@ import {
   consumeResumeRoute,
   shouldResumeSettings,
 } from './resumeRoute';
+import { refreshAppConnection } from '../firebase/refreshConnection';
+import {
+  createStartupGate,
+  recoverStartupRead,
+  StartupAttemptCancelled,
+  StartupContinued,
+  startupNetworkWaived,
+  waiveStartupNetwork,
+  type StartupGate,
+  type StartupNetPhase,
+} from '../firebase/startupNetwork';
 import { listIncomingPendingInvites } from '../share/invites';
 import { StartupScreen } from '../ui/components/StartupScreen';
 import { PermissionSetupHost } from '../ui/components/PermissionSetupHost';
@@ -43,41 +54,73 @@ export function RootNavigator() {
   const { t } = useTranslation();
   const { isRtl } = useAppI18n();
   const { colors, navigationTheme } = useTheme();
-  const { user, ready } = useAuth();
+  const {
+    user,
+    ready,
+    startupConnection,
+    retryStartupConnection,
+    continueStartup,
+  } = useAuth();
   const [hubRoute, setHubRoute] = useState<'GateSystems' | 'GatesList' | null>(
     null,
   );
   const [resumeSettings, setResumeSettings] = useState(false);
+  const [hubConnection, setHubConnection] = useState<StartupNetPhase>('quiet');
+  const hubGateRef = useRef<StartupGate | null>(null);
 
   useEffect(() => {
     if (!ready) return;
     if (!user) {
       setHubRoute(null);
       setResumeSettings(false);
+      setHubConnection('quiet');
       void clearResumeRoute();
       return;
     }
     let cancelled = false;
+    const gate = createStartupGate();
+    hubGateRef.current = gate;
+    setHubConnection('quiet');
     (async () => {
-      const [gates, systems, resume, pending] = await Promise.all([
+      const local = Promise.all([
         loadGates(),
         listSystems(),
         consumeResumeRoute(),
-        listIncomingPendingInvites().catch(() => []),
       ]);
-      if (!cancelled) {
-        setResumeSettings(shouldResumeSettings(true, resume));
-        setHubRoute(
-          initialHubRoute({
-            gateCount: gates.length,
-            systemCount: systems.length,
-            pendingInviteCount: pending.length,
-          }),
-        );
+      let pending: Awaited<ReturnType<typeof listIncomingPendingInvites>> = [];
+      if (!startupNetworkWaived()) {
+        try {
+          pending = await recoverStartupRead({
+            read: () => listIncomingPendingInvites().catch(() => []),
+            refresh: refreshAppConnection,
+            isStopped: gate.isStopped,
+            wait: gate.wait,
+            onPhase: (phase) => {
+              if (!cancelled) setHubConnection(phase);
+            },
+          });
+        } catch (error) {
+          if (cancelled || error instanceof StartupAttemptCancelled) return;
+          if (!(error instanceof StartupContinued)) return;
+          pending = [];
+        }
       }
+      const [gates, systems, resume] = await local;
+      if (cancelled) return;
+      setHubConnection('quiet');
+      setResumeSettings(shouldResumeSettings(true, resume));
+      setHubRoute(
+        initialHubRoute({
+          gateCount: gates.length,
+          systemCount: systems.length,
+          pendingInviteCount: pending.length,
+        }),
+      );
     })();
     return () => {
       cancelled = true;
+      gate.cancel();
+      if (hubGateRef.current === gate) hubGateRef.current = null;
     };
   }, [ready, user]);
 
@@ -89,7 +132,23 @@ export function RootNavigator() {
       : hubRoute;
 
   if (!initialRoute) {
-    return <StartupScreen />;
+    const connection = !ready ? startupConnection : hubConnection;
+    return (
+      <StartupScreen
+        connection={connection}
+        onRefresh={() => {
+          if (!ready) retryStartupConnection();
+          else hubGateRef.current?.kick();
+        }}
+        onContinue={() => {
+          if (!ready) continueStartup();
+          else {
+            waiveStartupNetwork();
+            hubGateRef.current?.continue();
+          }
+        }}
+      />
+    );
   }
 
   return (

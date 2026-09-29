@@ -14,13 +14,26 @@ import {
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { auth, db } from '../firebase/app';
+import { refreshAppConnection } from '../firebase/refreshConnection';
+import {
+  createStartupGate,
+  recoverStartupRead,
+  resetStartupNetworkWaiver,
+  StartupAttemptCancelled,
+  StartupContinued,
+  waiveStartupNetwork,
+  type StartupGate,
+  type StartupNetPhase,
+} from '../firebase/startupNetwork';
 import { googleWebClientId } from '../firebase/config';
 import i18n from '../i18n';
 import { configureGoogleSignIn, signOutGoogleQuietly } from './googleNative';
@@ -68,12 +81,18 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
   updateDisplayName: (name: string) => Promise<void>;
   googleClientConfigured: boolean;
+  /** Splash copy while startup Firestore/auth reads sit on a dead socket. */
+  startupConnection: StartupNetPhase;
+  retryStartupConnection: () => void;
+  continueStartup: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** Bumps on every auth transition so an in-flight persistProfile cannot restore a signed-out user. */
 let authEpoch = 0;
+/** Same-user token refreshes must not restart startup or clear an "open anyway". */
+let settledStartupUid: string | null = null;
 
 function providersOf(user: User): string[] {
   return user.providerData.map((p) => p.providerId);
@@ -215,59 +234,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [startupConnection, setStartupConnection] =
+    useState<StartupNetPhase>('quiet');
+  const startupGateRef = useRef<StartupGate | null>(null);
+
+  const retryStartupConnection = useCallback(() => {
+    startupGateRef.current?.kick();
+  }, []);
+
+  const continueStartup = useCallback(() => {
+    waiveStartupNetwork();
+    startupGateRef.current?.continue();
+  }, []);
 
   useEffect(() => {
     configureGoogleSignIn();
     const unsub = onAuthStateChanged(auth, (next) => {
+      if (next && next.uid === settledStartupUid) return;
       const epoch = ++authEpoch;
+      resetStartupNetworkWaiver();
+      startupGateRef.current?.cancel();
+      settledStartupUid = next ? next.uid : null;
       if (!next) {
         leaveAccountVault();
         void clearResumeRoute();
         setFirebaseUser(null);
+        setStartupConnection('quiet');
         setReady(true);
         void import('../telemetry').then((t) => t.setTelemetryUser(null));
         return;
       }
+      const gate = createStartupGate();
+      startupGateRef.current = gate;
       void (async () => {
+        let opened = false;
         try {
           await activateAccountVault(next.uid);
-          await Promise.race([
-            hydrateSignedInAccount(next),
-            new Promise<void>((resolve) => {
-              setTimeout(() => resolve(), 8000);
-            }),
-          ]);
           if (epoch !== authEpoch) return;
-          const settled = await persistProfile(next);
-          if (epoch !== authEpoch) return;
-          if (!auth.currentUser || auth.currentUser.uid !== next.uid) return;
-          setFirebaseUser(auth.currentUser ?? settled);
-          void import('../telemetry').then((t) =>
-            t.setTelemetryUser(next.uid),
-          );
-          void syncNativeFromSystems().then(async () => {
-            const { loadGates } = await import('../data/gatesStore');
-            const gates = await loadGates();
-            if (gates.length === 0) return;
-            await import('../geo/monitoringResync')
-              .then((m) => m.resyncMonitoringIfArmed('account-switch'))
-              .catch(() => undefined);
+          await recoverStartupRead({
+            read: async () => {
+              await hydrateSignedInAccount(next);
+              await persistProfile(next);
+            },
+            refresh: refreshAppConnection,
+            isStopped: gate.isStopped,
+            wait: gate.wait,
+            onPhase: (phase) => {
+              if (epoch === authEpoch) setStartupConnection(phase);
+            },
           });
-        } catch {
-          if (epoch !== authEpoch) return;
-          if (auth.currentUser?.uid === next.uid) {
-            setFirebaseUser(auth.currentUser ?? next);
-            void import('../telemetry').then((t) =>
-              t.setTelemetryUser(next.uid),
-            );
-            void syncNativeFromSystems();
+          opened = true;
+        } catch (error) {
+          if (epoch !== authEpoch || error instanceof StartupAttemptCancelled) {
+            return;
           }
+          opened =
+            error instanceof StartupContinued ||
+            auth.currentUser?.uid === next.uid;
         } finally {
-          if (epoch === authEpoch) setReady(true);
+          if (startupGateRef.current === gate) startupGateRef.current = null;
         }
+        if (epoch !== authEpoch) return;
+        if (!opened || !auth.currentUser || auth.currentUser.uid !== next.uid) {
+          setReady(true);
+          return;
+        }
+        setFirebaseUser(auth.currentUser ?? next);
+        setStartupConnection('quiet');
+        void import('../telemetry').then((t) =>
+          t.setTelemetryUser(next.uid),
+        );
+        void syncNativeFromSystems().then(async () => {
+          const { loadGates } = await import('../data/gatesStore');
+          const gates = await loadGates();
+          if (gates.length === 0) return;
+          await import('../geo/monitoringResync')
+            .then((m) => m.resyncMonitoringIfArmed('account-switch'))
+            .catch(() => undefined);
+        });
+        setReady(true);
       })();
     });
-    return unsub;
+    return () => {
+      startupGateRef.current?.cancel();
+      unsub();
+    };
   }, []);
 
   const googleClientConfigured = !googleWebClientId.includes('placeholder');
@@ -388,9 +439,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error(message);
         }
       },
+      startupConnection,
+      retryStartupConnection,
+      continueStartup,
       signOut: async () => {
         setError(null);
         authEpoch += 1;
+        settledStartupUid = null;
+        resetStartupNetworkWaiver();
+        startupGateRef.current?.cancel();
+        setStartupConnection('quiet');
         leaveAccountVault();
         await clearResumeRoute();
         setFirebaseUser(null);
@@ -403,7 +461,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [error, firebaseUser, googleClientConfigured, ready],
+    [
+      continueStartup,
+      error,
+      firebaseUser,
+      googleClientConfigured,
+      ready,
+      retryStartupConnection,
+      startupConnection,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

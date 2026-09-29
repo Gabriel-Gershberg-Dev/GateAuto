@@ -43,6 +43,7 @@ type GateAutoKeepAliveNative = {
     gateOpen?: boolean;
   }>;
   recreateActivity?(): Promise<boolean>;
+  reportStaleNetwork?(): Promise<boolean>;
   setAppLang?(lang: string): Promise<boolean>;
   isIgnoringBatteryOptimizations?(): Promise<boolean>;
   isBatteryUnrestricted?(): Promise<boolean>;
@@ -72,6 +73,17 @@ function getNative(): GateAutoKeepAliveNative | null {
 
 export function hasNativeKeepAlive(): boolean {
   return getNative() != null;
+}
+
+/** Ask Android to revalidate the active network after a hung app socket. */
+export async function reportStaleNetwork(): Promise<boolean> {
+  const native = getNative();
+  if (!native?.reportStaleNetwork) return false;
+  try {
+    return (await native.reportStaleNetwork()) === true;
+  } catch {
+    return false;
+  }
 }
 
 function asBool(value: unknown, fallback = false): boolean {

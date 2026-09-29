@@ -47,7 +47,12 @@
     "notifications": "Notifications"
   },
   "startup": {
-    "a11y": "GateAuto is starting"
+    "a11y": "GateAuto is starting",
+    "refreshing": "Refreshing the connection…",
+    "stuckTitle": "Connection is stuck",
+    "stuckBody": "The phone is online. GateAuto’s connection still needs a reset. Turn mobile data off and on, or tap Refresh.",
+    "refresh": "Refresh connection",
+    "openAnyway": "Open anyway"
   },
   "lang": {
     "title": "Language",
