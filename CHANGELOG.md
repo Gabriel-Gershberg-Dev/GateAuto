@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.60** (versionCode 61).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.61** (versionCode 62).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, and `v1.0.48`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, and `v1.0.61`.
+
+## 1.0.61 — 2026-09-29 (beta)
+
+Auto-open stays foreground in the background even with the searching notice or all notifications off: the notice shrinks to a silent one instead of `stopForeground(REMOVE)` demoting the service, which Samsung then killed. A HoldService or MonitoringService start is never stopped before it reaches `startForeground`; that race crashed the app twice in a minute, and Android then blocked background wakes until the app was opened (seen on S21 FE and S22 Ultra on 1.0.30/1.0.48). Android 15+ reboots no longer crash on the shortService boot sync. Startup no longer hangs on a stuck connection: it resets Firestore's network, asks Android to revalidate at most once a minute, and after two misses offers Refresh connection / Open anyway. Telemetry adds notice, notification, battery, exact-alarm and hold state.
 
 ## 1.0.60 — 2026-09-29 (beta)
 
