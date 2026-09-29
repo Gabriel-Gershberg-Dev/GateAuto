@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -37,6 +36,7 @@ import { GateLocationPicker } from '../components/GateLocationPicker';
 import { hasGoogleMapsApiKey } from '../components/GateMap';
 import { RadiusSlider } from '../components/RadiusSlider';
 import { StreetViewSheet } from '../components/StreetViewSheet';
+import { Toggle } from '../components/Toggle';
 import { IconPin } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
@@ -541,7 +541,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
           {t('editor.requireBt')}
         </Text>
         <View style={styles.switchSlot}>
-          <Switch
+          <Toggle
             value={btRequired}
             onValueChange={setBtRequired}
             trackColor={{ false: colors.border, true: colors.primaryMuted }}

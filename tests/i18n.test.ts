@@ -13,9 +13,14 @@ import {
   glueTrailingNumber,
   isolateBidiText,
   logicalFlexDirection,
+  logicalTextAlign,
   LRI,
+  ltrIsolate,
   PDI,
   RLI,
+  RLM,
+  toggleThumbOffset,
+  withRtlMark,
 } from '../src/i18n/bidi';
 
 function flatten(
@@ -131,5 +136,34 @@ describe('RTL bidi helpers', () => {
     assert.equal(logicalFlexDirection(true, true), 'row');
     assert.equal(logicalFlexDirection(true, false), 'row-reverse');
     assert.equal(logicalFlexDirection(false, true), 'row-reverse');
+  });
+
+  it('avoids double-flipping textAlign, which RN swaps under native RTL', () => {
+    assert.equal(logicalTextAlign(false, false), 'left');
+    assert.equal(logicalTextAlign(true, true), 'left');
+    assert.equal(logicalTextAlign(true, false), 'right');
+    assert.equal(logicalTextAlign(false, true), 'right');
+  });
+
+  it('gives Hebrew strings an RTL base once, and keeps versions and ranges LTR', () => {
+    assert.equal(withRtlMark('Auto-open כבוי'), `${RLM}Auto-open כבוי`);
+    assert.equal(withRtlMark(withRtlMark('Open')), `${RLM}Open`);
+    assert.equal(ltrIsolate('1.0.62 (63)'), `${LRI}1.0.62 (63)${PDI}`);
+    for (const key of ['durationHint', 'customAttemptsMsg', 'customDurationMsg'] as const) {
+      assert.ok(he.safety[key].includes(`${LRI}{{min}}–{{max}}${PDI}`), key);
+    }
+    assert.ok(he.map.radiusHint.includes(`${LRI}{{min}}–{{max}}${PDI}`));
+  });
+
+  it('puts the toggle thumb on the reading end when on, regardless of native mirroring', () => {
+    // LTR app: off at left (0), on at right.
+    assert.equal(toggleThumbOffset(false, false, false, 18), 0);
+    assert.equal(toggleThumbOffset(true, false, false, 18), 18);
+    // Hebrew with native RTL (track start is the right edge): on moves left.
+    assert.equal(toggleThumbOffset(false, true, true, 18), 0);
+    assert.equal(toggleThumbOffset(true, true, true, 18), -18);
+    // Hebrew picked but not yet reloaded (native LTR): on still sits left.
+    assert.equal(toggleThumbOffset(true, true, false, 18), 0);
+    assert.equal(toggleThumbOffset(false, true, false, 18), 18);
   });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { displayGateName, loadGates, setMonitoringEnabled } from '../../data/gatesStore';
 import { getActiveLocks } from '../../data/openSafetyLock';
@@ -14,6 +14,7 @@ import {
 } from '../../integrations/optionalNative';
 import { importNativeOpenEvents } from '../../platform/keepAliveAlarm';
 import { BarrierMark } from './BarrierMark';
+import { Toggle } from './Toggle';
 import { InfoSheet } from './ConfirmSheet';
 import { IconInfo } from '../icons';
 import { useTheme } from '../ThemeProvider';
@@ -142,7 +143,7 @@ export function AutoOpenSettings() {
             </Text>
           </View>
           <View style={styles.switchSlot}>
-          <Switch
+          <Toggle
             value={enabled}
             onValueChange={(v) => void onToggle(v)}
             trackColor={{ false: colors.border, true: colors.primaryMuted }}

@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +18,7 @@ import {
 } from '../../updates/updateNotice';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
 import { Group, Hairline } from '../components/Group';
+import { Toggle } from '../components/Toggle';
 import { useTheme } from '../ThemeProvider';
 import { spacing, type ThemeColors } from '../theme';
 
@@ -216,7 +217,7 @@ function ToggleRow({
           {detail}
         </Text>
       </View>
-      <Switch
+      <Toggle
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}

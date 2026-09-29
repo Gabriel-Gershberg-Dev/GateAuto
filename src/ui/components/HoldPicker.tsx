@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -17,6 +16,7 @@ import { useTheme } from '../ThemeProvider';
 import { radii, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
 import { ConfirmSheet } from './ConfirmSheet';
+import { Toggle } from './Toggle';
 
 type Props = {
   enabled: boolean;
@@ -58,7 +58,7 @@ export function HoldPicker({
           {t('editor.hold')}
         </Text>
         <View style={styles.switchSlot}>
-        <Switch
+        <Toggle
           value={enabled}
           onValueChange={(next) => {
             onEnabledChange(next);

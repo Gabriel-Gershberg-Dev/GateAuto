@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.62** (versionCode 63).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.63** (versionCode 64).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, and `v1.0.62`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, and `v1.0.63`.
+
+## 1.0.63 — 2026-09-30 (beta)
+
+Hebrew layout reads right to left. Wrapped lines start on the right, settings chevrons point left, and "on" is on the left of every toggle (including Xiaomi, which does not mirror Android's switch). Number ranges and the version read left to right.
 
 ## 1.0.62 — 2026-09-29 (beta)
 

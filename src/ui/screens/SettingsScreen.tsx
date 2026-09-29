@@ -59,6 +59,7 @@ import {
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
+import { ltrIsolate } from '../../i18n/bidi';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -357,7 +358,7 @@ export function SettingsScreen({ navigation }: Props) {
         <SettingsRow
           icon={<IconShield color={colors.primary} />}
           label={t('settings.appVersion')}
-          detail={installedLabel}
+          detail={ltrIsolate(installedLabel)}
           onPress={onVersionRowPress}
           colors={colors}
           showChevron={false}
@@ -602,7 +603,7 @@ function SettingsRow({
   destructive?: boolean;
   showChevron?: boolean;
 }) {
-  const { row, writingDirection, textAlign } = useRtlLayout();
+  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
   return (
     <Pressable
       onPress={onPress}
@@ -650,7 +651,12 @@ function SettingsRow({
         </Text>
       </View>
       {showChevron ? (
-        <View style={{ flexShrink: 0 }}>
+        <View
+          style={{
+            flexShrink: 0,
+            transform: [{ scaleX: isRtl ? -1 : 1 }],
+          }}
+        >
           <IconChevronRight
             color={destructive ? colors.danger : colors.muted}
           />

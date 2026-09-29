@@ -7,7 +7,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   useWindowDimensions,
   View,
@@ -21,6 +20,7 @@ import { IconInfo } from '../icons';
 import { useReduceMotion } from '../useReduceMotion';
 import { BarrierMark } from './BarrierMark';
 import { HintSheet } from './ConfirmSheet';
+import { Toggle } from './Toggle';
 import { useTheme } from '../ThemeProvider';
 import { HUD_TEAL, radii, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
@@ -476,8 +476,9 @@ export function GateRow({
             {t('autoOpen.auto')}
           </Text>
           <View pointerEvents={autoOpenMaster ? 'auto' : 'none'}>
-            <Switch
+            <Toggle
               value={gate.enabled}
+              accessibilityLabel={t('autoOpen.auto')}
               disabled={!autoOpenMaster}
               onValueChange={onToggleEnabled}
               trackColor={{
