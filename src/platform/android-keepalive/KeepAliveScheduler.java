@@ -165,6 +165,16 @@ public final class KeepAliveScheduler {
     KeepAlivePrefs.clearAllHolds(app);
   }
 
+  static boolean exactAlarmsAllowed(Context context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
+    try {
+      AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+      return am != null && am.canScheduleExactAlarms();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
   static boolean shouldThrottle(Context context) {
     long last = KeepAlivePrefs.lastRunAt(context);
     return last > 0 && System.currentTimeMillis() - last < MIN_RUN_GAP_MS;

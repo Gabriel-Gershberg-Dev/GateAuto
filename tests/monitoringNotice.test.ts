@@ -290,4 +290,39 @@ describe('MonitoringNotice.java stays in sync with the spec', () => {
     assert.ok(monitoring.includes('if (foreground) HoldService.stop(this);'));
     assert.ok(!monitoring.includes('    HoldService.stop(this);\n    ensureChannel();'));
   });
+
+  it('never stops a MonitoringService start before it reaches startForeground', () => {
+    const monitoring = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'platform', 'android-keepalive', 'MonitoringService.java'),
+      'utf8',
+    );
+    const stopBody = monitoring.slice(
+      monitoring.indexOf('public static void stop(Context context)'),
+    );
+    assert.ok(
+      stopBody.slice(0, stopBody.indexOf('stopService')).includes('if (instance == null) return;'),
+      'stop() must skip a start that has not promoted yet',
+    );
+    const onCreate = monitoring.slice(
+      monitoring.indexOf('public void onCreate()'),
+      monitoring.indexOf('public int onStartCommand'),
+    );
+    const promoteAt = onCreate.indexOf('promote();');
+    assert.ok(promoteAt >= 0, 'onCreate promotes without the armed check');
+    assert.ok(!onCreate.includes('promoteOrHideNotice();'));
+    assert.ok(promoteAt < onCreate.indexOf('instance = this;'));
+  });
+
+  it('does not start the shortService boot sync from BOOT_COMPLETED on Android 15+', () => {
+    const plugin = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'platform', 'withAndroidBootSync.js'),
+      'utf8',
+    );
+    const receiver = plugin.slice(0, plugin.indexOf('const SERVICE_JAVA'));
+    const skipAt = receiver.indexOf('Build.VERSION.SDK_INT >= 35');
+    assert.ok(skipAt >= 0);
+    assert.ok(skipAt > receiver.indexOf('KeepAliveScheduler.start(context);'));
+    assert.ok(skipAt < receiver.indexOf('startForegroundService(service)'));
+    assert.ok(receiver.includes('!Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)'));
+  });
 });

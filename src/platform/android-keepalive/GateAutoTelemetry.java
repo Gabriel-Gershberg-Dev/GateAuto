@@ -162,6 +162,7 @@ public final class GateAutoTelemetry {
         "battery_unrestricted",
         AutoOpenPermissionStatus.isBatteryUnrestricted(context) ? 1 : 0
       );
+      params.putInt("exact_alarm", KeepAliveScheduler.exactAlarmsAllowed(context) ? 1 : 0);
       logEvent(context, "permission_state", params);
     } catch (Throwable ignored) {
       // ignore
@@ -190,6 +191,7 @@ public final class GateAutoTelemetry {
       crash.setCustomKey("notice_visible", KeepAlivePrefs.monitorNoticeVisible(context) ? 1 : 0);
       crash.setCustomKey("notifications", notificationsGranted(context) ? 1 : 0);
       crash.setCustomKey("battery_unrestricted", AutoOpenPermissionStatus.isBatteryUnrestricted(context) ? 1 : 0);
+      crash.setCustomKey("exact_alarm", KeepAliveScheduler.exactAlarmsAllowed(context) ? 1 : 0);
       crash.setCustomKey("hold", HoldService.isRunning() ? 1 : 0);
       crash.setCustomKey("monitor_fg", MonitoringService.isForeground() ? 1 : 0);
     } catch (Throwable ignored) {

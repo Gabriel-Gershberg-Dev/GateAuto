@@ -78,6 +78,10 @@ public class MonitoringService extends Service {
 
   private void promoteOrHideNotice() {
     if (!KeepAlivePrefs.isArmed(this)) return;
+    promote();
+  }
+
+  private void promote() {
     try {
       int type =
         Build.VERSION.SDK_INT >= 34
@@ -193,6 +197,10 @@ public class MonitoringService extends Service {
   }
 
   public static void stop(Context context) {
+    // Stopping a startForegroundService before onCreate reaches startForeground
+    // crashes the app (ForegroundServiceDidNotStartInTime). A pending start
+    // re-checks armed/demand in onStartCommand and stops itself.
+    if (instance == null) return;
     try {
       context.stopService(new Intent(context, MonitoringService.class));
     } catch (Exception e) {
@@ -203,10 +211,12 @@ public class MonitoringService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
-    instance = this;
     foreground = false;
     ensureChannel();
-    promoteOrHideNotice();
+    // Promote even if disarmed meanwhile: onStartCommand may stopSelf, which
+    // is only safe once startForeground has run.
+    promote();
+    instance = this;
     // Retire the non-location HoldService only once this service really holds
     // the process, so only one "Searching for nearby gates" notice is shown.
     if (foreground) HoldService.stop(this);
