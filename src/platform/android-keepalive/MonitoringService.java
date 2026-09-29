@@ -50,12 +50,19 @@ public class MonitoringService extends Service {
   private static volatile long lastWidgetRefreshAt;
 
   private static volatile MonitoringService instance;
+  /** startForeground succeeded. A sticky restart from the background can run without it. */
+  private static volatile boolean foreground;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private FusedLocationProviderClient fused;
   private volatile boolean nearMode;
 
   public static boolean isRunning() {
     return instance != null;
+  }
+
+  /** Holding the process as a foreground service, not just created. */
+  public static boolean isForeground() {
+    return instance != null && foreground;
   }
 
   /**
@@ -65,26 +72,23 @@ public class MonitoringService extends Service {
   static boolean resyncNotice() {
     MonitoringService svc = instance;
     if (svc == null) return false;
-    svc.handler.post(
-      () -> {
-        if (KeepAlivePrefs.monitorNoticeVisible(svc)) {
-          svc.promoteOrHideNotice();
-        } else {
-          MonitoringNotice.hideShadeIfDisabled(svc, NOTIF_ID);
-        }
-      }
-    );
+    svc.handler.post(svc::promoteOrHideNotice);
     return true;
   }
 
   private void promoteOrHideNotice() {
     if (!KeepAlivePrefs.isArmed(this)) return;
+    promote();
+  }
+
+  private void promote() {
     try {
       int type =
         Build.VERSION.SDK_INT >= 34
           ? ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
           : 0;
       MonitoringNotice.startForegroundHonoringPreference(this, NOTIF_ID, type);
+      foreground = true;
     } catch (Exception e) {
       Log.w(TAG, "resync searching notice failed", e);
     }
@@ -193,6 +197,10 @@ public class MonitoringService extends Service {
   }
 
   public static void stop(Context context) {
+    // Stopping a startForegroundService before onCreate reaches startForeground
+    // crashes the app (ForegroundServiceDidNotStartInTime). A pending start
+    // re-checks armed/demand in onStartCommand and stops itself.
+    if (instance == null) return;
     try {
       context.stopService(new Intent(context, MonitoringService.class));
     } catch (Exception e) {
@@ -203,12 +211,15 @@ public class MonitoringService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
-    instance = this;
-    // Location FGS now holds the process — retire the non-location HoldService
-    // so only one "Searching for nearby gates" notice is shown.
-    HoldService.stop(this);
+    foreground = false;
     ensureChannel();
-    promoteOrHideNotice();
+    // Promote even if disarmed meanwhile: onStartCommand may stopSelf, which
+    // is only safe once startForeground has run.
+    promote();
+    instance = this;
+    // Retire the non-location HoldService only once this service really holds
+    // the process, so only one "Searching for nearby gates" notice is shown.
+    if (foreground) HoldService.stop(this);
     GeofenceRegistrar.register(this, false);
     ApproachSampler.stop();
     startLocationUpdates(false);
@@ -227,8 +238,9 @@ public class MonitoringService extends Service {
       stopSelf();
       return START_NOT_STICKY;
     }
-    HoldService.stop(this);
     promoteOrHideNotice();
+    if (foreground) HoldService.stop(this);
+    else HoldService.ensure(this);
     return START_STICKY;
   }
 
@@ -237,7 +249,10 @@ public class MonitoringService extends Service {
     handler.removeCallbacks(reregister);
     handler.removeCallbacks(refreshNotice);
     stopLocationUpdates();
-    if (instance == this) instance = null;
+    if (instance == this) {
+      instance = null;
+      foreground = false;
+    }
     MonitoringNotice.clearOrphan(this, NOTIF_ID);
     // If still armed (e.g. app backgrounded / swiped away but not disarmed),
     // fall back to the non-location HoldService so the process stays held and

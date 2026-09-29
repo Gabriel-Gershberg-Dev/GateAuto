@@ -61,6 +61,14 @@ public class BootReceiver extends BroadcastReceiver {
       KeepAliveScheduler.start(context);
       LocationDemand.sync(context, false);
     }
+    if (Build.VERSION.SDK_INT >= 35
+        && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+      // Android 15+ throws from startForeground for a shortService started by
+      // BOOT_COMPLETED, crashing the app on every reboot. The native re-arm
+      // above already restores fences, the alarm and HoldService.
+      Log.i(TAG, "boot: skip BootSyncService (shortService blocked from boot)");
+      return;
+    }
     Intent service = new Intent(context, BootSyncService.class);
     HeadlessJsTaskService.acquireWakeLockNow(context);
     try {

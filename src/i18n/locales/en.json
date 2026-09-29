@@ -564,12 +564,12 @@
   "notifications": {
     "lede": "These only change what Android shows. Auto-open keeps running.",
     "all": "All notifications",
-    "allDetail": "Hide every shade notice, including when a gate opens. Auto-open still runs.",
+    "allDetail": "Hide every shade notice, including when a gate opens. Auto-open still runs; Android keeps a small silent “Auto-open is running” notice you can swipe away.",
     "kindsLede": "Choose which notices to show.",
     "gateOpen": "Gate opened",
     "gateOpenDetail": "Ping when a gate opens or an auto-open fails.",
     "monitor": "Searching notification",
-    "monitorDetail": "The pinned notice while Auto-open is on. Turning this off does not stop monitoring.",
+    "monitorDetail": "The pinned notice while Auto-open is on. Off shrinks it to a silent notice you can swipe away. Android needs it to keep Auto-open running.",
     "updates": "App updates",
     "updatesDetail": "Get a notice when a new GateAuto is ready to install."
   },

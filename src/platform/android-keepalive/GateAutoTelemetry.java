@@ -152,6 +152,8 @@ public final class GateAutoTelemetry {
       Bundle params = new Bundle();
       params.putInt("always_loc", alwaysLocation(context) ? 1 : 0);
       params.putInt("notifications", notificationsGranted(context) ? 1 : 0);
+      params.putInt("notice_visible", KeepAlivePrefs.monitorNoticeVisible(context) ? 1 : 0);
+      params.putInt("notices_all", KeepAlivePrefs.noticesEnabled(context) ? 1 : 0);
       params.putInt(
         "bt_connect",
         AutoOpenPermissionStatus.bluetoothConnectGranted(context) ? 1 : 0
@@ -160,6 +162,7 @@ public final class GateAutoTelemetry {
         "battery_unrestricted",
         AutoOpenPermissionStatus.isBatteryUnrestricted(context) ? 1 : 0
       );
+      params.putInt("exact_alarm", KeepAliveScheduler.exactAlarmsAllowed(context) ? 1 : 0);
       logEvent(context, "permission_state", params);
     } catch (Throwable ignored) {
       // ignore
@@ -185,6 +188,12 @@ public final class GateAutoTelemetry {
       crash.setCustomKey("auto_on", KeepAlivePrefs.isArmed(context) ? 1 : 0);
       crash.setCustomKey("fence_count", autoFenceCount(context));
       crash.setCustomKey("always_location", alwaysLocation(context) ? 1 : 0);
+      crash.setCustomKey("notice_visible", KeepAlivePrefs.monitorNoticeVisible(context) ? 1 : 0);
+      crash.setCustomKey("notifications", notificationsGranted(context) ? 1 : 0);
+      crash.setCustomKey("battery_unrestricted", AutoOpenPermissionStatus.isBatteryUnrestricted(context) ? 1 : 0);
+      crash.setCustomKey("exact_alarm", KeepAliveScheduler.exactAlarmsAllowed(context) ? 1 : 0);
+      crash.setCustomKey("hold", HoldService.isRunning() ? 1 : 0);
+      crash.setCustomKey("monitor_fg", MonitoringService.isForeground() ? 1 : 0);
     } catch (Throwable ignored) {
       // ignore
     }
