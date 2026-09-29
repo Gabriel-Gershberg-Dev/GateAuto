@@ -69,15 +69,7 @@ public class HoldService extends Service {
   static boolean resyncNotice() {
     HoldService svc = instance;
     if (svc == null) return false;
-    svc.handler.post(
-      () -> {
-        if (KeepAlivePrefs.monitorNoticeVisible(svc)) {
-          svc.promote();
-        } else {
-          MonitoringNotice.hideShadeIfDisabled(svc, NOTIF_ID);
-        }
-      }
-    );
+    svc.handler.post(svc::promote);
     return true;
   }
 
@@ -93,7 +85,7 @@ public class HoldService extends Service {
     Context app = context.getApplicationContext();
     if (!KeepAlivePrefs.isArmed(app)) return;
     // Location FGS already holds the process — no need for a second FGS.
-    if (MonitoringService.isRunning()) return;
+    if (MonitoringService.isForeground()) return;
     if (running) return;
     Intent intent = new Intent(app, HoldService.class);
     try {
@@ -111,6 +103,11 @@ public class HoldService extends Service {
 
   public static void stop(Context context) {
     if (context == null) return;
+    // Stopping a startForegroundService() that has not reached startForeground
+    // yet crashes the whole process (ForegroundServiceDidNotStartInTimeException).
+    // A pending start re-checks armed / MonitoringService in onStartCommand and
+    // steps aside itself, so only stop an instance that is already promoted.
+    if (instance == null) return;
     try {
       context.getApplicationContext().stopService(
         new Intent(context.getApplicationContext(), HoldService.class)
@@ -123,10 +120,10 @@ public class HoldService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
-    instance = this;
     running = true;
     ensureChannel();
     promote();
+    instance = this;
     // This is the service that comes up on a cold background wake, so it is the
     // right place to get the car-BT proxies bound before an open needs them.
     CarBluetoothState.prime(this);
@@ -141,7 +138,7 @@ public class HoldService extends Service {
       return START_NOT_STICKY;
     }
     // A location FGS came up meanwhile — let it own the hold and step aside.
-    if (MonitoringService.isRunning()) {
+    if (MonitoringService.isForeground()) {
       stopSelf();
       return START_NOT_STICKY;
     }

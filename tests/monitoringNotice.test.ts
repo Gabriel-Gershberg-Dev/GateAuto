@@ -226,7 +226,16 @@ describe('MonitoringNotice.java stays in sync with the spec', () => {
     assert.ok(java.includes('RESTORE_BACKOFF_MS = 60_000L'));
     assert.ok(java.includes('applyUserPreference'));
     assert.ok(java.includes('startForegroundHonoringPreference'));
-    assert.ok(java.includes('STOP_FOREGROUND_REMOVE'));
+  });
+
+  it('keeps the service foreground when the user hides the notice', () => {
+    // A demoted hold is what Samsung / battery saver stop between arrivals.
+    assert.ok(!java.includes('stopForeground('));
+    assert.ok(java.includes('if (!KeepAlivePrefs.monitorNoticeVisible(app)) return buildQuiet(app);'));
+    assert.ok(java.includes('NotificationManager.IMPORTANCE_MIN'));
+    const quiet = java.slice(java.indexOf('private static Notification buildQuiet'));
+    const quietBody = quiet.slice(0, quiet.indexOf('private static void ensureQuietChannel'));
+    assert.ok(!quietBody.includes('setDeleteIntent('), 'a swiped quiet notice must stay gone');
   });
 
   it('matches the notification ids the services own', () => {
@@ -254,7 +263,31 @@ describe('MonitoringNotice.java stays in sync with the spec', () => {
     assert.ok(hold.includes(`NOTIF_ID = ${HOLD_NOTIF_ID}`));
     assert.ok(monitoring.includes('startForegroundHonoringPreference'));
     assert.ok(hold.includes('startForegroundHonoringPreference'));
-    assert.ok(monitoring.includes('hideShadeIfDisabled'));
-    assert.ok(hold.includes('hideShadeIfDisabled'));
+    assert.ok(!monitoring.includes('stopForeground('));
+    assert.ok(!hold.includes('stopForeground('));
+  });
+
+  it('never stops a HoldService start before it reaches startForeground', () => {
+    const read = (name: string) =>
+      fs.readFileSync(
+        path.join(process.cwd(), 'src', 'platform', 'android-keepalive', name),
+        'utf8',
+      );
+    const hold = read('HoldService.java');
+    const monitoring = read('MonitoringService.java');
+    const stopBody = hold.slice(hold.indexOf('public static void stop(Context context)'));
+    assert.ok(
+      stopBody.slice(0, stopBody.indexOf('stopService')).includes('if (instance == null) return;'),
+      'stop() must skip a start that has not promoted yet',
+    );
+    const onCreate = hold.slice(hold.indexOf('public void onCreate()'));
+    assert.ok(
+      onCreate.indexOf('promote();') < onCreate.indexOf('instance = this;'),
+      'instance is published only after startForeground',
+    );
+    assert.ok(hold.includes('if (MonitoringService.isForeground()) {'));
+    assert.ok(hold.includes('if (MonitoringService.isForeground()) return;'));
+    assert.ok(monitoring.includes('if (foreground) HoldService.stop(this);'));
+    assert.ok(!monitoring.includes('    HoldService.stop(this);\n    ensureChannel();'));
   });
 });

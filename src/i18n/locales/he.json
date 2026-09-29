@@ -564,12 +564,12 @@
   "notifications": {
     "lede": "משנים רק מה ש־Android מציג. Auto-open ממשיך לפעול.",
     "all": "כל ההתראות",
-    "allDetail": "מסתיר כל התראה, כולל כששער נפתח. Auto-open ממשיך לפעול.",
+    "allDetail": "מסתיר כל התראה, כולל כששער נפתח. Auto-open ממשיך לפעול; Android משאיר התראה שקטה וקטנה „Auto-open is running” שאפשר להחליק.",
     "kindsLede": "בחרו אילו התראות להציג.",
     "gateOpen": "השער נפתח",
     "gateOpenDetail": "התראה כששער נפתח או כש־Auto-open נכשל.",
     "monitor": "התראת חיפוש",
-    "monitorDetail": "ההתראה הנעוצה כש־Auto-open דולק. כיבוי לא עוצר את הניטור.",
+    "monitorDetail": "ההתראה הנעוצה כש־Auto-open דולק. כיבוי מקטין אותה להתראה שקטה שאפשר להחליק. Android צריך אותה כדי ש־Auto-open ימשיך לפעול.",
     "updates": "עדכוני אפליקציה",
     "updatesDetail": "קבלו התראה כשגרסה חדשה של GateAuto מוכנה להתקנה."
   },

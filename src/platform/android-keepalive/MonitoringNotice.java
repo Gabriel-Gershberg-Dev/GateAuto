@@ -1,6 +1,8 @@
 package com.gateauto.app.keepalive;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
@@ -55,8 +57,15 @@ public final class MonitoringNotice {
 
   static final String ACTION_RESTORE = "com.gateauto.app.MONITOR_NOTICE_RESTORE";
   static final String EXTRA_NOTIF_ID = "notifId";
+  /**
+   * Used when the user hides the searching notice. The service must stay
+   * foreground: without it Samsung / battery saver stop the process and hold
+   * back its location, so auto-open only fires once the app is opened.
+   */
+  static final String QUIET_CHANNEL_ID = "gateauto-running-quiet";
 
   private static final String TITLE = "GateAuto";
+  private static final String QUIET_TEXT = "Auto-open is running";
   private static final long JUST_NOW_MS = 10_000L;
   private static final long MINUTE_MS = 60_000L;
   private static final long HOUR_MS = 60L * MINUTE_MS;
@@ -145,6 +154,7 @@ public final class MonitoringNotice {
    */
   public static Notification build(Context context, int notifId) {
     Context app = context.getApplicationContext();
+    if (!KeepAlivePrefs.monitorNoticeVisible(app)) return buildQuiet(app);
     long lastCheck = KeepAlivePrefs.lastMonitorCheckAt(app);
     long now = System.currentTimeMillis();
     NotificationCompat.Builder builder =
@@ -174,11 +184,57 @@ public final class MonitoringNotice {
   }
 
   /**
+   * Minimum-importance notice for a hidden searching notice: collapsed in the
+   * silent section, no status-bar icon, no live text, and a swipe keeps it
+   * gone (no restore intent). The foreground service behind it keeps running.
+   */
+  private static Notification buildQuiet(Context app) {
+    ensureQuietChannel(app);
+    NotificationCompat.Builder builder =
+      new NotificationCompat.Builder(app, QUIET_CHANNEL_ID)
+        .setContentTitle(TITLE)
+        .setContentText(QUIET_TEXT)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setSilent(true)
+        .setShowWhen(false)
+        .setForegroundServiceBehavior(
+          NotificationCompat.FOREGROUND_SERVICE_DEFERRED
+        );
+    PendingIntent content = launchIntent(app);
+    if (content != null) {
+      builder.setContentIntent(content);
+    }
+    return builder.build();
+  }
+
+  private static void ensureQuietChannel(Context app) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+    NotificationManager manager = app.getSystemService(NotificationManager.class);
+    if (manager == null) return;
+    NotificationChannel channel =
+      new NotificationChannel(
+        QUIET_CHANNEL_ID,
+        "GateAuto running (hidden)",
+        NotificationManager.IMPORTANCE_MIN
+      );
+    channel.setDescription(
+      "Shown instead of the searching notice when you hide it. Android needs it to keep Auto-open running."
+    );
+    channel.setShowBadge(false);
+    channel.setSound(null, null);
+    channel.enableVibration(false);
+    manager.createNotificationChannel(channel);
+  }
+
+  /**
    * Required {@code startForeground} (Android 12+ kills the service without
-   * it), then detach the shade notice if the user turned it off. Cancelling
-   * an FGS notification is ignored on Android 14+ — the system puts it back.
-   * {@link Service#stopForeground} with REMOVE is what actually hides it.
-   * Auto-open / geofence / BT are unchanged.
+   * it). When the user hid the searching notice, {@link #build} returns the
+   * quiet variant instead. Never {@code stopForeground}: a demoted service is
+   * what Samsung / battery saver stop between arrivals.
    */
   public static void startForegroundHonoringPreference(
       Service service,
@@ -192,12 +248,11 @@ public final class MonitoringNotice {
     } else {
       service.startForeground(notifId, notification);
     }
-    hideShadeIfDisabled(service, notifId);
   }
 
   /**
-   * After {@code startForeground} (which always needs a notification), honor
-   * Settings → hide the shade notice without stopping the service.
+   * Re-post the owning service's notice as full or quiet after a Settings
+   * change, without leaving the foreground.
    */
   public static void applyUserPreference(Context context) {
     if (context == null) return;
@@ -318,21 +373,6 @@ public final class MonitoringNotice {
     return 0;
   }
 
-  static void hideShadeIfDisabled(Service service, int notifId) {
-    if (service == null || KeepAlivePrefs.monitorNoticeVisible(service)) return;
-    try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        service.stopForeground(Service.STOP_FOREGROUND_REMOVE);
-      } else {
-        service.stopForeground(true);
-      }
-      NotificationManagerCompat.from(service).cancel(notifId);
-      Log.i(TAG, "monitor notice hidden by preference; service stays up");
-    } catch (Exception e) {
-      Log.w(TAG, "monitor notice hide-via-stopForeground failed", e);
-    }
-  }
-
   private static void cancelBoth(Context app) {
     try {
       NotificationManagerCompat nm = NotificationManagerCompat.from(app);
@@ -344,14 +384,8 @@ public final class MonitoringNotice {
   }
 
   private static void post(Context app, int notifId) {
-    if (!KeepAlivePrefs.monitorNoticeVisible(app)) {
-      try {
-        NotificationManagerCompat.from(app).cancel(notifId);
-      } catch (Exception e) {
-        Log.w(TAG, "monitor notice hide failed", e);
-      }
-      return;
-    }
+    // The quiet notice has no live text; re-posting would only undo a swipe.
+    if (!KeepAlivePrefs.monitorNoticeVisible(app)) return;
     try {
       Notification notification = build(app, notifId);
       // Re-check after building: if the owning service stopped while we were
