@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.61** (versionCode 62).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.62** (versionCode 63).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, and `v1.0.61`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, and `v1.0.62`.
+
+## 1.0.62 — 2026-09-29 (beta)
+
+Reopening after swiping the app away no longer sticks on the startup animation. The hold keeps the process alive, so Android recreates the screen in the same JS runtime; 1.0.61 remembered the signed-in user at module level and ignored the new screen's first auth callback.
 
 ## 1.0.61 — 2026-09-29 (beta)
 

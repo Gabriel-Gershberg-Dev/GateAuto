@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
   createStartupGate,
@@ -120,5 +122,19 @@ describe('startup network waiver', () => {
     assert.equal(startupNetworkWaived(), true);
     resetStartupNetworkWaiver();
     assert.equal(startupNetworkWaived(), false);
+  });
+});
+
+describe('AuthProvider startup settle', () => {
+  it('tracks the settled user per mount so a recreated activity still leaves the splash', () => {
+    const src = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'auth', 'AuthProvider.tsx'),
+      'utf8',
+    );
+    const providerAt = src.indexOf('export function AuthProvider(');
+    assert.ok(providerAt > 0);
+    assert.ok(!/settled\w*\s*:\s*string \| null = null;/.test(src.slice(0, providerAt)));
+    assert.ok(src.includes('const settledUidRef = useRef<string | null>(null);'));
+    assert.ok(src.includes('next.uid === settledUidRef.current'));
   });
 });

@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "62"
+        "value": "63"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.61"
+        "value": "1.0.62"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Auto-open keeps running in the background even with notifications off, and no longer crashes when Android restarts it or the phone reboots. If the app gets stuck on the connection at startup, it refreshes it by itself."
+        "value": "Reopening the app after swiping it away no longer sticks on the startup animation. Includes 1.0.61: auto-open keeps running with notifications off, no crashes on restart or reboot, and a stuck startup connection refreshes itself."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

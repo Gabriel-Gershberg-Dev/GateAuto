@@ -91,8 +91,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** Bumps on every auth transition so an in-flight persistProfile cannot restore a signed-out user. */
 let authEpoch = 0;
-/** Same-user token refreshes must not restart startup or clear an "open anyway". */
-let settledStartupUid: string | null = null;
 
 function providersOf(user: User): string[] {
   return user.providerData.map((p) => p.providerId);
@@ -237,6 +235,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [startupConnection, setStartupConnection] =
     useState<StartupNetPhase>('quiet');
   const startupGateRef = useRef<StartupGate | null>(null);
+  /**
+   * Same-user token refreshes must not restart startup or clear an "open
+   * anyway". Per mount: Android can recreate the activity in a live JS runtime
+   * (the hold keeps the process), and the new tree must still settle.
+   */
+  const settledUidRef = useRef<string | null>(null);
 
   const retryStartupConnection = useCallback(() => {
     startupGateRef.current?.kick();
@@ -250,11 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     configureGoogleSignIn();
     const unsub = onAuthStateChanged(auth, (next) => {
-      if (next && next.uid === settledStartupUid) return;
+      if (next && next.uid === settledUidRef.current) return;
       const epoch = ++authEpoch;
       resetStartupNetworkWaiver();
       startupGateRef.current?.cancel();
-      settledStartupUid = next ? next.uid : null;
+      settledUidRef.current = next ? next.uid : null;
       if (!next) {
         leaveAccountVault();
         void clearResumeRoute();
@@ -445,7 +449,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut: async () => {
         setError(null);
         authEpoch += 1;
-        settledStartupUid = null;
+        settledUidRef.current = null;
         resetStartupNetworkWaiver();
         startupGateRef.current?.cancel();
         setStartupConnection('quiet');
