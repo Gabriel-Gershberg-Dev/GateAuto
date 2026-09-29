@@ -27,6 +27,29 @@ if (!fs.existsSync(ANDROID)) {
   process.exit(1);
 }
 
+function syncAndroidVersionFromAppJson() {
+  const appJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8'));
+  const versionName = String(appJson.expo?.version ?? '').trim();
+  const versionCode = String(appJson.expo?.android?.versionCode ?? '').trim();
+  if (!versionName || !/^\d+$/.test(versionCode)) {
+    throw new Error('app.json is missing expo.version / android.versionCode');
+  }
+  const gradlePath = path.join(ANDROID, 'app', 'build.gradle');
+  const gradle = fs.readFileSync(gradlePath, 'utf8');
+  const next = gradle
+    .replace(/versionCode\s+\d+/, `versionCode ${versionCode}`)
+    .replace(/versionName\s+"[^"]*"/, `versionName "${versionName}"`);
+  if (!next.includes(`versionCode ${versionCode}`) || !next.includes(`versionName "${versionName}"`)) {
+    throw new Error('could not patch versionCode/versionName in android/app/build.gradle');
+  }
+  if (next !== gradle) {
+    fs.writeFileSync(gradlePath, next);
+  }
+  console.log(`Synced Android version ${versionName} (${versionCode})`);
+}
+
+syncAndroidVersionFromAppJson();
+
 copyDirFiles(
   path.join(ROOT, 'src', 'platform', 'android-keepalive'),
   path.join(ANDROID, 'app', 'src', 'main', 'java', 'com', 'gateauto', 'app', 'keepalive'),
@@ -121,11 +144,18 @@ const widgetRes = [
   ['res/xml/gateauto_widget_info.xml', 'xml/gateauto_widget_info.xml'],
   ['res/layout/widget_hero.xml', 'layout/widget_hero.xml'],
   ['res/layout/widget_row.xml', 'layout/widget_row.xml'],
+  ['res/layout/widget_row_page.xml', 'layout/widget_row_page.xml'],
   ['res/layout/widget_list.xml', 'layout/widget_list.xml'],
   ['res/layout/widget_cube.xml', 'layout/widget_cube.xml'],
+  ['res/layout/widget_strip_line.xml', 'layout/widget_strip_line.xml'],
   ['res/drawable/widget_face.xml', 'drawable/widget_face.xml'],
   ['res/drawable/widget_open_pill.xml', 'drawable/widget_open_pill.xml'],
   ['res/drawable/widget_chip.xml', 'drawable/widget_chip.xml'],
+  ['res/drawable/widget_chip_live.xml', 'drawable/widget_chip_live.xml'],
+  ['res/drawable/widget_chip_ok.xml', 'drawable/widget_chip_ok.xml'],
+  ['res/drawable/widget_chip_fail.xml', 'drawable/widget_chip_fail.xml'],
+  ['res/drawable/widget_spin.xml', 'drawable/widget_spin.xml'],
+  ['res/drawable/widget_busy_ring.xml', 'drawable/widget_busy_ring.xml'],
   ['res/drawable/widget_row_well.xml', 'drawable/widget_row_well.xml'],
   ['res/drawable/ic_widget_gate.xml', 'drawable/ic_widget_gate.xml'],
   ['res/values/widget_colors.xml', 'values/widget_colors.xml'],

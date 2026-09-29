@@ -28,6 +28,7 @@ public final class KeepAlivePrefs {
   private static final String KEY_WIDGET_LAST_CLOSEST = "widgetLastClosest";
   private static final String KEY_WIDGET_STATUS = "widgetStatus";
   private static final String KEY_WIDGET_STATUS_MSG = "widgetStatusMsg";
+  private static final String KEY_WIDGET_STATUS_GATE = "widgetStatusGate";
   /** Last lat/lng for widget face only — not a fused request. */
   private static final String KEY_WIDGET_LAST_LAT = "widgetLastLat";
   private static final String KEY_WIDGET_LAST_LNG = "widgetLastLng";
@@ -156,11 +157,21 @@ public final class KeepAlivePrefs {
   }
 
   public static void setWidgetStatus(Context context, String status, String message) {
+    setWidgetStatus(context, status, message, "");
+  }
+
+  public static void setWidgetStatus(Context context, String status, String message, String gateId) {
     prefs(context)
       .edit()
       .putString(KEY_WIDGET_STATUS, status == null ? "idle" : status)
       .putString(KEY_WIDGET_STATUS_MSG, message == null ? "" : message)
+      .putString(KEY_WIDGET_STATUS_GATE, gateId == null ? "" : gateId.trim())
       .commit();
+  }
+
+  public static String widgetStatusGate(Context context) {
+    String raw = prefs(context).getString(KEY_WIDGET_STATUS_GATE, "");
+    return raw == null ? "" : raw.trim();
   }
 
   public static String widgetStatus(Context context) {

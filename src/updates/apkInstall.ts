@@ -2,6 +2,7 @@ import { NativeModules, Platform } from 'react-native';
 
 type GateAutoApkInstallNative = {
   getInstalledVersionCode(): Promise<number>;
+  getInstalledVersionName?(): Promise<string>;
   canRequestPackageInstalls(): Promise<boolean>;
   openInstallPermissionSettings(): Promise<boolean>;
   downloadAndInstall(url: string): Promise<boolean>;
@@ -30,6 +31,19 @@ export async function getInstalledVersionCode(): Promise<number> {
     }
   }
   return 0;
+}
+
+/** Android PackageManager versionName — not expoConfig.version. */
+export async function getInstalledVersionName(): Promise<string> {
+  const native = getNative();
+  if (native?.getInstalledVersionName) {
+    try {
+      return String((await native.getInstalledVersionName()) ?? '').trim();
+    } catch {
+      /* fall through */
+    }
+  }
+  return '';
 }
 
 export async function canRequestPackageInstalls(): Promise<boolean> {

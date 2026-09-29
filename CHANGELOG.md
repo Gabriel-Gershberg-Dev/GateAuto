@@ -5,9 +5,37 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.53** (versionCode 54).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.60** (versionCode 61).
 
 Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, and `v1.0.48`.
+
+## 1.0.60 — 2026-09-29 (beta)
+
+Wide strip is back to the previous list. Swipe up for more gates.
+
+## 1.0.59 — 2026-09-29 (beta)
+
+Wide widget strip is a real scrolling list: swipe up to the next gates. Left/right still moves the home screen.
+
+## 1.0.58 — 2026-09-29 (beta)
+
+Widget taps register on name/range/background (not only the cube root). Opening paints immediately, queues presses instead of dropping them, and uses the platform spinner without full-list rebinds that restart the animation.
+
+## 1.0.57 — 2026-09-29 (beta)
+
+Larger widget sizes paint gates instead of sitting on Loading. Wide strip uses the same list machinery as the tall widget (home screens leave GridView spinning).
+
+## 1.0.56 — 2026-09-29 (beta)
+
+Tap a widget gate to open it — the cube lights and spins instead of an Open pill. The wide strip scrolls like the tall list (home screens steal horizontal swipes).
+
+## 1.0.55 — 2026-09-29 (beta)
+
+Wide strip shows two fuller cubes when the widget is narrow (three when it is wide), swipe between pages, and ‹ › on the sides if the home screen steals the swipe.
+
+## 1.0.54 — 2026-09-29 (beta)
+
+Wide widget pages extra gates; tall widget stacks the same cubes instead of squishing rows. The APK versionCode now follows app.json so Check for beta updates does not re-offer a version you already have.
 
 ## 1.0.53 — 2026-09-20 (beta)
 

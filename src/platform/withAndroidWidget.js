@@ -30,11 +30,18 @@ const RES_FILES = [
   ['res/xml/gateauto_widget_info.xml', 'xml/gateauto_widget_info.xml'],
   ['res/layout/widget_hero.xml', 'layout/widget_hero.xml'],
   ['res/layout/widget_row.xml', 'layout/widget_row.xml'],
+  ['res/layout/widget_row_page.xml', 'layout/widget_row_page.xml'],
   ['res/layout/widget_list.xml', 'layout/widget_list.xml'],
   ['res/layout/widget_cube.xml', 'layout/widget_cube.xml'],
+  ['res/layout/widget_strip_line.xml', 'layout/widget_strip_line.xml'],
   ['res/drawable/widget_face.xml', 'drawable/widget_face.xml'],
   ['res/drawable/widget_open_pill.xml', 'drawable/widget_open_pill.xml'],
   ['res/drawable/widget_chip.xml', 'drawable/widget_chip.xml'],
+  ['res/drawable/widget_chip_live.xml', 'drawable/widget_chip_live.xml'],
+  ['res/drawable/widget_chip_ok.xml', 'drawable/widget_chip_ok.xml'],
+  ['res/drawable/widget_chip_fail.xml', 'drawable/widget_chip_fail.xml'],
+  ['res/drawable/widget_spin.xml', 'drawable/widget_spin.xml'],
+  ['res/drawable/widget_busy_ring.xml', 'drawable/widget_busy_ring.xml'],
   ['res/drawable/widget_row_well.xml', 'drawable/widget_row_well.xml'],
   ['res/drawable/ic_widget_gate.xml', 'drawable/ic_widget_gate.xml'],
   ['res/values/widget_colors.xml', 'values/widget_colors.xml'],
@@ -141,4 +148,4 @@ function withAndroidWidget(config) {
   return config;
 }
 
-module.exports = createRunOncePlugin(withAndroidWidget, 'gateauto-android-widget', '1.1.0');
+module.exports = createRunOncePlugin(withAndroidWidget, 'gateauto-android-widget', '1.3.3');

@@ -28,6 +28,10 @@ import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { checkAppUpdate } from '../../updates/checkUpdate';
 import {
+  getInstalledVersionCode,
+  getInstalledVersionName,
+} from '../../updates/apkInstall';
+import {
   loadDevOptionsUnlocked,
   setDevOptionsUnlocked,
   verifyDevUnlockPassword,
@@ -94,6 +98,24 @@ export function SettingsScreen({ navigation }: Props) {
         | undefined
     )?.androidVersionCode ??
     '';
+  const [installedLabel, setInstalledLabel] = useState(
+    versionCode ? `${versionName} (${versionCode})` : versionName,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const nativeCode = await getInstalledVersionCode();
+      const nativeName = await getInstalledVersionName();
+      if (cancelled) return;
+      const name = nativeName || versionName;
+      const code = nativeCode > 0 ? nativeCode : versionCode;
+      setInstalledLabel(code ? `${name} (${code})` : name);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [versionCode, versionName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,11 +357,7 @@ export function SettingsScreen({ navigation }: Props) {
         <SettingsRow
           icon={<IconShield color={colors.primary} />}
           label={t('settings.appVersion')}
-          detail={
-            versionCode
-              ? `${versionName} (${versionCode})`
-              : versionName
-          }
+          detail={installedLabel}
           onPress={onVersionRowPress}
           colors={colors}
           showChevron={false}

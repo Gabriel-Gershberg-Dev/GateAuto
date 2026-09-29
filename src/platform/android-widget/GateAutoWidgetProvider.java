@@ -11,7 +11,7 @@ import com.gateauto.app.keepalive.KeepAlivePrefs;
 public class GateAutoWidgetProvider extends AppWidgetProvider {
   @Override
   public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
-    WidgetRefresh.updateAll(context);
+    WidgetRefresh.renderNow(context, WidgetRefresh.cachedLocation(context));
   }
 
   @Override
@@ -21,7 +21,8 @@ public class GateAutoWidgetProvider extends AppWidgetProvider {
     int appWidgetId,
     Bundle newOptions
   ) {
-    WidgetRefresh.updateAll(context);
+    WidgetRenderer.forgetWidget(appWidgetId);
+    WidgetRefresh.renderNow(context, WidgetRefresh.cachedLocation(context));
   }
 
   @Override

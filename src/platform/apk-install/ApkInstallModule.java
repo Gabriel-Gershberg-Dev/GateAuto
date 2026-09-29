@@ -47,14 +47,28 @@ public class ApkInstallModule extends ReactContextBaseJavaModule {
   @ReactMethod
   public void getInstalledVersionCode(Promise promise) {
     try {
-      Context ctx = getReactApplicationContext();
-      PackageInfo info = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
+      PackageInfo info = packageInfo();
       long code =
         Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
       promise.resolve((int) code);
     } catch (Exception e) {
       promise.reject("VERSION", e);
     }
+  }
+
+  @ReactMethod
+  public void getInstalledVersionName(Promise promise) {
+    try {
+      String name = packageInfo().versionName;
+      promise.resolve(name == null ? "" : name);
+    } catch (Exception e) {
+      promise.reject("VERSION", e);
+    }
+  }
+
+  private PackageInfo packageInfo() throws Exception {
+    Context ctx = getReactApplicationContext();
+    return ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
   }
 
   @ReactMethod
