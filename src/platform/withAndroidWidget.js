@@ -23,6 +23,7 @@ const JAVA_FILES = [
   'WidgetRefresh.java',
   'WidgetRenderer.java',
   'WidgetActionReceiver.java',
+  'WidgetViewsService.java',
   'GateAutoWidgetProvider.java',
 ];
 const RES_FILES = [
@@ -30,6 +31,7 @@ const RES_FILES = [
   ['res/layout/widget_hero.xml', 'layout/widget_hero.xml'],
   ['res/layout/widget_row.xml', 'layout/widget_row.xml'],
   ['res/layout/widget_list.xml', 'layout/widget_list.xml'],
+  ['res/layout/widget_cube.xml', 'layout/widget_cube.xml'],
   ['res/drawable/widget_face.xml', 'drawable/widget_face.xml'],
   ['res/drawable/widget_open_pill.xml', 'drawable/widget_open_pill.xml'],
   ['res/drawable/widget_chip.xml', 'drawable/widget_chip.xml'],
@@ -62,6 +64,18 @@ function copyWidgetSources(config) {
       return cfg;
     },
   ]);
+}
+
+function upsertService(app, name, attrs) {
+  const services = app.service ?? [];
+  const existing = services.find((s) => s?.$?.['android:name'] === name);
+  if (existing) {
+    Object.assign(existing.$, attrs);
+    app.service = services;
+    return;
+  }
+  services.push({ $: { 'android:name': name, ...attrs } });
+  app.service = services;
 }
 
 function upsertReceiver(app, name, attrs, intentFilter, extraMeta) {
@@ -113,6 +127,10 @@ function withWidgetManifest(config) {
         'android:enabled': 'true',
       },
     );
+    upsertService(app, 'com.gateauto.app.widget.WidgetViewsService', {
+      'android:exported': 'false',
+      'android:permission': 'android.permission.BIND_REMOTEVIEWS',
+    });
     return cfg;
   });
 }
@@ -123,4 +141,4 @@ function withAndroidWidget(config) {
   return config;
 }
 
-module.exports = createRunOncePlugin(withAndroidWidget, 'gateauto-android-widget', '1.0.0');
+module.exports = createRunOncePlugin(withAndroidWidget, 'gateauto-android-widget', '1.1.0');

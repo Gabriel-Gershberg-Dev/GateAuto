@@ -111,6 +111,7 @@ copyDirFiles(
     'WidgetRefresh.java',
     'WidgetRenderer.java',
     'WidgetActionReceiver.java',
+    'WidgetViewsService.java',
     'GateAutoWidgetProvider.java',
   ],
 );
@@ -120,6 +121,7 @@ const widgetRes = [
   ['res/layout/widget_hero.xml', 'layout/widget_hero.xml'],
   ['res/layout/widget_row.xml', 'layout/widget_row.xml'],
   ['res/layout/widget_list.xml', 'layout/widget_list.xml'],
+  ['res/layout/widget_cube.xml', 'layout/widget_cube.xml'],
   ['res/drawable/widget_face.xml', 'drawable/widget_face.xml'],
   ['res/drawable/widget_open_pill.xml', 'drawable/widget_open_pill.xml'],
   ['res/drawable/widget_chip.xml', 'drawable/widget_chip.xml'],

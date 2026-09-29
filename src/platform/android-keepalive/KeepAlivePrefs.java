@@ -138,6 +138,23 @@ public final class KeepAlivePrefs {
     return raw == null ? "" : raw.trim();
   }
 
+  /** Wide-strip cube page. Home-screen pagers steal horizontal swipes. */
+  public static int widgetChipPage(Context context, int widgetId) {
+    return prefs(context).getInt(widgetChipPageKey(widgetId), 0);
+  }
+
+  public static void setWidgetChipPage(Context context, int widgetId, int page) {
+    prefs(context).edit().putInt(widgetChipPageKey(widgetId), Math.max(0, page)).apply();
+  }
+
+  public static void clearWidgetChipPage(Context context, int widgetId) {
+    prefs(context).edit().remove(widgetChipPageKey(widgetId)).apply();
+  }
+
+  private static String widgetChipPageKey(int widgetId) {
+    return "widgetChipPage_" + widgetId;
+  }
+
   public static void setWidgetStatus(Context context, String status, String message) {
     prefs(context)
       .edit()

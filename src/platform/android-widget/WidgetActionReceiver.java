@@ -1,5 +1,6 @@
 package com.gateauto.app.widget;
 
+import android.appwidget.AppWidgetManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -22,8 +23,10 @@ public final class WidgetActionReceiver extends BroadcastReceiver {
   public static final String ACTION_OPEN_CLOSEST = "com.gateauto.app.widget.OPEN_CLOSEST";
   public static final String ACTION_OPEN_ID = "com.gateauto.app.widget.OPEN_ID";
   public static final String ACTION_OPEN_APP = "com.gateauto.app.widget.OPEN_APP";
+  public static final String ACTION_CHIP_PAGE = "com.gateauto.app.widget.CHIP_PAGE";
   public static final String EXTRA_ACTION = "action";
   public static final String EXTRA_GATE_ID = "gateId";
+  public static final String EXTRA_PAGE_DELTA = "pageDelta";
 
   private static final String TAG = "GateAutoWidget";
   private static final AtomicBoolean IN_FLIGHT = new AtomicBoolean(false);
@@ -38,6 +41,10 @@ public final class WidgetActionReceiver extends BroadcastReceiver {
     }
     if (ACTION_OPEN_APP.equals(action)) {
       openApp(app);
+      return;
+    }
+    if (ACTION_CHIP_PAGE.equals(action)) {
+      turnChipPage(app, intent);
       return;
     }
     if (!ACTION_OPEN_CLOSEST.equals(action) && !ACTION_OPEN_ID.equals(action)) {
@@ -90,6 +97,20 @@ public final class WidgetActionReceiver extends BroadcastReceiver {
       },
       "gateauto-widget-open"
     ).start();
+  }
+
+  /** Cache-only. Does not request fused location or take the open lock. */
+  static void turnChipPage(Context app, Intent intent) {
+    int widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1);
+    int delta = intent.getIntExtra(EXTRA_PAGE_DELTA, 0);
+    if (widgetId < 0 || delta == 0) return;
+    Location loc = WidgetRefresh.cachedLocation(app);
+    List<WidgetClosest.Ranked> ranked = WidgetClosest.rank(app, loc);
+    int cur = KeepAlivePrefs.widgetChipPage(app, widgetId);
+    int next = WidgetRenderer.chipPageIndex(cur + delta, ranked.size());
+    if (next == cur) return;
+    KeepAlivePrefs.setWidgetChipPage(app, widgetId, next);
+    WidgetRefresh.renderNow(app, loc);
   }
 
   static void openApp(Context context) {
