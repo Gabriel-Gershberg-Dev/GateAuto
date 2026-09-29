@@ -58,9 +58,11 @@ public class BtConnectReceiver extends BroadcastReceiver {
     if (disconnected) {
       CarBluetoothState.recordDisconnected(context, address, name);
       Log.i(TAG, "native BT disconnect " + name + " " + address);
+      LocationDemand.sync(context, false);
       return;
     }
     CarBluetoothState.recordConnected(context, address, name);
+    LocationDemand.sync(context, false);
 
     Log.i(TAG, "native BT connect " + name + " " + address);
     final PendingResult pending = goAsync();

@@ -41,6 +41,7 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
    * in the background even if hasActiveReactInstance() is still true.
    */
   public static void requestJsPoll(Context context) {
+    if (!LocationDemand.needsContinuousLocation(context)) return;
     long now = System.currentTimeMillis();
     if (lastPollAt > 0 && now - lastPollAt < MIN_POLL_GAP_MS) return;
     lastPollAt = now;
@@ -85,15 +86,11 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     );
     if (armed) {
       KeepAliveScheduler.start(ctx);
-      // Never INITIAL_TRIGGER — already-outside EXIT would open every other pin.
-      GeofenceRegistrar.register(ctx, false);
       // Bind the car-BT profile proxies now, while there is time to spare, so an
       // open never has to wait for a Bluetooth read.
       CarBluetoothState.prime(ctx);
-      if (startLocationFgs) {
-        MonitoringService.start(ctx);
-      }
-      if (!wasArmed) {
+      LocationDemand.sync(ctx, startLocationFgs);
+      if (!wasArmed && LocationDemand.needsContinuousLocation(ctx)) {
         pollNearbySoon(ctx, "arm");
       }
     } else {
@@ -157,6 +154,12 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
         promise.resolve(false);
         return;
       }
+      if (!LocationDemand.needsContinuousLocation(ctx)) {
+        Log.i(NAME, "startLocationFgs skip — waiting for listed car Bluetooth");
+        LocationDemand.sync(ctx, false);
+        promise.resolve(false);
+        return;
+      }
       if (ctx.getCurrentActivity() == null) {
         Log.w(NAME, "startLocationFgs skip — no UI activity");
         promise.resolve(false);
@@ -166,6 +169,17 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       promise.resolve(true);
     } catch (Exception e) {
       promise.reject("keepalive_fgs", e);
+    }
+  }
+
+  @ReactMethod
+  public void needsContinuousLocation(Promise promise) {
+    try {
+      promise.resolve(
+        LocationDemand.needsContinuousLocation(getReactApplicationContext())
+      );
+    } catch (Exception e) {
+      promise.reject("keepalive_demand", e);
     }
   }
 
@@ -349,10 +363,11 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       ReactApplicationContext ctx = getReactApplicationContext();
       GeofenceRegistrar.saveRegionsJson(ctx, json);
       if (KeepAlivePrefs.isArmed(ctx)) {
-        // Geometry change rewrites (no INITIAL_TRIGGER). Rename / BT-off
-        // leaves Play fences in place. Poll non-BT auto-on gates with last loc.
-        GeofenceRegistrar.register(ctx, false);
-        pollNearbySoon(ctx, "regions");
+        boolean fromUi = ctx.getCurrentActivity() != null;
+        LocationDemand.sync(ctx, fromUi);
+        if (LocationDemand.needsContinuousLocation(ctx)) {
+          pollNearbySoon(ctx, "regions");
+        }
       }
       promise.resolve(true);
     } catch (Exception e) {

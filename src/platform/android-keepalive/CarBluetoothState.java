@@ -132,7 +132,7 @@ public final class CarBluetoothState {
       }
       bind(app, adapter, profile);
     }
-    resweep(app);
+    resweepAndSyncDemand(app);
   }
 
   private static void bind(Context app, BluetoothAdapter adapter, int profile) {
@@ -151,7 +151,7 @@ public final class CarBluetoothState {
               Log.i(TAG, "car BT profile proxy bound (" + p + ")");
               // This callback is delivered on the main looper — read the devices
               // on a worker so the very thread a cold wake needs stays free.
-              new Thread(() -> resweep(app), "gateauto-bt-seed").start();
+              new Thread(() -> resweepAndSyncDemand(app), "gateauto-bt-seed").start();
             }
 
             @Override
@@ -294,6 +294,15 @@ public final class CarBluetoothState {
     synchronized (LOCK) {
       return !proxies.isEmpty();
     }
+  }
+
+  /**
+   * After a full profile seed, turn GPS on or off to match the listed-car
+   * cache. Never starts a location FGS from this callback.
+   */
+  private static void resweepAndSyncDemand(Context app) {
+    resweep(app);
+    LocationDemand.sync(app, false);
   }
 
   /**

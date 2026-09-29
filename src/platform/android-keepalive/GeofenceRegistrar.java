@@ -152,6 +152,11 @@ public final class GeofenceRegistrar {
    */
   public static boolean register(Context context, boolean initialTrigger) {
     Context app = context.getApplicationContext();
+    if (!LocationDemand.needsContinuousLocation(app)) {
+      Log.i(TAG, "native geofence register skip — waiting for listed car Bluetooth");
+      unregister(app);
+      return false;
+    }
     String json = regionsJson(app);
     String sig = fenceSignature(json);
     if (fenceSigUnchanged(app, sig)) {
@@ -226,6 +231,11 @@ public final class GeofenceRegistrar {
    */
   public static void refresh(Context context) {
     Context app = context.getApplicationContext();
+    if (!LocationDemand.needsContinuousLocation(app)) {
+      Log.i(TAG, "native geofence refresh skip — waiting for listed car Bluetooth");
+      unregister(app);
+      return;
+    }
     String json = regionsJson(app);
     List<Geofence> geofences = parseGeofences(json);
     if (geofences.isEmpty()) {

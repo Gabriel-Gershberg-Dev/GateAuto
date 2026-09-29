@@ -76,8 +76,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       () -> {
         PowerManager.WakeLock wakeLock = acquireRecoverWakeLock(app);
         try {
-          GeofenceRegistrar.refresh(app);
-          PalGateNativeOpen.pollNearby(app, "recover");
+          recoverIfDemanded(app, true);
         } finally {
           releaseWakeLock(wakeLock);
         }
@@ -117,10 +116,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       () -> {
         PowerManager.WakeLock wakeLock = acquireRecoverWakeLock(app);
         try {
-          if (reregister) {
-            GeofenceRegistrar.refresh(app);
-          }
-          PalGateNativeOpen.pollNearby(app, "recover");
+          recoverIfDemanded(app, reregister);
         } finally {
           releaseWakeLock(wakeLock);
           new Handler(Looper.getMainLooper()).post(pending::finish);
@@ -128,6 +124,18 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       },
       "gateauto-" + reason
     ).start();
+  }
+
+  private static void recoverIfDemanded(Context app, boolean reregister) {
+    if (!LocationDemand.needsContinuousLocation(app)) {
+      Log.i(TAG, "native recover skip — waiting for listed car Bluetooth");
+      LocationDemand.sync(app, false);
+      return;
+    }
+    if (reregister) {
+      GeofenceRegistrar.refresh(app);
+    }
+    PalGateNativeOpen.pollNearby(app, "recover");
   }
 
   private static PowerManager.WakeLock acquireRecoverWakeLock(Context context) {

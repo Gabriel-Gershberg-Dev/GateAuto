@@ -386,6 +386,10 @@ public final class PalGateNativeOpen {
       Log.i(TAG, "native poll skip — not armed");
       return;
     }
+    if (!LocationDemand.needsContinuousLocation(context)) {
+      Log.i(TAG, "native poll skip — waiting for listed car Bluetooth");
+      return;
+    }
     // Keep the car-BT proxies bound and the cached device set fresh, so the next
     // open never has to wait for a Bluetooth read. Returns immediately once
     // bound; never blocks this poll.

@@ -43,6 +43,14 @@ public class KeepAliveService extends HeadlessJsTaskService {
     @Nullable String name,
     @Nullable String address
   ) {
+    String why = reason == null ? "poll" : reason;
+    if ("poll".equals(why) && !LocationDemand.needsContinuousLocation(context)) {
+      android.util.Log.i(
+        "GateAutoKeepAlive",
+        "KeepAliveService.startJs skip — waiting for listed car Bluetooth"
+      );
+      return;
+    }
     if (!running.compareAndSet(false, true)) {
       android.util.Log.i("GateAutoKeepAlive", "KeepAliveService.startJs skip — already running");
       GateAutoTelemetry.keepaliveTick(context, "skip");

@@ -5,9 +5,17 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.51** (versionCode 52).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.53** (versionCode 54).
 
 Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, and `v1.0.48`.
+
+## 1.0.53 — 2026-09-20 (beta)
+
+Auto-open no longer starts the leftover Expo GPS stream or Play fences when every auto-on gate is Bluetooth-required (or manual). The status-bar location indicator should stay off until a listed car connects.
+
+## 1.0.52 — 2026-09-20 (beta)
+
+When every auto-open gate requires a listed car (manual gates ignored), GPS and Play fences stay off until that car connects. A proximity-only auto gate still keeps location on as before.
 
 ## 1.0.51 — 2026-09-20 (beta)
 

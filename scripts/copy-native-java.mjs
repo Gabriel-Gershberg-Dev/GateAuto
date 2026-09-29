@@ -47,6 +47,7 @@ copyDirFiles(
     'HoldService.java',
     'BtConnectReceiver.java',
     'CarBluetoothState.java',
+    'LocationDemand.java',
     'PalGateAes.java',
     'PalGateToken.java',
     'PalGateNativeOpen.java',

@@ -79,6 +79,7 @@ import {
   startMonitoringKeepAlive,
   stopMonitoringKeepAlive,
 } from './monitoringKeepAlive';
+import { jsNeedsContinuousLocation } from './locationDemandRuntime';
 import {
   setNativeKeepAliveArmed,
   getNativeKeepAliveArmed,
@@ -420,6 +421,12 @@ function isUiForeground(): boolean {
 async function startBackgroundHelpers(): Promise<void> {
   ensureBtConnectHandlerWired();
   await startBluetoothConnectMonitor();
+  const gates = await loadGates();
+  if (!(await jsNeedsContinuousLocation(true, gates))) {
+    await stopMonitoringKeepAlive();
+    console.log('[GateAuto] skip location FGS — waiting for listed car Bluetooth');
+    return;
+  }
   // Location FGS only from the UI process. Samsung rejects
   // startForegroundService after Home / lock. A settings save that
   // finishes after the user backgrounds must not tear down or start FGS.
@@ -589,7 +596,8 @@ export async function syncGeofences(): Promise<void> {
   // Clear leftover noisy stickies from older builds (keep-alive has its own FGS notif).
   await dismissArmedSticky();
 
-  if (enabled.length === 0) {
+  const needLocation = await jsNeedsContinuousLocation(true, allGates);
+  if (enabled.length === 0 || !needLocation) {
     await stopExpoGeofencing();
     await startBackgroundHelpers();
     return;
@@ -604,8 +612,14 @@ export async function startMonitoring(): Promise<void> {
   await hydrateUserScope();
   await setMonitoringEnabled(true);
   // Location FGS from the UI process *before* other awaits — Android 12+
-  // rejects startForegroundService after the user locks.
-  await startMonitoringKeepAlive();
+  // rejects startForegroundService after the user locks. Skip GPS when every
+  // auto-on gate is waiting for a listed car.
+  const armGates = await loadGates();
+  if (await jsNeedsContinuousLocation(true, armGates)) {
+    await startMonitoringKeepAlive();
+  } else {
+    await stopMonitoringKeepAlive();
+  }
   try {
     await syncGeofences();
     await persistArmedAt();
@@ -1136,6 +1150,8 @@ export async function handleBluetoothDeviceConnected(
     return;
   }
 
+  await startBackgroundHelpers();
+
   await appendEvent({
     kind: 'info',
     message: `BT connect heard: ${device.name}${device.address ? ` (${device.address})` : ''} — checking gates…`,
@@ -1224,6 +1240,13 @@ export async function checkEligibleNowAndOpen(
 
     const gates = await getEnabledGeofenceGates();
     if (gates.length === 0) return;
+    const allGates = await loadGates();
+    if (!(await jsNeedsContinuousLocation(true, allGates))) {
+      console.log(
+        `[GateAuto] eligible-now skip (${reason}) — waiting for listed car Bluetooth`,
+      );
+      return;
+    }
 
     const now = Date.now();
 
@@ -1319,6 +1342,11 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
 
     const gates = await getEnabledGeofenceGates();
     if (gates.length === 0) return;
+    const allGates = await loadGates();
+    if (!(await jsNeedsContinuousLocation(true, allGates))) {
+      await stopMonitoringKeepAlive();
+      return;
+    }
 
     for (const gate of gates) {
       const label = displayGateName(gate);

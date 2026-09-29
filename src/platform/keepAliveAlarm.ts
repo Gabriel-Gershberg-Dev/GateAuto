@@ -10,6 +10,7 @@ type GateAutoKeepAliveNative = {
   setArmed(armed: boolean): Promise<boolean>;
   isArmed?(): Promise<boolean>;
   startLocationFgs?(): Promise<boolean>;
+  needsContinuousLocation?(): Promise<boolean>;
   syncRegions?(json: string): Promise<boolean>;
   getRegionsJson?(): Promise<string>;
   scheduleCooldownWake?(delayMs: number): Promise<boolean>;
@@ -147,6 +148,17 @@ export async function getAutoOpenOsStatus(): Promise<AutoOpenOsStatus | null> {
       bluetoothScanGranted: asBool(raw.bluetoothScanGranted),
       bluetoothAdapterEnabled: asBool(raw.bluetoothAdapterEnabled),
     };
+  } catch {
+    return null;
+  }
+}
+
+/** Native LocationDemand, or null when the module is missing. */
+export async function getNativeNeedsContinuousLocation(): Promise<boolean | null> {
+  const native = getNative();
+  if (!native?.needsContinuousLocation) return null;
+  try {
+    return Boolean(await native.needsContinuousLocation());
   } catch {
     return null;
   }

@@ -30,6 +30,7 @@ import com.facebook.react.HeadlessJsTaskService;
 import com.gateauto.app.keepalive.GeofenceRegistrar;
 import com.gateauto.app.keepalive.KeepAlivePrefs;
 import com.gateauto.app.keepalive.KeepAliveScheduler;
+import com.gateauto.app.keepalive.LocationDemand;
 
 /**
  * Re-sync geofences after reboot / update. Play Services clears geofence
@@ -58,7 +59,7 @@ public class BootReceiver extends BroadcastReceiver {
     }
     if (KeepAlivePrefs.isArmed(context)) {
       KeepAliveScheduler.start(context);
-      GeofenceRegistrar.register(context, false);
+      LocationDemand.sync(context, false);
     }
     Intent service = new Intent(context, BootSyncService.class);
     HeadlessJsTaskService.acquireWakeLockNow(context);

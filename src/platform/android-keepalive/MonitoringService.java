@@ -171,6 +171,10 @@ public class MonitoringService extends Service {
    */
   public static void start(Context context) {
     if (!KeepAlivePrefs.isArmed(context)) return;
+    if (!LocationDemand.needsContinuousLocation(context)) {
+      Log.i(TAG, "location FGS skip — waiting for listed car Bluetooth");
+      return;
+    }
     Intent intent = new Intent(context, MonitoringService.class);
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -219,7 +223,7 @@ public class MonitoringService extends Service {
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    if (!KeepAlivePrefs.isArmed(this)) {
+    if (!KeepAlivePrefs.isArmed(this) || !LocationDemand.needsContinuousLocation(this)) {
       stopSelf();
       return START_NOT_STICKY;
     }
