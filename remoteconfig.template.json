@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "64"
+        "value": "65"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.63"
+        "value": "1.0.64"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Hebrew reads right to left: wrapped lines start on the right, settings arrows point left, and the on side of every switch is on the left, including on Xiaomi. Includes 1.0.62: reopening after swiping the app away no longer sticks on startup."
+        "value": "Address search lists every matching place as you type. Pick the city before the pin drops, so the same street in Tel Aviv and Ramat Gan stays two choices."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

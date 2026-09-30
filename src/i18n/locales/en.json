@@ -527,6 +527,7 @@
     "coords": "Coordinates",
     "map": "Map",
     "findStreet": "Find a street",
+    "pickOne": "Several places match. Pick the right one.",
     "noMatch": "No match for that address",
     "lookupFail": "Couldn’t look up that address",
     "droppedPin": "Dropped pin",

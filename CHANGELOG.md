@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.63** (versionCode 64).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.64** (versionCode 65).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, and `v1.0.63`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, and `v1.0.64`.
+
+## 1.0.64 — 2026-09-30 (beta)
+
+Address search lists every matching place as you type. The same street in two cities stays as two rows, and the pin moves only after you tap one.
 
 ## 1.0.63 — 2026-09-30 (beta)
 

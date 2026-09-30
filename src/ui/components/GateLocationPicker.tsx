@@ -1,13 +1,21 @@
 import * as Location from 'expo-location';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { isolateBidiText } from '../../i18n/bidi';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
+import { lookupAddresses } from '../addressLookup';
+import {
+  addressSuggestions,
+  type AddressSuggestion,
+} from '../addressSearch';
 import { useTheme } from '../ThemeProvider';
 import { formatCoordPair, formatStreetName } from '../streetName';
 import { radii, spacing, type ThemeColors } from '../theme';
@@ -88,6 +96,7 @@ export function GateLocationPicker({
 }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [mode, setMode] = useState<Mode>(mapsEnabled ? 'map' : 'coords');
   const [streetView, setStreetView] = useState<{
@@ -99,8 +108,12 @@ export function GateLocationPicker({
   const [viewLat, setViewLat] = useState(lat ?? DEFAULT_LAT);
   const [viewLng, setViewLng] = useState(lng ?? DEFAULT_LNG);
   const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [searchHint, setSearchHint] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const searchGen = useRef(0);
+  /** After a pick, don't reopen the list for the label we just wrote. */
+  const pickedQuery = useRef<string | null>(null);
   const [fullMap, setFullMap] = useState(false);
 
   useEffect(() => {
@@ -136,26 +149,44 @@ export function GateLocationPicker({
     };
   }, [lat, lng, viewLat, viewLng]);
 
-  const runSearch = async () => {
+  useEffect(() => {
     const q = query.trim();
-    if (!q || searching) return;
-    setSearching(true);
-    setSearchHint(null);
-    try {
-      const hits = await Location.geocodeAsync(q);
-      const first = hits[0];
-      if (!first) {
-        setSearchHint(t('map.noMatch'));
-        return;
-      }
-      setViewLat(first.latitude);
-      setViewLng(first.longitude);
-      onProposePin(first.latitude, first.longitude);
-    } catch {
-      setSearchHint(t('map.lookupFail'));
-    } finally {
-      setSearching(false);
+    if (q.length < 2 || q === pickedQuery.current) {
+      setSuggestions([]);
+      if (q.length < 2) setSearchHint(null);
+      return;
     }
+    const gen = ++searchGen.current;
+    const timer = setTimeout(() => {
+      setSearching(true);
+      setSearchHint(null);
+      void lookupAddresses(q)
+        .then((hits) => {
+          if (gen !== searchGen.current) return;
+          const next = addressSuggestions(hits);
+          setSuggestions(next);
+          setSearchHint(next.length === 0 ? t('map.noMatch') : null);
+        })
+        .catch(() => {
+          if (gen !== searchGen.current) return;
+          setSuggestions([]);
+          setSearchHint(t('map.lookupFail'));
+        })
+        .finally(() => {
+          if (gen === searchGen.current) setSearching(false);
+        });
+    }, 320);
+    return () => clearTimeout(timer);
+  }, [query, t]);
+
+  const pickSuggestion = (item: AddressSuggestion) => {
+    pickedQuery.current = item.title;
+    setQuery(item.title);
+    setSuggestions([]);
+    setSearchHint(null);
+    setViewLat(item.latitude);
+    setViewLng(item.longitude);
+    onProposePin(item.latitude, item.longitude);
   };
 
   const hasPin = lat != null && lng != null;
@@ -195,30 +226,83 @@ export function GateLocationPicker({
 
       {mode === 'map' && mapsEnabled ? (
         <>
-          <View style={styles.searchRow}>
+          <View style={styles.searchField}>
             <TextInput
-              style={styles.search}
+              style={[
+                styles.search,
+                searching && styles.searchBusy,
+                { writingDirection, textAlign },
+              ]}
               value={query}
-              onChangeText={setQuery}
-              onSubmitEditing={() => void runSearch()}
+              onChangeText={(text) => {
+                pickedQuery.current = null;
+                setQuery(text);
+              }}
               placeholder={t('map.findStreet')}
               placeholderTextColor={colors.muted}
               returnKeyType="search"
               autoCorrect={false}
             />
-            <Pressable
-              onPress={() => void runSearch()}
-              style={[styles.searchGo, searching && styles.disabled]}
-              disabled={searching}
-            >
-              {searching ? (
-                <ActivityIndicator color={colors.primaryOn} size="small" />
-              ) : (
-                <Text style={styles.searchGoText}>Go</Text>
-              )}
-            </Pressable>
+            {searching ? (
+              <ActivityIndicator
+                color={colors.primary}
+                size="small"
+                style={styles.searchSpin}
+              />
+            ) : null}
           </View>
-          {searchHint ? <Text style={styles.searchHint}>{searchHint}</Text> : null}
+          {suggestions.length > 1 ? (
+            <Text style={[styles.searchHint, { writingDirection, textAlign }]}>
+              {t('map.pickOne')}
+            </Text>
+          ) : null}
+          {suggestions.length > 0 ? (
+            <ScrollView
+              style={styles.suggestList}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {suggestions.map((item, index) => (
+                <Pressable
+                  key={item.key}
+                  onPress={() => pickSuggestion(item)}
+                  android_ripple={{ color: colors.surfacePressed }}
+                  style={({ pressed }) => [
+                    styles.suggestRow,
+                    { flexDirection: row },
+                    index > 0 && styles.suggestDivider,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.suggestTick} />
+                  <View style={styles.suggestCopy}>
+                    <Text
+                      style={[styles.suggestTitle, { writingDirection, textAlign }]}
+                      numberOfLines={2}
+                    >
+                      {isolateBidiText(item.title, isRtl)}
+                    </Text>
+                    {item.subtitle ? (
+                      <Text
+                        style={[
+                          styles.suggestSubtitle,
+                          { writingDirection, textAlign },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {isolateBidiText(item.subtitle, isRtl)}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+          {searchHint ? (
+            <Text style={[styles.searchHint, { writingDirection, textAlign }]}>
+              {searchHint}
+            </Text>
+          ) : null}
 
           <View style={styles.mapCard}>
             <View style={styles.mapBox}>
@@ -545,12 +629,10 @@ function createStyles(c: ThemeColors) {
     pressed: {
       opacity: 0.88,
     },
-    searchRow: {
-      flexDirection: 'row',
-      gap: 8,
+    searchField: {
+      justifyContent: 'center',
     },
     search: {
-      flex: 1,
       height: 44,
       backgroundColor: c.surface,
       borderColor: c.border,
@@ -560,19 +642,50 @@ function createStyles(c: ThemeColors) {
       fontSize: 15,
       color: c.text,
     },
-    searchGo: {
-      width: 52,
-      height: 44,
-      borderRadius: radii.sm,
-      backgroundColor: c.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+    searchBusy: {
+      paddingEnd: 40,
     },
-    searchGoText: {
-      color: c.primaryOn,
-      fontWeight: '700',
+    searchSpin: {
+      position: 'absolute',
+      end: 14,
     },
     searchHint: {
+      fontSize: 13,
+      color: c.muted,
+    },
+    suggestList: {
+      maxHeight: 240,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    suggestRow: {
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    suggestDivider: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.divider,
+    },
+    suggestTick: {
+      width: 3,
+      alignSelf: 'stretch',
+      borderRadius: 2,
+      backgroundColor: c.primary,
+    },
+    suggestCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    suggestTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: c.text,
+    },
+    suggestSubtitle: {
       fontSize: 13,
       color: c.muted,
     },

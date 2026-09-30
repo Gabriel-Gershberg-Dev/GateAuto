@@ -2,6 +2,8 @@ package com.gateauto.app.keepalive;
 
 import android.app.Activity;
 import android.content.Context;
+import android.location.Address;
+import android.location.Geocoder;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.os.Handler;
@@ -10,6 +12,9 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import java.util.List;
+import java.util.Locale;
+
 import com.facebook.react.ReactApplication;
 import com.facebook.react.ReactHost;
 import com.facebook.react.bridge.Arguments;
@@ -17,6 +22,7 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.module.annotations.ReactModule;
 
@@ -545,6 +551,70 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       Log.w(NAME, "reportStaleNetwork failed", t);
       promise.resolve(false);
     }
+  }
+
+  /** Several hits, so "דרך ירושלים 2" can be Ramat Gan or Tel Aviv. */
+  private static final int ADDRESS_LIMIT = 8;
+  /** Prefer Israel, then search worldwide if that box is empty. */
+  private static final double IL_SOUTH = 29.45;
+  private static final double IL_WEST = 34.17;
+  private static final double IL_NORTH = 33.40;
+  private static final double IL_EAST = 35.92;
+
+  /**
+   * Address choices for the gate pin. The platform geocoder's one-hit lookup
+   * pinned the first city and never asked. Does not require a location fix.
+   */
+  @ReactMethod
+  public void searchAddresses(String query, Promise promise) {
+    String q = query == null ? "" : query.trim();
+    if (q.isEmpty() || !Geocoder.isPresent()) {
+      promise.resolve(Arguments.createArray());
+      return;
+    }
+    Context ctx = getReactApplicationContext();
+    new Thread(
+      () -> {
+        try {
+          Geocoder geocoder = new Geocoder(ctx, Locale.getDefault());
+          List<Address> hits =
+            geocoder.getFromLocationName(q, ADDRESS_LIMIT, IL_SOUTH, IL_WEST, IL_NORTH, IL_EAST);
+          if (hits == null || hits.isEmpty()) {
+            hits = geocoder.getFromLocationName(q, ADDRESS_LIMIT);
+          }
+          promise.resolve(addressesToArray(hits));
+        } catch (Exception e) {
+          Log.w(NAME, "searchAddresses failed", e);
+          promise.reject("address_search", e);
+        }
+      },
+      "gateauto-address"
+    ).start();
+  }
+
+  private static WritableArray addressesToArray(List<Address> hits) {
+    WritableArray out = Arguments.createArray();
+    if (hits == null) return out;
+    for (Address address : hits) {
+      if (address == null || !address.hasLatitude() || !address.hasLongitude()) continue;
+      WritableMap row = Arguments.createMap();
+      row.putDouble("latitude", address.getLatitude());
+      row.putDouble("longitude", address.getLongitude());
+      putAddress(row, "street", address.getThoroughfare());
+      putAddress(row, "streetNumber", address.getSubThoroughfare());
+      putAddress(row, "city", address.getLocality());
+      putAddress(row, "district", address.getSubLocality());
+      String line =
+        address.getMaxAddressLineIndex() >= 0 ? address.getAddressLine(0) : null;
+      putAddress(row, "formattedAddress", line);
+      out.pushMap(row);
+    }
+    return out;
+  }
+
+  private static void putAddress(WritableMap row, String key, String value) {
+    if (value == null || value.trim().isEmpty()) return;
+    row.putString(key, value.trim());
   }
 
   /**
