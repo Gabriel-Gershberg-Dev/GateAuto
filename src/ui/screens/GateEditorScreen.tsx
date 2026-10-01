@@ -124,7 +124,7 @@ function toGateBtDevice(device: ConnectedBtDevice): GateBluetoothDevice | null {
 export function GateEditorScreen({ navigation, route }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { row } = useRtlLayout();
+  const { row, inputAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { gateId } = route.params;
   const [gate, setGate] = useState<GateConfig | null>(null);
@@ -502,7 +502,7 @@ export function GateEditorScreen({ navigation, route }: Props) {
     >
       <Text style={styles.label}>{t('editor.displayName')}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { textAlign: inputAlign }]}
         value={name}
         onChangeText={setName}
         placeholder={gate.name || t('editor.gateName')}

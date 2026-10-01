@@ -280,7 +280,10 @@ public final class PalGateNativeOpen {
   ) {
     JSONArray arr = GeofenceRegistrar.regionsArray(context);
     if (arr == null) return;
-    Location last = lastLocation(context);
+    // Read only once a listed car matched: a TV, PC or earbuds reconnecting
+    // every minute must not light the location indicator.
+    Location last = null;
+    boolean located = false;
     for (int i = 0; i < arr.length(); i++) {
       JSONObject gate = arr.optJSONObject(i);
       if (gate == null) continue;
@@ -298,6 +301,10 @@ public final class PalGateNativeOpen {
             + " is not a listed car"
         );
         continue;
+      }
+      if (!located) {
+        last = lastLocation(context);
+        located = true;
       }
       if (last == null || !withinFence(gate, last, 1.0)) {
         double meters = last == null ? Double.NaN : distanceMeters(gate, last);
@@ -350,6 +357,11 @@ public final class PalGateNativeOpen {
    * gate so a 40m pin waking the process also opens clustered 25m pins.
    */
   public static void onFenceWake(Context context, Location triggering) {
+    if (!LocationDemand.needsContinuousLocation(context)) {
+      Log.i(TAG, "native fence-wake skip — location not needed, dropping stale fences");
+      GeofenceRegistrar.unregister(context);
+      return;
+    }
     Location fresh = currentLocation(context, true);
     Location loc = fresh != null ? fresh : triggering;
     if (loc != null) {

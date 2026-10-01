@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "65"
+        "value": "66"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.64"
+        "value": "1.0.65"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Address search lists every matching place as you type. Pick the city before the pin drops, so the same street in Tel Aviv and Ramat Gan stays two choices."
+        "value": "Location stays off while your gates wait for the car's Bluetooth, and there is no 'Auto-open is running' notice when nothing needs it. Address search shows Google Maps suggestions as you type, and the Hebrew search box sits on the right."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.64** (versionCode 65).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.65** (versionCode 66).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, and `v1.0.64`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, and `v1.0.65`.
+
+## 1.0.65 — 2026-10-01 (beta)
+
+Location stays off while every auto-open gate waits for a listed car. Play kept GPS-checking a leftover Expo geofence copy every ~10 minutes all night after the car disconnected, because only the app screen removed it; on Android the native fences are now the only ones, and they drop with demand. A TV, PC or earbuds connecting over Bluetooth no longer reads location, a fence wake or MonitoringService restart without demand no longer turns GPS on, and a car disconnect that lands mid-sync is applied instead of dropped. With nothing needing location there is no background hold, so no "Auto-open is running" notice; when there is one, it is posted once and stays gone after a swipe. Brief boot and gate-check notices are deferred so a quick run never reaches the shade. Address search uses Google Places autocomplete, so the list grows with every letter like Google Maps, with the geocoder as fallback. The Hebrew search box, its hint and the gate name field sit on the right, and pin coordinates read "lat, lng" instead of flipping to "lng ,lat".
 
 ## 1.0.64 — 2026-09-30 (beta)
 

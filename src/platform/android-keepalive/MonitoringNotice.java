@@ -373,6 +373,21 @@ public final class MonitoringNotice {
     return 0;
   }
 
+  /**
+   * An app update or kill can leave the old process's notice in the shade with
+   * no service behind it. Take it down when nothing holds the process.
+   */
+  static void clearUnowned(Context context) {
+    if (context == null) return;
+    final Context app = context.getApplicationContext();
+    WORKER.execute(
+      () -> {
+        if (MonitoringService.isRunning() || HoldService.isRunning()) return;
+        cancelBoth(app);
+      }
+    );
+  }
+
   private static void cancelBoth(Context app) {
     try {
       NotificationManagerCompat nm = NotificationManagerCompat.from(app);

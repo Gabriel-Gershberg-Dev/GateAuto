@@ -119,9 +119,11 @@ public class BootSyncService extends HeadlessJsTaskService {
         .setContentTitle("GateAuto")
         .setContentText("Restoring geofence monitoring…")
         .setSmallIcon(R.mipmap.ic_launcher)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setSilent(true)
         .setOngoing(false)
+        .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
         .build();
     startForeground(NOTIF_ID, notification);
   }

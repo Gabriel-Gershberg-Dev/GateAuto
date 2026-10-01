@@ -71,6 +71,7 @@ copyDirFiles(
     'BtConnectReceiver.java',
     'CarBluetoothState.java',
     'LocationDemand.java',
+    'PlacesSearch.java',
     'PalGateAes.java',
     'PalGateToken.java',
     'PalGateNativeOpen.java',

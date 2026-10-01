@@ -81,6 +81,7 @@ import {
 } from './monitoringKeepAlive';
 import { jsNeedsContinuousLocation } from './locationDemandRuntime';
 import {
+  hasNativeKeepAlive,
   setNativeKeepAliveArmed,
   getNativeKeepAliveArmed,
   startNativeLocationFgs,
@@ -499,6 +500,16 @@ async function stopExpoGeofencing(): Promise<void> {
   }
 }
 
+/**
+ * An Expo fence registered by an older build fired on Android, where the
+ * native receiver already handles the same Play transition. Remove it.
+ */
+async function dropLeftoverExpoFences(): Promise<boolean> {
+  if (!hasNativeKeepAlive()) return false;
+  await stopExpoGeofencing();
+  return true;
+}
+
 async function startExpoGeofencing(
   regions: Location.LocationRegion[],
 ): Promise<void> {
@@ -597,7 +608,10 @@ export async function syncGeofences(): Promise<void> {
   await dismissArmedSticky();
 
   const needLocation = await jsNeedsContinuousLocation(true, allGates);
-  if (enabled.length === 0 || !needLocation) {
+  // Android: native GeofenceRegistrar owns the Play fences and drops them the
+  // moment location is no longer needed. An Expo copy is only removed from the
+  // UI, so after a car disconnect it kept Play hunting GPS all night.
+  if (enabled.length === 0 || !needLocation || hasNativeKeepAlive()) {
     await stopExpoGeofencing();
     await startBackgroundHelpers();
     return;
@@ -975,6 +989,7 @@ async function performOpen(
  * → re-check radius → open. Play ENTER alone is not enough.
  */
 export async function handleGeofenceEnter(regionIdentifier: string): Promise<void> {
+  if (await dropLeftoverExpoFences()) return;
   if (!(await isMonitoringLive())) return;
   const gate = await getGate(regionIdentifier);
   if (!gate || !gate.enabled) {
@@ -1065,6 +1080,7 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
  * radius×2) → BT → re-check radius → open. No High GPS wait when already inside.
  */
 export async function handleGeofenceExit(regionIdentifier: string): Promise<void> {
+  if (await dropLeftoverExpoFences()) return;
   if (!(await isMonitoringLive())) return;
   const gate = await getGate(regionIdentifier);
   if (!gate || !gate.enabled) {

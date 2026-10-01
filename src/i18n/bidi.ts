@@ -38,6 +38,15 @@ export function logicalTextAlign(
   return wantRtl === nativeRtl ? 'left' : 'right';
 }
 
+/**
+ * TextInput is the exception: Android maps its `textAlign` straight to
+ * Gravity.LEFT / RIGHT with no RTL swap, so the typed text and the hint need
+ * the physical side.
+ */
+export function inputTextAlign(wantRtl: boolean): 'left' | 'right' {
+  return wantRtl ? 'right' : 'left';
+}
+
 /** Versions, ranges and codes read left-to-right inside Hebrew text. */
 export function ltrIsolate(text: string): string {
   return `${LRI}${text}${PDI}`;

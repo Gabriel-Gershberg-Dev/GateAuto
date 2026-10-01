@@ -55,6 +55,7 @@ public class MonitoringService extends Service {
   private final Handler handler = new Handler(Looper.getMainLooper());
   private FusedLocationProviderClient fused;
   private volatile boolean nearMode;
+  private boolean watching;
 
   public static boolean isRunning() {
     return instance != null;
@@ -120,6 +121,11 @@ public class MonitoringService extends Service {
 
   private final LocationListener locationListener =
     location -> {
+      if (!demanded()) {
+        Log.i(TAG, "location fix after demand ended — stopping GPS");
+        LocationDemand.sync(getApplicationContext(), false);
+        return;
+      }
       KeepAlivePrefs.markMonitorCheck(MonitoringService.this);
       MonitoringNotice.update(MonitoringService.this);
       final Location loc = location;
@@ -153,7 +159,8 @@ public class MonitoringService extends Service {
     new Runnable() {
       @Override
       public void run() {
-        if (!KeepAlivePrefs.isArmed(MonitoringService.this)) {
+        if (!demanded()) {
+          LocationDemand.sync(getApplicationContext(), false);
           stopSelf();
           return;
         }
@@ -220,6 +227,21 @@ public class MonitoringService extends Service {
     // Retire the non-location HoldService only once this service really holds
     // the process, so only one "Searching for nearby gates" notice is shown.
     if (foreground) HoldService.stop(this);
+    // A sticky restart after the car left: onStartCommand stops us. Never turn
+    // on fences or GPS on the way out.
+    if (demanded()) startWatching();
+    GateAutoTelemetry.refreshKeys(this);
+    GateAutoTelemetry.permissionState(this);
+    Log.i(TAG, "MonitoringService started (searching, pinned)");
+  }
+
+  private boolean demanded() {
+    return KeepAlivePrefs.isArmed(this) && LocationDemand.needsContinuousLocation(this);
+  }
+
+  private void startWatching() {
+    if (watching) return;
+    watching = true;
     GeofenceRegistrar.register(this, false);
     ApproachSampler.stop();
     startLocationUpdates(false);
@@ -227,20 +249,19 @@ public class MonitoringService extends Service {
     KeepAliveModule.requestJsPoll(this);
     handler.postDelayed(reregister, REREGISTER_MS);
     handler.postDelayed(refreshNotice, NOTICE_REFRESH_MS);
-    GateAutoTelemetry.refreshKeys(this);
-    GateAutoTelemetry.permissionState(this);
-    Log.i(TAG, "MonitoringService started (searching, pinned)");
   }
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    if (!KeepAlivePrefs.isArmed(this) || !LocationDemand.needsContinuousLocation(this)) {
+    if (!demanded()) {
       stopSelf();
       return START_NOT_STICKY;
     }
-    promoteOrHideNotice();
+    // Re-posting on every start would bring back a notice the user swiped away.
+    if (!foreground) promoteOrHideNotice();
     if (foreground) HoldService.stop(this);
     else HoldService.ensure(this);
+    startWatching();
     return START_STICKY;
   }
 

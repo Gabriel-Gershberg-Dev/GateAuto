@@ -10,12 +10,21 @@ export type AddressHit = {
   formattedAddress?: string | null;
 };
 
+/** Google Places autocomplete row; located only once picked. */
+export type PlacePrediction = {
+  placeId: string;
+  title: string;
+  subtitle?: string | null;
+};
+
 export type AddressSuggestion = {
   key: string;
   title: string;
   subtitle: string;
-  latitude: number;
-  longitude: number;
+  /** Places rows carry an id instead of coordinates. */
+  placeId?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 function clean(value: string | null | undefined): string {
@@ -62,6 +71,23 @@ export function addressSuggestions(hits: AddressHit[]): AddressSuggestion[] {
       latitude: hit.latitude,
       longitude: hit.longitude,
     });
+  }
+  return out;
+}
+
+/** Autocomplete rows, country dropped from the secondary line, duplicates folded. */
+export function placeSuggestions(rows: PlacePrediction[]): AddressSuggestion[] {
+  const out: AddressSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const placeId = clean(row.placeId);
+    const title = clean(row.title);
+    if (!placeId || !title) continue;
+    const subtitle = addressParts(clean(row.subtitle)).join(', ');
+    const label = `${title}\n${subtitle}`.toLocaleLowerCase();
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push({ key: `place:${placeId}`, title, subtitle, placeId });
   }
   return out;
 }

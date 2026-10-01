@@ -47,6 +47,7 @@ public class HoldService extends Service {
 
   private static volatile boolean running = false;
   private static volatile HoldService instance;
+  private boolean foreground;
 
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final Runnable refreshNotice =
@@ -84,6 +85,9 @@ public class HoldService extends Service {
     if (context == null) return;
     Context app = context.getApplicationContext();
     if (!KeepAlivePrefs.isArmed(app)) return;
+    // Every auto gate waits for a listed car: the car-connect broadcast wakes
+    // the process by itself, so a hold would only pin a notice in the shade.
+    if (!LocationDemand.needsContinuousLocation(app)) return;
     // Location FGS already holds the process — no need for a second FGS.
     if (MonitoringService.isForeground()) return;
     if (running) return;
@@ -133,7 +137,7 @@ public class HoldService extends Service {
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    if (!KeepAlivePrefs.isArmed(this)) {
+    if (!KeepAlivePrefs.isArmed(this) || !LocationDemand.needsContinuousLocation(this)) {
       stopSelf();
       return START_NOT_STICKY;
     }
@@ -142,7 +146,8 @@ public class HoldService extends Service {
       stopSelf();
       return START_NOT_STICKY;
     }
-    promote();
+    // Re-posting on every start would bring back a notice the user swiped away.
+    if (!foreground) promote();
     return START_STICKY;
   }
 
@@ -153,6 +158,7 @@ public class HoldService extends Service {
           ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
           : 0;
       MonitoringNotice.startForegroundHonoringPreference(this, NOTIF_ID, type);
+      foreground = true;
     } catch (Exception e) {
       Log.w(TAG, "HoldService.promote startForeground failed", e);
       stopSelf();

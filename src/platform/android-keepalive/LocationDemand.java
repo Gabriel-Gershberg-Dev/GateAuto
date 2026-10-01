@@ -27,6 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class LocationDemand {
   private static final String TAG = "GateAutoKeepAlive";
   private static final AtomicBoolean syncing = new AtomicBoolean(false);
+  private static final AtomicBoolean pending = new AtomicBoolean(false);
+  private static final AtomicBoolean pendingAllowFgs = new AtomicBoolean(false);
 
   private LocationDemand() {}
 
@@ -136,11 +138,18 @@ public final class LocationDemand {
     if (context == null) return;
     Context ctx = context.getApplicationContext();
     if (!KeepAlivePrefs.isArmed(ctx)) return;
-    if (!syncing.compareAndSet(false, true)) return;
-    try {
-      syncLocked(ctx, allowStartLocationFgs);
-    } finally {
-      syncing.set(false);
+    if (allowStartLocationFgs) pendingAllowFgs.set(true);
+    pending.set(true);
+    // A car disconnect that lands mid-sync must still be applied, or GPS stays
+    // on with the demand that sync computed a moment earlier.
+    while (pending.get() && syncing.compareAndSet(false, true)) {
+      try {
+        while (pending.getAndSet(false)) {
+          syncLocked(ctx, pendingAllowFgs.getAndSet(false));
+        }
+      } finally {
+        syncing.set(false);
+      }
     }
   }
 
@@ -166,7 +175,10 @@ public final class LocationDemand {
       ApproachSampler.stop();
       MonitoringService.stop(ctx);
       GeofenceRegistrar.unregister(ctx);
-      HoldService.ensure(ctx);
+      // Nothing to hold for: the car-connect broadcast cold-starts the process
+      // and re-arms. Keeping the hold only kept a "running" notice up.
+      HoldService.stop(ctx);
+      MonitoringNotice.clearUnowned(ctx);
     }
   }
 }

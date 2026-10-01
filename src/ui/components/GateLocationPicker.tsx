@@ -11,9 +11,15 @@ import {
 } from 'react-native';
 import { isolateBidiText } from '../../i18n/bidi';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
-import { lookupAddresses } from '../addressLookup';
+import {
+  autocompleteAddresses,
+  lookupAddresses,
+  newPlacesSession,
+  placeLocation,
+} from '../addressLookup';
 import {
   addressSuggestions,
+  placeSuggestions,
   type AddressSuggestion,
 } from '../addressSearch';
 import { useTheme } from '../ThemeProvider';
@@ -94,9 +100,9 @@ export function GateLocationPicker({
   mapNonce,
   onGestureLock,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { colors } = useTheme();
-  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
+  const { isRtl, row, writingDirection, textAlign, inputAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [mode, setMode] = useState<Mode>(mapsEnabled ? 'map' : 'coords');
   const [streetView, setStreetView] = useState<{
@@ -114,6 +120,10 @@ export function GateLocationPicker({
   const searchGen = useRef(0);
   /** After a pick, don't reopen the list for the label we just wrote. */
   const pickedQuery = useRef<string | null>(null);
+  const placesSession = useRef(newPlacesSession());
+  /** Rank suggestions around what the map shows, without re-running on pan. */
+  const searchNear = useRef({ lat: lat ?? DEFAULT_LAT, lng: lng ?? DEFAULT_LNG });
+  searchNear.current = { lat: lat ?? viewLat, lng: lng ?? viewLng };
   const [fullMap, setFullMap] = useState(false);
 
   useEffect(() => {
@@ -160,10 +170,18 @@ export function GateLocationPicker({
     const timer = setTimeout(() => {
       setSearching(true);
       setSearchHint(null);
-      void lookupAddresses(q)
-        .then((hits) => {
+      void (async () => {
+        const places = await autocompleteAddresses(q, {
+          session: placesSession.current,
+          lang: i18n.language,
+          near: searchNear.current,
+        });
+        const fromPlaces = places ? placeSuggestions(places) : [];
+        if (fromPlaces.length > 0) return fromPlaces;
+        return addressSuggestions(await lookupAddresses(q));
+      })()
+        .then((next) => {
           if (gen !== searchGen.current) return;
-          const next = addressSuggestions(hits);
           setSuggestions(next);
           setSearchHint(next.length === 0 ? t('map.noMatch') : null);
         })
@@ -175,18 +193,47 @@ export function GateLocationPicker({
         .finally(() => {
           if (gen === searchGen.current) setSearching(false);
         });
-    }, 320);
+    }, 200);
     return () => clearTimeout(timer);
-  }, [query, t]);
+  }, [query, t, i18n.language]);
+
+  const dropPin = (latitude: number, longitude: number) => {
+    setViewLat(latitude);
+    setViewLng(longitude);
+    onProposePin(latitude, longitude);
+  };
 
   const pickSuggestion = (item: AddressSuggestion) => {
     pickedQuery.current = item.title;
+    searchGen.current++;
     setQuery(item.title);
     setSuggestions([]);
     setSearchHint(null);
-    setViewLat(item.latitude);
-    setViewLng(item.longitude);
-    onProposePin(item.latitude, item.longitude);
+    if (item.latitude != null && item.longitude != null) {
+      dropPin(item.latitude, item.longitude);
+      return;
+    }
+    if (!item.placeId) return;
+    const session = placesSession.current;
+    placesSession.current = newPlacesSession();
+    setSearching(true);
+    void (async () => {
+      const place = await placeLocation(item.placeId as string, {
+        session,
+        lang: i18n.language,
+      });
+      if (place) return place;
+      const hits = await lookupAddresses(
+        [item.title, item.subtitle].filter(Boolean).join(', '),
+      );
+      return hits[0] ?? null;
+    })()
+      .then((place) => {
+        if (place) dropPin(place.latitude, place.longitude);
+        else setSearchHint(t('map.lookupFail'));
+      })
+      .catch(() => setSearchHint(t('map.lookupFail')))
+      .finally(() => setSearching(false));
   };
 
   const hasPin = lat != null && lng != null;
@@ -231,7 +278,7 @@ export function GateLocationPicker({
               style={[
                 styles.search,
                 searching && styles.searchBusy,
-                { writingDirection, textAlign },
+                { writingDirection, textAlign: inputAlign },
               ]}
               value={query}
               onChangeText={(text) => {

@@ -110,6 +110,8 @@ public class KeepAliveService extends HeadlessJsTaskService {
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
         .setSilent(true)
         .setOngoing(false)
+        // A check that finishes inside ~10s never reaches the shade.
+        .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
         .build();
     if (Build.VERSION.SDK_INT >= 34) {
       startForeground(

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import en from '../src/i18n/locales/en.json';
 import he from '../src/i18n/locales/he.json';
@@ -13,6 +15,7 @@ import {
   glueTrailingNumber,
   isolateBidiText,
   logicalFlexDirection,
+  inputTextAlign,
   logicalTextAlign,
   LRI,
   ltrIsolate,
@@ -143,6 +146,16 @@ describe('RTL bidi helpers', () => {
     assert.equal(logicalTextAlign(true, true), 'left');
     assert.equal(logicalTextAlign(true, false), 'right');
     assert.equal(logicalTextAlign(false, true), 'right');
+  });
+
+  it('puts TextInput text on the physical reading side, which Android never swaps', () => {
+    assert.equal(inputTextAlign(true), 'right');
+    assert.equal(inputTextAlign(false), 'left');
+    const picker = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'ui', 'components', 'GateLocationPicker.tsx'),
+      'utf8',
+    );
+    assert.ok(picker.includes('{ writingDirection, textAlign: inputAlign }'));
   });
 
   it('gives Hebrew strings an RTL base once, and keeps versions and ranges LTR', () => {

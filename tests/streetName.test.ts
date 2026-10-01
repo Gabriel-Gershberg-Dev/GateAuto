@@ -30,6 +30,11 @@ describe('formatStreetName', () => {
 
 describe('formatCoordPair', () => {
   it('prints six decimal places', () => {
-    assert.equal(formatCoordPair(32.0853, 34.7818), '32.085300, 34.781800');
+    assert.equal(formatCoordPair(32.0853, 34.7818), '\u206632.085300, 34.781800\u2069');
+  });
+
+  it('keeps lat before lng inside Hebrew lines', () => {
+    const pair = formatCoordPair(32.161749, 34.852592);
+    assert.ok(pair.startsWith('\u2066') && pair.endsWith('\u2069'));
   });
 });

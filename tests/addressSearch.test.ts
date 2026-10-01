@@ -2,7 +2,56 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { addressSuggestions } from '../src/ui/addressSearch';
+import { addressSuggestions, placeSuggestions } from '../src/ui/addressSearch';
+
+describe('placeSuggestions', () => {
+  it('lists every autocomplete row with its city and no country', () => {
+    const rows = placeSuggestions([
+      { placeId: 'a', title: 'דרך ירושלים 2', subtitle: 'רמת גן, ישראל' },
+      { placeId: 'b', title: 'דרך ירושלים 2', subtitle: 'תל אביב-יפו, ישראל' },
+      { placeId: 'c', title: 'דרך ירושלים', subtitle: 'ירושלים, Israel' },
+    ]);
+    assert.deepEqual(
+      rows.map((row) => [row.placeId, row.title, row.subtitle]),
+      [
+        ['a', 'דרך ירושלים 2', 'רמת גן'],
+        ['b', 'דרך ירושלים 2', 'תל אביב-יפו'],
+        ['c', 'דרך ירושלים', 'ירושלים'],
+      ],
+    );
+    assert.equal(rows[0].latitude, undefined);
+  });
+
+  it('folds duplicates and skips rows without an id or title', () => {
+    const rows = placeSuggestions([
+      { placeId: 'a', title: 'הרצל 1', subtitle: 'ראשון לציון' },
+      { placeId: 'a2', title: 'הרצל 1', subtitle: 'ראשון לציון, ישראל' },
+      { placeId: '', title: 'nothing' },
+      { placeId: 'x', title: '  ' },
+    ]);
+    assert.equal(rows.length, 1);
+  });
+});
+
+describe('Places autocomplete native', () => {
+  const javaDir = path.join(process.cwd(), 'src', 'platform', 'android-keepalive');
+  const places = fs.readFileSync(path.join(javaDir, 'PlacesSearch.java'), 'utf8');
+
+  it('sends the Android key restriction headers and one billing session', () => {
+    assert.ok(places.includes('"X-Android-Package"'));
+    assert.ok(places.includes('"X-Android-Cert"'));
+    assert.ok(places.includes('"sessionToken"'));
+    assert.ok(places.includes('"location,formattedAddress"'));
+  });
+
+  it('is copied into the Android project', () => {
+    const plugin = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'platform', 'withAndroidKeepAlive.js'),
+      'utf8',
+    );
+    assert.ok(plugin.includes("'PlacesSearch.java'"));
+  });
+});
 
 describe('addressSuggestions', () => {
   it('keeps the same street in two cities as two choices', () => {

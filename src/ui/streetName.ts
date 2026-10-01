@@ -1,3 +1,5 @@
+import { ltrIsolate } from '../i18n/bidi';
+
 export type StreetPlace = {
   formattedAddress?: string | null;
   streetNumber?: string | null;
@@ -35,6 +37,7 @@ export function formatStreetName(place: StreetPlace): string {
   return city;
 }
 
+/** Isolated LTR so a Hebrew line does not render it as "lng ,lat". */
 export function formatCoordPair(lat: number, lng: number): string {
-  return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  return ltrIsolate(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
 }

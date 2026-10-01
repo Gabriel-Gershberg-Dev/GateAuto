@@ -22,6 +22,7 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.module.annotations.ReactModule;
@@ -590,6 +591,77 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       },
       "gateauto-address"
     ).start();
+  }
+
+  /** Google Maps-style suggestions while typing. Rejects so JS can fall back to the geocoder. */
+  @ReactMethod
+  public void placesAutocomplete(ReadableMap req, Promise promise) {
+    String q = req != null && req.hasKey("query") ? req.getString("query") : null;
+    final String query = q == null ? "" : q.trim();
+    if (query.isEmpty()) {
+      promise.resolve(Arguments.createArray());
+      return;
+    }
+    final String session = optString(req, "session");
+    final String lang = optString(req, "lang");
+    final double lat = req.hasKey("lat") ? req.getDouble("lat") : Double.NaN;
+    final double lng = req.hasKey("lng") ? req.getDouble("lng") : Double.NaN;
+    Context ctx = getReactApplicationContext();
+    new Thread(
+      () -> {
+        try {
+          WritableArray out = Arguments.createArray();
+          for (PlacesSearch.Prediction p :
+            PlacesSearch.autocomplete(ctx, query, session, lang, lat, lng)) {
+            WritableMap row = Arguments.createMap();
+            row.putString("placeId", p.placeId);
+            row.putString("title", p.title);
+            row.putString("subtitle", p.subtitle);
+            out.pushMap(row);
+          }
+          promise.resolve(out);
+        } catch (Exception e) {
+          Log.w(NAME, "placesAutocomplete failed: " + e.getMessage());
+          promise.reject("places_autocomplete", e);
+        }
+      },
+      "gateauto-places"
+    ).start();
+  }
+
+  /** Coordinates for a picked suggestion, closing the autocomplete session. */
+  @ReactMethod
+  public void placeLocation(ReadableMap req, Promise promise) {
+    final String placeId = optString(req, "placeId");
+    if (placeId == null || placeId.isEmpty()) {
+      promise.reject("place_location", "missing placeId");
+      return;
+    }
+    final String session = optString(req, "session");
+    final String lang = optString(req, "lang");
+    Context ctx = getReactApplicationContext();
+    new Thread(
+      () -> {
+        try {
+          PlacesSearch.Place place = PlacesSearch.details(ctx, placeId, session, lang);
+          WritableMap row = Arguments.createMap();
+          row.putDouble("latitude", place.latitude);
+          row.putDouble("longitude", place.longitude);
+          putAddress(row, "formattedAddress", place.formattedAddress);
+          promise.resolve(row);
+        } catch (Exception e) {
+          Log.w(NAME, "placeLocation failed: " + e.getMessage());
+          promise.reject("place_location", e);
+        }
+      },
+      "gateauto-place"
+    ).start();
+  }
+
+  private static String optString(ReadableMap req, String key) {
+    if (req == null || !req.hasKey(key) || req.isNull(key)) return null;
+    String value = req.getString(key);
+    return value == null ? null : value.trim();
   }
 
   private static WritableArray addressesToArray(List<Address> hits) {

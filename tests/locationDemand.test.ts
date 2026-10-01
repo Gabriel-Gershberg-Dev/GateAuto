@@ -112,4 +112,60 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     assert.ok(receiver.includes('LocationDemand.sync('));
     assert.ok(monitoring.includes('waiting for listed car Bluetooth'));
   });
+
+  it('applies a sync that lands while another one is running', () => {
+    const body = demand.slice(demand.indexOf('public static void sync('));
+    assert.ok(body.includes('pending.set(true);'));
+    assert.ok(body.includes('while (pending.getAndSet(false))'));
+    assert.ok(!body.includes('if (!syncing.compareAndSet(false, true)) return;'));
+  });
+
+  it('drops the hold, fences and GPS together when nothing needs location', () => {
+    const locked = demand.slice(demand.indexOf('private static void syncLocked'));
+    const idle = locked.slice(locked.indexOf('ApproachSampler.stop();'));
+    assert.ok(idle.includes('GeofenceRegistrar.unregister(ctx);'));
+    assert.ok(idle.includes('HoldService.stop(ctx);'));
+    assert.ok(!idle.includes('HoldService.ensure(ctx);'));
+    const hold = fs.readFileSync(path.join(javaDir, 'HoldService.java'), 'utf8');
+    const ensure = hold.slice(hold.indexOf('public static void ensure'), hold.indexOf('public static void stop'));
+    assert.ok(ensure.includes('LocationDemand.needsContinuousLocation(app)'));
+  });
+
+  it('never reads location for a Bluetooth device that is not a listed car', () => {
+    const open = fs.readFileSync(path.join(javaDir, 'PalGateNativeOpen.java'), 'utf8');
+    const bt = open.slice(
+      open.indexOf('public static void openFromBluetooth'),
+      open.indexOf('public static void pollNearby(Context context)'),
+    );
+    assert.ok(bt.indexOf('lastLocation(context)') > bt.indexOf('is not a listed car'));
+    const wake = open.slice(open.indexOf('public static void onFenceWake'));
+    assert.ok(
+      wake.indexOf('needsContinuousLocation') < wake.indexOf('currentLocation(context, true)'),
+    );
+  });
+
+  it('a sticky MonitoringService restart without demand starts no fences or GPS', () => {
+    const onCreate = monitoring.slice(
+      monitoring.indexOf('public void onCreate()'),
+      monitoring.indexOf('private boolean demanded()'),
+    );
+    assert.ok(onCreate.includes('if (demanded()) startWatching();'));
+    assert.ok(!onCreate.includes('startLocationUpdates('));
+    assert.ok(!onCreate.includes('GeofenceRegistrar.register('));
+  });
+});
+
+describe('Expo geofences on Android', () => {
+  const geo = fs.readFileSync(path.join(process.cwd(), 'src', 'geo', 'geofencing.ts'), 'utf8');
+
+  it('are never registered next to the native Play fences', () => {
+    assert.ok(geo.includes('!needLocation || hasNativeKeepAlive()'));
+  });
+
+  it('remove themselves when a leftover one fires', () => {
+    for (const fn of ['handleGeofenceEnter', 'handleGeofenceExit']) {
+      const body = geo.slice(geo.indexOf(`export async function ${fn}`));
+      assert.ok(body.indexOf('dropLeftoverExpoFences()') < body.indexOf('isMonitoringLive()'));
+    }
+  });
 });
