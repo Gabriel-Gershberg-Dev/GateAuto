@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.66** (versionCode 67).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.67** (versionCode 68).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, and `v1.0.66`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, and `v1.0.67`.
+
+## 1.0.67 — 2026-10-01 (beta)
+
+The widget hint under Auto-open is gone. Developer options use a flask icon. The warning before turning notifications off, and the searching-notice line, are shorter. A PalGate no longer shows the end of a phone number under its name.
 
 ## 1.0.66 — 2026-10-01 (beta)
 

@@ -568,19 +568,19 @@
     "updateBody": "GateAuto {{name}} is ready to install."
   },
   "notifications": {
-    "lede": "These only change what Android shows. Auto-open keeps running.",
+    "lede": "What GateAuto tells you.",
     "all": "All notifications",
     "allDetail": "Gate opens, searching, and app updates.",
-    "allOffDetail": "No notice when a gate opens on Auto-open. Auto-open still runs.",
+    "allOffDetail": "No notice when a gate opens.",
     "allOffTitle": "Turn off all notifications?",
-    "allOffMsg": "You won't get a notice when a gate opens on Auto-open. Auto-open still runs. Android keeps one silent line while it is working, so Auto-open is not stopped in the background.",
+    "allOffMsg": "You won't be told when a gate opens.",
     "allOffConfirm": "Turn off",
     "allOffCancel": "Keep on",
     "kindsLede": "Choose which notices to show.",
     "gateOpen": "Gate opened",
     "gateOpenDetail": "Ping when a gate opens or an auto-open fails.",
     "monitor": "Searching notification",
-    "monitorDetail": "The pinned notice while Auto-open is on. Off shrinks it to a silent notice you can swipe away. Android needs it to keep Auto-open running.",
+    "monitorDetail": "Shown while looking for your gates.",
     "updates": "App updates",
     "updatesDetail": "Get a notice when a new GateAuto is ready to install."
   },

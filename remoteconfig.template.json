@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "67"
+        "value": "68"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.66"
+        "value": "1.0.67"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "A newly scanned PalGate is named after you, and you can rename it. My location is translated, Hold is shorter, and the armed line is gone. Turning off all notifications warns that you will not be told when a gate opens on Auto-open."
+        "value": "The widget hint under Auto-open is gone. Turning off notifications only says you will not be told when a gate opens. A PalGate no longer shows a phone number under its name."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

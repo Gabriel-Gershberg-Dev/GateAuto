@@ -71,6 +71,21 @@ export function IconTag({ color, size = 22 }: IconProps) {
   );
 }
 
+/** Beaker — developer options, not the permissions key or the version tag. */
+export function IconFlask({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M9 3h6" {...stroke(color)} />
+      <Path
+        d="M10 3v6.2L5.2 19.2A2 2 0 0 0 7 22h10a2 2 0 0 0 1.8-2.8L14 9.2V3"
+        {...stroke(color)}
+      />
+      <Path d="M8.5 15h7" {...stroke(color)} />
+    </>,
+  );
+}
+
 export function IconPencil({ color, size = 22 }: IconProps) {
   return wrap(
     size,

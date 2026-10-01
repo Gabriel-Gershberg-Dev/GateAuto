@@ -243,8 +243,6 @@ export function GateSystemsScreen({ navigation }: Props) {
               ellipsizeMode="tail"
             >
               {sys.origin === 'shared' ? t('systems.fromInvite') : t('systems.scannedHere')}
-              {' · '}
-              {String(sys.credentials.phoneNumber).slice(-4)}
             </Text>
             {sys.origin === 'linked' ? (
               <View style={[styles.actionRow, { flexDirection: row }]}>

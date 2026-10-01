@@ -573,19 +573,19 @@
     "updateBody": "GateAuto {{name}} מוכן להתקנה."
   },
   "notifications": {
-    "lede": "משנים רק מה ש־Android מציג. Auto-open ממשיך לפעול.",
+    "lede": "על מה GateAuto מודיע.",
     "all": "כל ההתראות",
     "allDetail": "פתיחת שער, חיפוש ועדכוני אפליקציה.",
-    "allOffDetail": "אין התראה כששער נפתח ב־Auto-open. Auto-open ממשיך לפעול.",
+    "allOffDetail": "אין התראה כששער נפתח.",
     "allOffTitle": "לכבות את כל ההתראות?",
-    "allOffMsg": "לא תקבלו התראה כששער נפתח ב־Auto-open. Auto-open ממשיך לפעול. Android משאיר שורה שקטה אחת בזמן שהוא עובד, כדי ש־Auto-open לא ייעצר ברקע.",
+    "allOffMsg": "לא תקבלו התראה כששער נפתח.",
     "allOffConfirm": "כיבוי",
     "allOffCancel": "להשאיר",
     "kindsLede": "בחרו אילו התראות להציג.",
     "gateOpen": "השער נפתח",
     "gateOpenDetail": "התראה כששער נפתח או כש־Auto-open נכשל.",
     "monitor": "התראת חיפוש",
-    "monitorDetail": "ההתראה הנעוצה כש־Auto-open דולק. כיבוי מקטין אותה להתראה שקטה שאפשר להחליק. Android צריך אותה כדי ש־Auto-open ימשיך לפעול.",
+    "monitorDetail": "מוצגת בזמן חיפוש השערים.",
     "updates": "עדכוני אפליקציה",
     "updatesDetail": "קבלו התראה כשגרסה חדשה של GateAuto מוכנה להתקנה."
   },

@@ -2,11 +2,11 @@
 
 GateAuto is an Expo (Development Client) React Native app that auto-opens PalGate gates when you arrive. It links as a PalGate **Linked Device**, then on geofence enter it refines your location, optionally checks car Bluetooth, and opens the gate via the PalGate API—useful when native PalGate AutoOpen is missing or imprecise.
 
-Primary target: **Galaxy S25 Ultra**. Same codebase builds for **iOS**.
+Android is the tested app, for current phones. The iOS project is in this repo and has not been tested or shipped.
 
 ## History
 
-Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.48`** is family production. Beta is **1.0.66**.
+Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.48`** is family production. Beta is **1.0.67**.
 
 ## Project location
 

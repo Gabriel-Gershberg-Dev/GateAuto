@@ -1,0 +1,12 @@
+---
+description: GateAuto targets current Android phones, not one model. User-facing copy stays short.
+alwaysApply: true
+---
+
+# Phones and user-facing copy
+
+GateAuto is for relatively modern phones, not only the Galaxy S25 Ultra. When a behavior depends on the OS or a vendor (Samsung stopping a background service, Xiaomi not mirroring a switch), handle that case, and still keep the feature working on other current Android phones.
+
+Android is the mature, tested app. iOS shares the codebase and has not been tested or shipped. Do not claim an iOS build is ready, and do not treat an Android-only path as if iOS already has it.
+
+User-facing text stays short and plain. Say what the person will notice or needs to do. Leave out internals they do not need: that Auto-open keeps running when notifications change, foreground-service requirements, version codes, phone-number endings, and which phone model the app was tried on.

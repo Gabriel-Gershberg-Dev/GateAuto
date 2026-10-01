@@ -50,11 +50,11 @@ import {
   IconChevronRight,
   IconDownload,
   IconExport,
+  IconFlask,
   IconGoogleMark,
   IconKey,
   IconPerson,
   IconQr,
-  IconShield,
   IconTag,
   IconTrash,
 } from '../icons';
@@ -310,7 +310,7 @@ export function SettingsScreen({ navigation }: Props) {
             />
             <Hairline inset={56} />
             <SettingsRow
-              icon={<IconShield color={colors.muted} />}
+              icon={<IconFlask color={colors.primary} />}
               label={t('settings.turnOffDev')}
               detail={t('settings.turnOffDevDetail')}
               onPress={() => setTurnOffDevOpen(true)}
