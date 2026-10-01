@@ -46,7 +46,7 @@ public final class ApproachSampler {
   public static void start(Context context) {
     if (context == null) return;
     if (!KeepAlivePrefs.isArmed(context)) return;
-    if (!LocationDemand.needsContinuousLocation(context)) return;
+    if (!LocationDemand.needsPlayFences(context)) return;
     // Location FGS already at 1 Hz when near — don't double-sample.
     if (MonitoringService.isRunning()) return;
     synchronized (LOCK) {

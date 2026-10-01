@@ -53,6 +53,24 @@ public final class LocationDemand {
   }
 
   /**
+   * Play detect fences. Continuous GPS, or Walking while Auto-open is on.
+   * Walking does not by itself start the location foreground service.
+   */
+  public static boolean needsPlayFences(Context context) {
+    if (needsContinuousLocation(context)) return true;
+    if (context == null || !KeepAlivePrefs.isArmed(context)) return false;
+    if (!KeepAlivePrefs.walkingEnabled(context) && !KeepAlivePrefs.motionEnabled(context)) {
+      return false;
+    }
+    JSONArray arr = GeofenceRegistrar.regionsArray(context);
+    for (int i = 0; i < arr.length(); i++) {
+      JSONObject gate = arr.optJSONObject(i);
+      if (isDemandAuto(gate)) return true;
+    }
+    return false;
+  }
+
+  /**
    * A listed car for at least one auto-on, BT-required gate. UNKNOWN does not
    * count — that would keep GPS on when Bluetooth cannot be read.
    */
@@ -154,23 +172,34 @@ public final class LocationDemand {
   }
 
   private static void syncLocked(Context ctx, boolean allowStartLocationFgs) {
-    boolean need = needsContinuousLocation(ctx);
+    boolean gps = needsContinuousLocation(ctx);
+    boolean fences = needsPlayFences(ctx);
     Log.i(
       TAG,
       "location demand="
-        + need
+        + gps
+        + " fences="
+        + fences
         + " allowFgs="
         + allowStartLocationFgs
         + " fgs="
         + MonitoringService.isRunning()
     );
-    if (need) {
+    if (gps) {
       GeofenceRegistrar.register(ctx, false);
       if (allowStartLocationFgs) {
         MonitoringService.start(ctx);
       } else {
         HoldService.ensure(ctx);
       }
+    } else if (fences) {
+      // Walking, no listed car: keep the 100 m wake. No location FGS, no hold
+      // notice. High GPS starts only after Play ENTER.
+      GeofenceRegistrar.register(ctx, false);
+      ApproachSampler.stop();
+      MonitoringService.stop(ctx);
+      HoldService.stop(ctx);
+      MonitoringNotice.clearUnowned(ctx);
     } else {
       ApproachSampler.stop();
       MonitoringService.stop(ctx);
@@ -180,5 +209,6 @@ public final class LocationDemand {
       HoldService.stop(ctx);
       MonitoringNotice.clearUnowned(ctx);
     }
+    WalkActivity.sync(ctx);
   }
 }

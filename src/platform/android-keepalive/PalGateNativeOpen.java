@@ -357,7 +357,7 @@ public final class PalGateNativeOpen {
    * gate so a 40m pin waking the process also opens clustered 25m pins.
    */
   public static void onFenceWake(Context context, Location triggering) {
-    if (!LocationDemand.needsContinuousLocation(context)) {
+    if (!LocationDemand.needsPlayFences(context)) {
       Log.i(TAG, "native fence-wake skip — location not needed, dropping stale fences");
       GeofenceRegistrar.unregister(context);
       return;
@@ -398,7 +398,7 @@ public final class PalGateNativeOpen {
       Log.i(TAG, "native poll skip — not armed");
       return;
     }
-    if (!LocationDemand.needsContinuousLocation(context)) {
+    if (!LocationDemand.needsPlayFences(context)) {
       Log.i(TAG, "native poll skip — waiting for listed car Bluetooth");
       return;
     }
@@ -440,7 +440,7 @@ public final class PalGateNativeOpen {
       auto++;
       String id = gate.optString("id", "").trim();
       double meters = distanceMeters(gate, last);
-      if (!withinFence(gate, last, 1.0)) {
+      if (!withinOpen(context, gate, last)) {
         double detect = GeofenceRegistrar.detectRadiusMeters(gate);
         if (Double.isFinite(meters) && detect > 0 && meters <= detect) {
           approaching = true;
@@ -911,6 +911,112 @@ public final class PalGateNativeOpen {
     }
   }
 
+  static final double WALKING_NORMAL_MAX_M = 7;
+  static final double WALKING_NORMAL_FLOOR_M = 5;
+  static final double WALKING_HIGH_MAX_M = 12;
+  static final double WALKING_HIGH_FLOOR_M = 8;
+  static final float WALKING_HEADING_MIN_SPEED_MPS = 1.2f;
+  static final float WALKING_HEADING_AWAY_DEG = 100f;
+  static final float WALKING_MAX_ACCURACY_M = 25f;
+
+  /** On foot: motion says so, or Walking is on and the listed car is not connected. */
+  private static boolean footOpen(Context context, JSONObject gate) {
+    if (context == null || gate == null) return false;
+    String activity =
+      KeepAlivePrefs.motionEnabled(context)
+        ? KeepAlivePrefs.walkActivity(context)
+        : "unknown";
+    if ("in_vehicle".equals(activity)) return false;
+    if ("on_foot".equals(activity)) return true;
+    if (!KeepAlivePrefs.walkingEnabled(context)) return false;
+    if (gate.optBoolean("btRequired", false) && listedCarConnected(context, gate)) {
+      return false;
+    }
+    return true;
+  }
+
+  private static boolean listedCarConnected(Context context, JSONObject gate) {
+    if (!gate.optBoolean("btRequired", false)) return false;
+    Set<String> wantAddr = new HashSet<>();
+    JSONArray addrs = gate.optJSONArray("btAddresses");
+    if (addrs != null) {
+      for (int i = 0; i < addrs.length(); i++) {
+        String a = CarBluetoothState.normalizeAddr(addrs.optString(i, ""));
+        if (!a.isEmpty()) wantAddr.add(a);
+      }
+    }
+    Set<String> wantName = new HashSet<>();
+    JSONArray names = gate.optJSONArray("btNames");
+    if (names != null) {
+      for (int i = 0; i < names.length(); i++) {
+        String n = names.optString(i, "").trim().toLowerCase(Locale.US);
+        if (!n.isEmpty()) wantName.add(n);
+      }
+    }
+    if (wantAddr.isEmpty() && wantName.isEmpty()) return false;
+    return CarBluetoothState.match(context, wantAddr, wantName)
+      == CarBluetoothState.CONNECTED;
+  }
+
+  /** Mirrors walkingOpenMaxM in src/data/walkingMode.ts. */
+  static double walkingOpenMaxMeters(double savedRadius, String level) {
+    if (!(savedRadius > 0) || !Double.isFinite(savedRadius)) return 0;
+    boolean high = "high".equals(level);
+    double cap = high ? WALKING_HIGH_MAX_M : WALKING_NORMAL_MAX_M;
+    double floor = high ? WALKING_HIGH_FLOOR_M : WALKING_NORMAL_FLOOR_M;
+    if (savedRadius < floor) return savedRadius;
+    return Math.max(Math.min(savedRadius, cap), Math.min(savedRadius, floor));
+  }
+
+  private static double openRadiusMeters(Context context, JSONObject gate) {
+    double radius = gate.optDouble("radius", Double.NaN);
+    if (!(radius > 0) || !Double.isFinite(radius)) return 0;
+    if (footOpen(context, gate)) {
+      radius = walkingOpenMaxMeters(radius, KeepAlivePrefs.walkingLevel(context));
+    }
+    return Math.min(radius, ABSOLUTE_MAX_M);
+  }
+
+  private static boolean walkingAccuracyOk(Location loc) {
+    if (loc == null || !loc.hasAccuracy()) return true;
+    float accuracy = loc.getAccuracy();
+    if (!(accuracy > 0)) return true;
+    return accuracy <= WALKING_MAX_ACCURACY_M;
+  }
+
+  /** Missing bearing allows. A clear away-heading delays. */
+  private static boolean headingAllows(JSONObject gate, Location loc) {
+    if (loc == null || !loc.hasSpeed() || loc.getSpeed() < WALKING_HEADING_MIN_SPEED_MPS) {
+      return true;
+    }
+    if (!loc.hasBearing()) return true;
+    double lat = gate.optDouble("lat", Double.NaN);
+    double lng = gate.optDouble("lng", Double.NaN);
+    if (!Double.isFinite(lat) || !Double.isFinite(lng)) return true;
+    float[] out = new float[2];
+    Location.distanceBetween(
+      loc.getLatitude(),
+      loc.getLongitude(),
+      lat,
+      lng,
+      out
+    );
+    float delta = Math.abs(out[1] - loc.getBearing());
+    if (delta > 180f) delta = 360f - delta;
+    return delta <= WALKING_HEADING_AWAY_DEG;
+  }
+
+  /** Poll / fence wake. Car Bluetooth connect keeps {@link #withinFence}. */
+  private static boolean withinOpen(Context context, JSONObject gate, Location loc) {
+    double meters = distanceMeters(gate, loc);
+    if (!Double.isFinite(meters)) return false;
+    double cap = openRadiusMeters(context, gate);
+    if (!(cap > 0) || meters > cap) return false;
+    if (!footOpen(context, gate)) return true;
+    if (!walkingAccuracyOk(loc)) return false;
+    return headingAllows(gate, loc);
+  }
+
   private static double openMaxMeters(JSONObject gate) {
     double radius = gate.optDouble("radius", Double.NaN);
     if (!(radius > 0) || !Double.isFinite(radius)) return 0;
@@ -1218,6 +1324,7 @@ public final class PalGateNativeOpen {
    * again stop the gate from opening.
    */
   private static boolean bluetoothMatches(Context context, JSONObject gate) {
+    if (footOpen(context, gate)) return true;
     if (!gate.optBoolean("btRequired", false)) return true;
 
     Set<String> wantAddr = new HashSet<>();

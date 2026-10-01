@@ -140,7 +140,7 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     assert.ok(bt.indexOf('lastLocation(context)') > bt.indexOf('is not a listed car'));
     const wake = open.slice(open.indexOf('public static void onFenceWake'));
     assert.ok(
-      wake.indexOf('needsContinuousLocation') < wake.indexOf('currentLocation(context, true)'),
+      wake.indexOf('needsPlayFences') < wake.indexOf('currentLocation(context, true)'),
     );
   });
 

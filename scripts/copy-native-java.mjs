@@ -75,6 +75,8 @@ copyDirFiles(
     'PalGateAes.java',
     'PalGateToken.java',
     'PalGateNativeOpen.java',
+    'WalkActivity.java',
+    'WalkActivityReceiver.java',
     'GateAutoTelemetry.java',
   ],
 );

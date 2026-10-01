@@ -40,6 +40,7 @@ import { onDevVersionTap } from '../../updates/unlockLogic';
 import { SHOW_EXPORT_UI } from '../flags';
 import { AppearancePicker } from '../components/AppearancePicker';
 import { AutoOpenSettings } from '../components/AutoOpenSettings';
+import { WalkingSettings } from '../components/WalkingSettings';
 import { SafetyLockSettings } from '../components/SafetyLockSettings';
 import { BusySheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { FormSheet } from '../components/FormSheet';
@@ -261,6 +262,7 @@ export function SettingsScreen({ navigation }: Props) {
       </Group>
 
       {hasGate ? <AutoOpenSettings /> : null}
+      {hasGate ? <WalkingSettings /> : null}
       {hasGate ? <SafetyLockSettings /> : null}
       <AppearancePicker />
       <LanguagePicker resumeOnRtl="Settings" />

@@ -128,6 +128,11 @@ public class KeepAliveReceiver extends BroadcastReceiver {
 
   private static void recoverIfDemanded(Context app, boolean reregister) {
     if (!LocationDemand.needsContinuousLocation(app)) {
+      // Walking keeps the wake fence. Do not take a GPS fix on the alarm.
+      if (LocationDemand.needsPlayFences(app)) {
+        if (reregister) GeofenceRegistrar.refresh(app);
+        return;
+      }
       Log.i(TAG, "native recover skip — waiting for listed car Bluetooth");
       LocationDemand.sync(app, false);
       return;

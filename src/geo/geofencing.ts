@@ -79,6 +79,8 @@ import {
   startMonitoringKeepAlive,
   stopMonitoringKeepAlive,
 } from './monitoringKeepAlive';
+import { footOpenApplies, walkingOpenMaxM } from '../data/walkingMode';
+import { loadWalkingSettings } from '../data/walkingSettings';
 import { jsNeedsContinuousLocation } from './locationDemandRuntime';
 import {
   hasNativeKeepAlive,
@@ -327,6 +329,46 @@ async function checkCarBluetooth(gate: GateConfig): Promise<'ok' | 'skipped_bt'>
     return 'ok';
   }
   return 'skipped_bt';
+}
+
+/** Listed car only. Unreadable Bluetooth is not "in the car". */
+async function listedCarConnected(gate: GateConfig): Promise<boolean> {
+  if (!gate.bluetooth?.required) return false;
+  const devices = gate.bluetooth.devices ?? [];
+  const requirements: CarBluetoothRequirement[] = devices
+    .map((d) => ({
+      name: d.name?.trim() || undefined,
+      address: d.address?.trim() || undefined,
+    }))
+    .filter((d) => Boolean(d.name || d.address));
+  if (requirements.length === 0) return false;
+  const read = loadCarBluetoothModule()?.readCarBluetoothConnection;
+  if (typeof read !== 'function') return false;
+  try {
+    return (await read(requirements)) === 'connected';
+  } catch {
+    return false;
+  }
+}
+
+async function openPlan(gate: GateConfig): Promise<{ foot: boolean; radius: number }> {
+  const settings = await loadWalkingSettings();
+  const connected = await listedCarConnected(gate);
+  const { getNativeWalkActivity } = await import('../platform/keepAliveAlarm');
+  const activity = settings.motion ? await getNativeWalkActivity() : 'unknown';
+  const foot = footOpenApplies({
+    walkingEnabled: settings.enabled,
+    motionEnabled: settings.motion,
+    activity,
+    btRequired: Boolean(gate.bluetooth?.required),
+    listedCarConnected: connected,
+  });
+  return {
+    foot,
+    radius: foot
+      ? walkingOpenMaxM(gate.radiusMeters, settings.level)
+      : gate.radiusMeters,
+  };
 }
 
 /** Retry BT for ~25–30s so late head-unit connects still open on ENTER/EXIT. */
@@ -596,6 +638,9 @@ export async function syncGeofences(): Promise<void> {
     // Native per-gate map is best-effort.
   }
   await syncNativeMonitoring(monitoring, nativeRegions);
+  const walking = await loadWalkingSettings();
+  const { writeNativeWalking } = await import('../platform/keepAliveAlarm');
+  await writeNativeWalking(walking.enabled, walking.level, walking.motion);
 
   if (!monitoring) {
     await stopExpoGeofencing();
@@ -768,7 +813,8 @@ async function evaluatePlayTransition(
   trigger: 'enter' | 'exit',
 ): Promise<Extract<PlayOpenResult, { ok: true }> | null> {
   const lastM = await lastKnownDistanceM(gate);
-  const play = playOpenAllowed(gate.radiusMeters, null, lastM);
+  const plan = await openPlan(gate);
+  const play = playOpenAllowed(plan.radius, null, lastM);
   if (play.ok) return play;
   await appendEvent({
     kind: 'skipped_refine',
@@ -785,13 +831,16 @@ async function runProximityRefine(
   gate: GateConfig,
   label: string,
   trigger: RefineTrigger,
+  plan?: { foot: boolean; radius: number },
 ): Promise<RefineOk | null> {
+  const open = plan ?? (await openPlan(gate));
   let refine: RefineResult;
   try {
     refine = await refineArrival(
       { lat: gate.lat as number, lng: gate.lng as number },
-      gate.radiusMeters,
+      open.radius,
       trigger,
+      { walking: open.foot },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1049,7 +1098,8 @@ export async function handleGeofenceEnter(regionIdentifier: string): Promise<voi
     trigger: 'enter',
     distanceM: inside.distanceM,
   };
-  const bt = await checkCarBluetoothWithRetry(gate, 'enter');
+  const enterPlan = await openPlan(gate);
+  const bt = enterPlan.foot ? 'ok' : await checkCarBluetoothWithRetry(gate, 'enter');
   if (bt === 'skipped_bt') {
     await appendEvent({
       kind: 'skipped_bt',
@@ -1123,7 +1173,8 @@ export async function handleGeofenceExit(regionIdentifier: string): Promise<void
     trigger: 'exit',
     distanceM: inside.distanceM,
   };
-  const bt = await checkCarBluetoothWithRetry(gate, 'exit');
+  const exitPlan = await openPlan(gate);
+  const bt = exitPlan.foot ? 'ok' : await checkCarBluetoothWithRetry(gate, 'exit');
   if (bt === 'skipped_bt') {
     await appendEvent({
       kind: 'exit_skipped_bt',
@@ -1257,7 +1308,8 @@ export async function checkEligibleNowAndOpen(
     const gates = await getEnabledGeofenceGates();
     if (gates.length === 0) return;
     const allGates = await loadGates();
-    if (!(await jsNeedsContinuousLocation(true, allGates))) {
+    const walkingOn = (await loadWalkingSettings()).enabled;
+    if (!(await jsNeedsContinuousLocation(true, allGates)) && !walkingOn) {
       console.log(
         `[GateAuto] eligible-now skip (${reason}) — waiting for listed car Bluetooth`,
       );
@@ -1300,12 +1352,13 @@ export async function checkEligibleNowAndOpen(
 
       if (!(await checkCooldown(gate, label, 'eligible_now'))) continue;
 
-      const refine = await runProximityRefine(gate, label, 'eligible_now');
+      const eligiblePlan = await openPlan(gate);
+      const refine = await runProximityRefine(gate, label, 'eligible_now', eligiblePlan);
       if (!refine) continue;
 
       const geo = refineGeoFields(refine);
       const btRequired = Boolean(gate.bluetooth?.required);
-      const bt = await checkCarBluetooth(gate);
+      const bt = eligiblePlan.foot ? 'ok' : await checkCarBluetooth(gate);
       if (bt === 'skipped_bt') {
         await appendEvent({
           kind: 'skipped_bt',
@@ -1366,8 +1419,9 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
 
     for (const gate of gates) {
       const label = displayGateName(gate);
+      const pollPlan = await openPlan(gate);
 
-      if (gate.bluetooth?.required) {
+      if (gate.bluetooth?.required && !pollPlan.foot) {
         const bt = await checkCarBluetooth(gate);
         if (bt === 'skipped_bt') {
           continue;
@@ -1397,8 +1451,9 @@ export async function runEligibilityPoll(opts?: { force?: boolean }): Promise<vo
       try {
         refine = await refineArrival(
           { lat: gate.lat as number, lng: gate.lng as number },
-          gate.radiusMeters,
+          pollPlan.radius,
           'poll',
+          { walking: pollPlan.foot },
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

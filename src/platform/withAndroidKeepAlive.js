@@ -37,6 +37,8 @@ const JAVA_FILES = [
   'PalGateAes.java',
   'PalGateToken.java',
   'PalGateNativeOpen.java',
+  'WalkActivity.java',
+  'WalkActivityReceiver.java',
   'GateAutoTelemetry.java',
 ];
 
@@ -135,6 +137,12 @@ function withKeepAliveManifest(config) {
       'com.gateauto.app.keepalive.GeofenceTransitionReceiver',
       { 'android:enabled': 'true', 'android:exported': 'false' },
       [{ action: [{ $: { 'android:name': 'com.gateauto.app.GEOFENCE_TRANSITION' } }] }],
+    );
+    upsertReceiver(
+      app,
+      'com.gateauto.app.keepalive.WalkActivityReceiver',
+      { 'android:enabled': 'true', 'android:exported': 'false' },
+      [{ action: [{ $: { 'android:name': 'com.gateauto.app.WALK_ACTIVITY' } }] }],
     );
     // ACL_DISCONNECTED matters as much as ACL_CONNECTED: these manifest
     // broadcasts are what keep the cached connected-car set exact even while the
@@ -310,6 +318,7 @@ function withAndroidKeepAlive(config) {
     'android.permission.FOREGROUND_SERVICE_LOCATION',
     'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
     'android.permission.WAKE_LOCK',
+    'android.permission.ACTIVITY_RECOGNITION',
     'android.permission.RECEIVE_BOOT_COMPLETED',
   ]);
   config = withKeepAliveSources(config);
@@ -322,5 +331,5 @@ function withAndroidKeepAlive(config) {
 module.exports = createRunOncePlugin(
   withAndroidKeepAlive,
   'gateauto-android-keep-alive',
-  '1.17.0',
+  '1.18.0',
 );

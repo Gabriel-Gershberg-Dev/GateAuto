@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "68"
+        "value": "69"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.67"
+        "value": "1.0.68"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "The widget hint under Auto-open is gone. Turning off notifications only says you will not be told when a gate opens. A PalGate no longer shows a phone number under its name."
+        "value": "Walking opens on foot, next to the gate. In the car, Auto-open stays as you set it. Motion is off until you turn it on."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

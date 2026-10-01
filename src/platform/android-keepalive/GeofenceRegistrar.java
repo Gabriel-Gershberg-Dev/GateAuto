@@ -152,7 +152,7 @@ public final class GeofenceRegistrar {
    */
   public static boolean register(Context context, boolean initialTrigger) {
     Context app = context.getApplicationContext();
-    if (!LocationDemand.needsContinuousLocation(app)) {
+    if (!LocationDemand.needsPlayFences(app)) {
       Log.i(TAG, "native geofence register skip — waiting for listed car Bluetooth");
       unregister(app);
       return false;
@@ -231,7 +231,7 @@ public final class GeofenceRegistrar {
    */
   public static void refresh(Context context) {
     Context app = context.getApplicationContext();
-    if (!LocationDemand.needsContinuousLocation(app)) {
+    if (!LocationDemand.needsPlayFences(app)) {
       Log.i(TAG, "native geofence refresh skip — waiting for listed car Bluetooth");
       unregister(app);
       return;

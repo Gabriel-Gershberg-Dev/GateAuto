@@ -445,6 +445,42 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     }
   }
 
+  /**
+   * Walking on registers Play fences without starting the location foreground
+   * service. A connected listed car still uses the saved radius.
+   */
+  @ReactMethod
+  public void setWalkingMode(
+    boolean enabled,
+    String level,
+    boolean motion,
+    Promise promise
+  ) {
+    try {
+      Context ctx = getReactApplicationContext();
+      KeepAlivePrefs.setWalking(ctx, enabled, level);
+      KeepAlivePrefs.setMotionEnabled(ctx, motion);
+      if (!motion) KeepAlivePrefs.setWalkActivity(ctx, "unknown");
+      if (KeepAlivePrefs.isArmed(ctx)) {
+        LocationDemand.sync(ctx, false);
+      } else {
+        WalkActivity.sync(ctx);
+      }
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_walking", e);
+    }
+  }
+
+  @ReactMethod
+  public void getWalkActivity(Promise promise) {
+    try {
+      promise.resolve(KeepAlivePrefs.walkActivity(getReactApplicationContext()));
+    } catch (Exception e) {
+      promise.reject("keepalive_walking", e);
+    }
+  }
+
   /** Hide or restore the searching FGS notice. Monitoring itself is unchanged. */
   @ReactMethod
   public void setMonitorNoticeEnabled(boolean enabled, Promise promise) {

@@ -21,6 +21,9 @@ public final class KeepAlivePrefs {
   private static final String KEY_MONITOR_NOTICE = "monitorNoticeEnabled";
   /** User toggle: "Gate opened" / open-failed pings. Default on. */
   private static final String KEY_GATE_OPEN_NOTICE = "gateOpenNoticeEnabled";
+  /** On-foot Auto-open. Default off. Does not change a connected car. */
+  private static final String KEY_WALKING = "walkingEnabled";
+  private static final String KEY_WALKING_LEVEL = "walkingLevel";
   /** Android Auto home layout. Default false = grid. */
   private static final String KEY_CAR_LIST_LAYOUT = "carListLayout";
   /** In-app language (en/he/ru) so the widget matches JS, not only the system. */
@@ -106,6 +109,47 @@ public final class KeepAlivePrefs {
   /** Effective "Gate opened" ping (master AND the gate-open toggle). */
   public static boolean gateOpenNoticeVisible(Context context) {
     return noticesEnabled(context) && gateOpenNoticeEnabled(context);
+  }
+
+  public static void setWalking(Context context, boolean enabled, String level) {
+    String value = "high".equals(level) ? "high" : "normal";
+    prefs(context)
+      .edit()
+      .putBoolean(KEY_WALKING, enabled)
+      .putString(KEY_WALKING_LEVEL, value)
+      .commit();
+  }
+
+  public static boolean walkingEnabled(Context context) {
+    return prefs(context).getBoolean(KEY_WALKING, false);
+  }
+
+  /** "high" or "normal". */
+  public static String walkingLevel(Context context) {
+    String raw = prefs(context).getString(KEY_WALKING_LEVEL, "normal");
+    return "high".equals(raw) ? "high" : "normal";
+  }
+
+  /** Motion hint. Default off so Walking can be tested without it. */
+  public static void setMotionEnabled(Context context, boolean enabled) {
+    prefs(context).edit().putBoolean("motionEnabled", enabled).commit();
+  }
+
+  public static boolean motionEnabled(Context context) {
+    return prefs(context).getBoolean("motionEnabled", false);
+  }
+
+  /** "on_foot", "in_vehicle", or "unknown". */
+  public static void setWalkActivity(Context context, String kind) {
+    String value =
+      "on_foot".equals(kind) || "in_vehicle".equals(kind) ? kind : "unknown";
+    prefs(context).edit().putString("walkActivity", value).commit();
+  }
+
+  public static String walkActivity(Context context) {
+    String raw = prefs(context).getString("walkActivity", "unknown");
+    if ("on_foot".equals(raw) || "in_vehicle".equals(raw)) return raw;
+    return "unknown";
   }
 
   /** Android Auto home: false = grid (default), true = list. */

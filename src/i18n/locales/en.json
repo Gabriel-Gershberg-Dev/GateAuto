@@ -196,6 +196,21 @@
     "disabledEvent": "Auto-open disabled",
     "auto": "Auto"
   },
+  "walking": {
+    "title": "Walking",
+    "detail": "Opens on foot, close to the gate. In the car, Auto-open stays as you set it.",
+    "explainTitle": "Walking",
+    "explain": "On foot, Open waits until you are next to the gate, even if the gate needs the car. In the car, nothing changes.",
+    "turnOn": "Turn on",
+    "normal": "Normal",
+    "high": "High",
+    "normalHint": "At the gate",
+    "highHint": "A few steps earlier",
+    "needAuto": "Turn Auto-open on first.",
+    "motion": "Motion",
+    "motionDetail": "On foot, open close even if the car is still connected. Off uses only Walking.",
+    "motionDenied": "Allow motion to tell walking from driving."
+  },
   "widget": {
     "howAdd": "Long-press the home screen → Widgets → GateAuto. The closest pinned gate opens even if Auto-open is off."
   },

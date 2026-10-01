@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { haversineMeters, type LatLng } from './haversine';
+import { walkingAccuracyOk } from '../data/walkingMode';
 import {
   accuracyAcceptable,
   assertNearGate,
@@ -91,7 +92,7 @@ function evaluateFix(
   pin: LatLng,
   radiusM: number,
   trigger: RefineTrigger,
-  options?: { ignoreAge?: boolean },
+  options?: { ignoreAge?: boolean; walking?: boolean },
 ): RefineResult {
   const gate: GateProximityTarget = {
     lat: pin.lat,
@@ -130,7 +131,14 @@ function evaluateFix(
     };
   }
 
-  const acc = accuracyAcceptable(fix.accuracy, near.distanceM, radiusM);
+  const acc = options?.walking
+    ? walkingAccuracyOk(fix.accuracy)
+      ? { ok: true as const }
+      : {
+          ok: false as const,
+          detail: `accuracy ${fix.accuracy.toFixed(1)}m too loose for walking`,
+        }
+    : accuracyAcceptable(fix.accuracy, near.distanceM, radiusM);
   if (!acc.ok) {
     return {
       ok: false,
@@ -175,6 +183,7 @@ async function refineOnce(
   radiusM: number,
   trigger: RefineTrigger,
   accuracy: Location.Accuracy,
+  walking?: boolean,
 ): Promise<RefineResult> {
   try {
     const position = await Location.getCurrentPositionAsync({
@@ -183,6 +192,7 @@ async function refineOnce(
     });
     return evaluateFix(position, pin, radiusM, trigger, {
       ignoreAge: trigger === 'poll',
+      walking,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -205,6 +215,7 @@ export async function refineArrival(
   pin: LatLng,
   radiusM: number,
   trigger: RefineTrigger = 'enter',
+  options?: { walking?: boolean },
 ): Promise<RefineResult> {
   try {
     const last = await Location.getLastKnownPositionAsync();
@@ -213,19 +224,20 @@ export async function refineArrival(
       if (!shouldWaitForHighGps(trigger, inside)) {
         const evaluated = evaluateFix(last, pin, radiusM, trigger, {
           ignoreAge: trigger === 'poll',
+          walking: options?.walking,
         });
         if (evaluated.ok || trigger === 'poll') {
           return evaluated;
         }
         // Inside but stale last-known: one Balanced fix, never High.
-        return refineOnce(pin, radiusM, trigger, Location.Accuracy.Balanced);
+        return refineOnce(pin, radiusM, trigger, Location.Accuracy.Balanced, options?.walking);
       }
     } else if (trigger === 'poll') {
-      return refineOnce(pin, radiusM, trigger, Location.Accuracy.Balanced);
+      return refineOnce(pin, radiusM, trigger, Location.Accuracy.Balanced, options?.walking);
     }
   } catch {
     if (trigger === 'poll') {
-      return refineOnce(pin, radiusM, trigger, Location.Accuracy.Balanced);
+      return refineOnce(pin, radiusM, trigger, Location.Accuracy.Balanced, options?.walking);
     }
   }
 
@@ -254,7 +266,9 @@ export async function refineArrival(
       return lastFail;
     }
 
-    const evaluated = evaluateFix(position, pin, radiusM, trigger);
+    const evaluated = evaluateFix(position, pin, radiusM, trigger, {
+      walking: options?.walking,
+    });
     if (evaluated.ok) return evaluated;
     if (!evaluated.ok && evaluated.detail?.includes('distance')) {
       // Distance failures fail immediately — do not leave GPS on retrying "far".

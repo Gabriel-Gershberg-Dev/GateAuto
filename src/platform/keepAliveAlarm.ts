@@ -31,6 +31,8 @@ type GateAutoKeepAliveNative = {
   getSafetyLocksJson?(): Promise<string>;
   clearSafetyLocks?(): Promise<boolean>;
   syncSafetyLockSettings?(burstCount: number, lockMs: number): Promise<boolean>;
+  setWalkingMode?(enabled: boolean, level: string, motion: boolean): Promise<boolean>;
+  getWalkActivity?(): Promise<string>;
   setMonitorNoticeEnabled?(enabled: boolean): Promise<boolean>;
   isMonitorNoticeEnabled?(): Promise<boolean>;
   setNoticesEnabled?(enabled: boolean): Promise<boolean>;
@@ -432,6 +434,33 @@ export async function clearNativeSafetyLocks(): Promise<void> {
   } catch (error) {
     console.warn('[GateAuto] clearNativeSafetyLocks failed', error);
   }
+}
+
+/** Mirror Walking into KeepAlivePrefs and refresh Play fences if armed. */
+export async function writeNativeWalking(
+  enabled: boolean,
+  level: 'normal' | 'high',
+  motion: boolean,
+): Promise<void> {
+  const native = getNative();
+  if (!native?.setWalkingMode) return;
+  try {
+    await native.setWalkingMode(enabled, level, motion);
+  } catch (error) {
+    console.warn('[GateAuto] writeNativeWalking failed', error);
+  }
+}
+
+export async function getNativeWalkActivity(): Promise<'on_foot' | 'in_vehicle' | 'unknown'> {
+  const native = getNative();
+  if (!native?.getWalkActivity) return 'unknown';
+  try {
+    const raw = await native.getWalkActivity();
+    if (raw === 'on_foot' || raw === 'in_vehicle') return raw;
+  } catch (error) {
+    console.warn('[GateAuto] getNativeWalkActivity failed', error);
+  }
+  return 'unknown';
 }
 
 /** Mirror JS safety-lock attempts / duration into KeepAlivePrefs. */

@@ -196,6 +196,21 @@
     "disabledEvent": "Auto-open כובה",
     "auto": "Auto"
   },
+  "walking": {
+    "title": "Walking",
+    "detail": "נפתח ברגל, קרוב לשער. ברכב, Auto-open נשאר כמו שהגדרתם.",
+    "explainTitle": "Walking",
+    "explain": "ברגל, Open מחכה עד שאתם ליד השער, גם אם השער דורש את הרכב. ברכב, שום דבר לא משתנה.",
+    "turnOn": "הפעלה",
+    "normal": "רגיל",
+    "high": "גבוה",
+    "normalHint": "ליד השער",
+    "highHint": "כמה צעדים קודם",
+    "needAuto": "הפעילו Auto-open קודם.",
+    "motion": "תנועה",
+    "motionDetail": "ברגל, פותח קרוב גם אם הרכב עדיין מחובר. כבוי משתמש רק ב־Walking.",
+    "motionDenied": "אשרו תנועה כדי להבדיל הליכה מנהיגה."
+  },
   "widget": {
     "howAdd": "לחיצה ארוכה על מסך הבית ← ווידג'טים ← GateAuto. השער הקרוב עם סיכה נפתח גם כש־Auto-open כבוי."
   },
