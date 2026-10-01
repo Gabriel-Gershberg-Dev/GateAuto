@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from '../firebase/app';
 import { TokenType, type PalGateCredentials } from '../palgate/types';
+import { scannedSystemLabel } from './systemLabel';
 import { writeNativeCredentials } from '../platform/keepAliveAlarm';
 import { loadGates, type GateConfig } from './gatesStore';
 import {
@@ -362,9 +364,17 @@ export async function upsertSystem(
 
   const id = newSystemId();
   const linkedCount = existing.filter((s) => s.origin === 'linked').length;
+  // A repeat scan keeps the stored name (match branch above). Only a new
+  // owner scan is named here, and only when the caller did not pass one.
   const label =
     options?.label?.trim() ||
-    labelForCredentials(credentials, origin, linkedCount + 1);
+    (origin === 'linked'
+      ? scannedSystemLabel({
+          userName: currentDisplayName(),
+          phoneNumber: credentials.phoneNumber,
+          index: linkedCount + 1,
+        })
+      : labelForCredentials(credentials, origin, linkedCount + 1));
   const row: PalGateSystemMeta = {
     id,
     label,
@@ -380,6 +390,34 @@ export async function upsertSystem(
     .then((m) => m.scheduleCloudPush())
     .catch(() => undefined);
   return { ...row, credentials };
+}
+
+function currentDisplayName(): string | null {
+  try {
+    return auth.currentUser?.displayName ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Rename a PalGate this phone scanned. Shared-in copies keep the owner's name. */
+export async function renameLinkedSystem(
+  systemId: string,
+  label: string,
+): Promise<boolean> {
+  const next = label.replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!next) return false;
+  const meta = await readMeta();
+  const row = meta.find((item) => item.id === systemId);
+  if (!row || row.origin !== 'linked') return false;
+  if (row.label === next) return true;
+  await writeMeta(
+    meta.map((item) => (item.id === systemId ? { ...item, label: next } : item)),
+  );
+  void import('./accountSync')
+    .then((m) => m.scheduleCloudPush())
+    .catch(() => undefined);
+  return true;
 }
 
 export async function removeSystem(systemId: string): Promise<void> {

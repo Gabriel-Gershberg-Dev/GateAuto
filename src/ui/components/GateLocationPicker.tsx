@@ -407,7 +407,9 @@ export function GateLocationPicker({
               {locating ? (
                 <ActivityIndicator color={colors.text} size="small" />
               ) : (
-                <Text style={styles.btnGhostText}>My location</Text>
+                <Text style={[styles.btnGhostText, { writingDirection }]} numberOfLines={1}>
+                  {t('map.myLocation')}
+                </Text>
               )}
             </Pressable>
             <Pressable

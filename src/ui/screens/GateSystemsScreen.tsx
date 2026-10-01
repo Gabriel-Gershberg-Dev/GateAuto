@@ -9,7 +9,11 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../../auth/AuthProvider';
-import { listSystems, type PalGateSystem } from '../../data/palgateSystems';
+import {
+  listSystems,
+  renameLinkedSystem,
+  type PalGateSystem,
+} from '../../data/palgateSystems';
 import { loadGates, type GateConfig } from '../../data/gatesStore';
 import { unlinkLinkedSystem } from '../../data/unlinkSystem';
 import { appendEvent } from '../../data/eventLog';
@@ -36,7 +40,7 @@ import { BarrierMark } from '../components/BarrierMark';
 import { BusySheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { FormSheet } from '../components/FormSheet';
 import { HeaderIconButton, NavHeader } from '../components/NavHeader';
-import { IconQr, IconSettings, IconUnlink } from '../icons';
+import { IconPencil, IconQr, IconSettings, IconUnlink } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
@@ -48,7 +52,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'GateSystems'>;
 export function GateSystemsScreen({ navigation }: Props) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { isRtl, writingDirection, textAlign } = useRtlLayout();
+  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const auth = useAuth();
   const { user } = auth;
@@ -63,6 +67,8 @@ export function GateSystemsScreen({ navigation }: Props) {
     null,
   );
   const [unlinkId, setUnlinkId] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
   const [preview, setPreview] = useState<{
     invite: InviteDoc & { code: string };
     declineOnCancel: boolean;
@@ -212,13 +218,25 @@ export function GateSystemsScreen({ navigation }: Props) {
 
         {systems.map((sys) => (
           <View key={sys.id} style={styles.systemCard}>
-            <Text
-              style={[styles.systemLabel, { writingDirection, textAlign }]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
+            <Pressable
+              disabled={sys.origin !== 'linked'}
+              onPress={() => {
+                setRenameText(sys.label);
+                setRenameId(sys.id);
+              }}
+              accessibilityRole={sys.origin === 'linked' ? 'button' : undefined}
+              accessibilityLabel={
+                sys.origin === 'linked' ? t('systems.rename') : undefined
+              }
             >
-              {isolateBidiText(sys.label, isRtl)}
-            </Text>
+              <Text
+                style={[styles.systemLabel, { writingDirection, textAlign }]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {isolateBidiText(sys.label, isRtl)}
+              </Text>
+            </Pressable>
             <Text
               style={[styles.systemMeta, { writingDirection, textAlign }]}
               numberOfLines={1}
@@ -229,19 +247,39 @@ export function GateSystemsScreen({ navigation }: Props) {
               {String(sys.credentials.phoneNumber).slice(-4)}
             </Text>
             {sys.origin === 'linked' ? (
-              <Pressable
-                onPress={() => setUnlinkId(sys.id)}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  styles.unlinkBtn,
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={t('systems.unlink')}
-              >
-                <IconUnlink color={colors.danger} size={16} />
-                <Text style={styles.unlinkText}>{t('systems.unlink')}</Text>
-              </Pressable>
+              <View style={[styles.actionRow, { flexDirection: row }]}>
+                <Pressable
+                  onPress={() => {
+                    setRenameText(sys.label);
+                    setRenameId(sys.id);
+                  }}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    { flexDirection: row },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('systems.rename')}
+                >
+                  <IconPencil color={colors.primary} size={16} />
+                  <Text style={styles.renameText}>{t('systems.rename')}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setUnlinkId(sys.id)}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    { flexDirection: row },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('systems.unlink')}
+                >
+                  <IconUnlink color={colors.danger} size={16} />
+                  <Text style={styles.unlinkText}>{t('systems.unlink')}</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         ))}
@@ -290,6 +328,32 @@ export function GateSystemsScreen({ navigation }: Props) {
         </Text>
       </ScrollView>
 
+      <FormSheet
+        visible={renameId != null}
+        title={t('systems.renameTitle')}
+        message={t('systems.renameMsg')}
+        fields={[
+          {
+            key: 'name',
+            label: t('systems.renameLabel'),
+            value: renameText,
+            onChange: setRenameText,
+            placeholder: t('systems.renameLabel'),
+            autoCapitalize: 'words',
+            autoFocus: true,
+          },
+        ]}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.save')}
+        onCancel={() => setRenameId(null)}
+        onConfirm={() => {
+          const id = renameId;
+          const next = renameText.trim();
+          if (!id || !next) return;
+          setRenameId(null);
+          void renameLinkedSystem(id, next).then(() => reload());
+        }}
+      />
       <FormSheet
         visible={codeOpen}
         title={t('systems.codeTitle')}
@@ -562,13 +626,21 @@ function createStyles(c: ThemeColors) {
       color: c.muted,
       flexShrink: 1,
     },
-    unlinkBtn: {
+    actionRow: {
+      alignItems: 'center',
+      gap: 16,
+      marginTop: 8,
+    },
+    actionBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      alignSelf: 'flex-start',
       gap: 6,
-      marginTop: 8,
       paddingVertical: 4,
+    },
+    renameText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.primary,
     },
     unlinkText: {
       fontSize: 14,

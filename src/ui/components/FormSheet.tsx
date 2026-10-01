@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useRtlLayout } from '../../i18n/useRtlLayout';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 import {
@@ -66,6 +67,7 @@ export function FormSheet({
 }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { writingDirection, textAlign, inputAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardBottomInset();
@@ -133,13 +135,15 @@ export function FormSheet({
             style={styles.bodyScroll}
             contentContainerStyle={styles.body}
           >
-            <Text style={styles.title}>{title}</Text>
-            {message ? <Text style={styles.message}>{message}</Text> : null}
+            <Text style={[styles.title, { writingDirection, textAlign }]}>{title}</Text>
+            {message ? (
+              <Text style={[styles.message, { writingDirection, textAlign }]}>{message}</Text>
+            ) : null}
             {fields.map((field) => (
               <View key={field.key} style={styles.field}>
-                <Text style={styles.label}>{field.label}</Text>
+                <Text style={[styles.label, { writingDirection, textAlign }]}>{field.label}</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { textAlign: inputAlign, writingDirection }]}
                   value={field.value}
                   onChangeText={field.onChange}
                   placeholder={field.placeholder}
@@ -163,7 +167,9 @@ export function FormSheet({
               </View>
             ))}
             {extra}
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? (
+              <Text style={[styles.error, { writingDirection, textAlign }]}>{error}</Text>
+            ) : null}
           </ScrollView>
           <View style={styles.actions}>
             <Pressable

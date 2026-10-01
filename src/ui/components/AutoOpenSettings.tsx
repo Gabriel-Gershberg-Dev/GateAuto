@@ -3,12 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { displayGateName, loadGates, setMonitoringEnabled } from '../../data/gatesStore';
 import { getActiveLocks } from '../../data/openSafetyLock';
+import { getMonitoringArmStatus } from '../../geo/geofencing';
 import {
-  getMonitoringArmStatus,
-  type MonitoringArmStatus,
-} from '../../geo/geofencing';
-import {
-  getGeofencingApi,
   tryStartGeofencing,
   tryStopGeofencing,
 } from '../../integrations/optionalNative';
@@ -29,7 +25,6 @@ export function AutoOpenSettings() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [enabled, setEnabled] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [armStatus, setArmStatus] = useState<MonitoringArmStatus | null>(null);
   const [lockBanner, setLockBanner] = useState<string | null>(null);
   const [gateCount, setGateCount] = useState(0);
   const running = useRef(false);
@@ -38,7 +33,6 @@ export function AutoOpenSettings() {
   const refresh = useCallback(async () => {
     const status = await getMonitoringArmStatus();
     setEnabled(status.flagOn);
-    setArmStatus(status);
     await importNativeOpenEvents();
     const gates = await loadGates();
     setGateCount(gates.length);
@@ -102,15 +96,6 @@ export function AutoOpenSettings() {
     }
   };
 
-  const reallyArmed =
-    !!armStatus?.flagOn &&
-    armStatus.geofencingActive &&
-    armStatus.btWatchOn;
-
-  let status = t('autoOpen.off');
-  if (reallyArmed) status = t('autoOpen.armed');
-  else if (enabled) status = t('autoOpen.onNotArmed');
-
   if (gateCount === 0) return null;
 
   return (
@@ -151,17 +136,6 @@ export function AutoOpenSettings() {
           />
           </View>
         </View>
-        {armStatus ? (
-          <Text
-            style={[
-              styles.status,
-              reallyArmed ? styles.statusOk : enabled ? styles.statusWarn : null,
-            ]}
-          >
-            {status}
-            {getGeofencingApi() == null ? t('autoOpen.notWired') : ''}
-          </Text>
-        ) : null}
         {lockBanner ? (
           <Text style={styles.lockBanner}>{lockBanner}</Text>
         ) : null}
@@ -222,18 +196,6 @@ function createStyles(c: ThemeColors) {
     meta: {
       fontSize: 13,
       color: c.muted,
-    },
-    status: {
-      fontSize: 13,
-      color: c.muted,
-      fontWeight: '600',
-      marginStart: 40,
-    },
-    statusOk: {
-      color: c.success,
-    },
-    statusWarn: {
-      color: c.warning,
     },
     lockBanner: {
       fontSize: 13,

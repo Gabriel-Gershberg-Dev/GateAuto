@@ -17,6 +17,7 @@ import {
   setUpdateNoticeEnabled,
 } from '../../updates/updateNotice';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
+import { ConfirmSheet } from '../components/ConfirmSheet';
 import { Group, Hairline } from '../components/Group';
 import { Toggle } from '../components/Toggle';
 import { useTheme } from '../ThemeProvider';
@@ -33,6 +34,7 @@ export function NotificationsScreen(_props: Props) {
   const [gateOpenOn, setGateOpenOn] = useState(true);
   const [monitorOn, setMonitorOn] = useState(true);
   const [updatesOn, setUpdatesOn] = useState(true);
+  const [confirmAllOff, setConfirmAllOff] = useState(false);
 
   const refresh = useCallback(async () => {
     const [native, updates] = await Promise.all([
@@ -60,7 +62,7 @@ export function NotificationsScreen(_props: Props) {
     })();
   };
 
-  const onAll = (value: boolean) => {
+  const applyAll = (value: boolean) => {
     setAllOn(value);
     void (async () => {
       await setNativeNoticesEnabled(value);
@@ -70,6 +72,14 @@ export function NotificationsScreen(_props: Props) {
       }
       askNotifyPermission();
     })();
+  };
+
+  const onAll = (value: boolean) => {
+    if (!value) {
+      setConfirmAllOff(true);
+      return;
+    }
+    applyAll(true);
   };
 
   const onGateOpen = (value: boolean) => {
@@ -97,6 +107,7 @@ export function NotificationsScreen(_props: Props) {
   const kindsOff = !allOn;
 
   return (
+    <>
     <ScrollView
       contentContainerStyle={styles.page}
       keyboardShouldPersistTaps="handled"
@@ -107,7 +118,7 @@ export function NotificationsScreen(_props: Props) {
       <Group>
         <ToggleRow
           label={t('notifications.all')}
-          detail={t('notifications.allDetail')}
+          detail={allOn ? t('notifications.allDetail') : t('notifications.allOffDetail')}
           value={allOn}
           onValueChange={onAll}
           colors={colors}
@@ -157,6 +168,19 @@ export function NotificationsScreen(_props: Props) {
         />
       </Group>
     </ScrollView>
+    <ConfirmSheet
+      visible={confirmAllOff}
+      title={t('notifications.allOffTitle')}
+      message={t('notifications.allOffMsg')}
+      cancelLabel={t('notifications.allOffCancel')}
+      confirmLabel={t('notifications.allOffConfirm')}
+      onCancel={() => setConfirmAllOff(false)}
+      onConfirm={() => {
+        setConfirmAllOff(false);
+        applyAll(false);
+      }}
+    />
+    </>
   );
 }
 

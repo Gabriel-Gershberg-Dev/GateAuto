@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.65** (versionCode 66).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.66** (versionCode 67).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, and `v1.0.65`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, and `v1.0.66`.
+
+## 1.0.66 — 2026-10-01 (beta)
+
+A newly scanned PalGate is named after the signed-in user, and that name can be edited. PalGates already on the phone keep their names. Settings uses a key for permissions and a tag for the version. My location is translated. Hold’s description is shorter. The armed / not fully armed line is gone. Turning off all notifications asks first, and says you will not be told when a gate opens on Auto-open. Android still keeps one silent line while Auto-open is working, because the phone needs it.
 
 ## 1.0.65 — 2026-10-01 (beta)
 

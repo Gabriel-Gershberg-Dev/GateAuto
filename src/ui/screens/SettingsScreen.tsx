@@ -51,9 +51,11 @@ import {
   IconDownload,
   IconExport,
   IconGoogleMark,
+  IconKey,
   IconPerson,
   IconQr,
   IconShield,
+  IconTag,
   IconTrash,
 } from '../icons';
 import { useTheme } from '../ThemeProvider';
@@ -265,7 +267,7 @@ export function SettingsScreen({ navigation }: Props) {
 
       <Group>
         <SettingsRow
-          icon={<IconShield color={colors.primary} />}
+          icon={<IconKey color={colors.primary} />}
           label={t('settings.permissions')}
           detail={t('settings.permissionsDetail')}
           onPress={() => navigation.navigate('Permissions')}
@@ -356,7 +358,7 @@ export function SettingsScreen({ navigation }: Props) {
 
       <Group>
         <SettingsRow
-          icon={<IconShield color={colors.primary} />}
+          icon={<IconTag color={colors.primary} />}
           label={t('settings.appVersion')}
           detail={ltrIsolate(installedLabel)}
           onPress={onVersionRowPress}

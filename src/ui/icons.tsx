@@ -42,6 +42,45 @@ export function IconSettings({ color, size = 22 }: IconProps) {
   );
 }
 
+/** Key — permissions, not the shield used for a protected state. */
+export function IconKey({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Circle cx="7.5" cy="15.5" r="5.5" {...stroke(color)} />
+      <Path d="M21 2l-9.6 9.6" {...stroke(color)} />
+      <Path
+        d="M15.5 7.5l2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"
+        {...stroke(color)}
+      />
+    </>,
+  );
+}
+
+/** Luggage tag — a version, distinct from the permissions key. */
+export function IconTag({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path
+        d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V4a1 1 0 0 1 1-1h9l7.6 7.6a2 2 0 0 1 0 2.8z"
+        {...stroke(color)}
+      />
+      <Circle cx="7.5" cy="7.5" r="1.15" fill={color} stroke="none" />
+    </>,
+  );
+}
+
+export function IconPencil({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Path d="M12 20h9" {...stroke(color)} />
+      <Path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" {...stroke(color)} />
+    </>,
+  );
+}
+
 export function IconShield({ color, size = 22 }: IconProps) {
   return wrap(
     size,
