@@ -145,6 +145,7 @@ function gatePayload(gate: GateConfig, systemLabel: string): SharedGatePayload {
     bluetooth: { required: false, devices: [] },
     systemLabel,
     credIndex: 0,
+    allowReshare: false,
   };
 }
 
@@ -157,7 +158,7 @@ export async function createGateInvite(
 
 export async function createGateInvites(
   gates: GateConfig[],
-  options?: { toEmail?: string },
+  options?: { toEmail?: string; allowReshare?: boolean },
 ): Promise<{ code: string }> {
   requireUid();
   if (gates.length === 0) throw new Error(i18n.t('share.errSelect'));
@@ -209,6 +210,7 @@ export async function createGateInvites(
       toShareGateMap({
         ...gatePayload(gate, label.slice(0, 80)),
         credIndex,
+        allowReshare: options?.allowReshare !== false,
       }),
     );
   }
@@ -455,6 +457,7 @@ export async function acceptInvite(
       bluetooth: { required: false, devices: [] },
       lastOpenedAt: null,
       lastResult: null,
+      allowReshare: payload.allowReshare === true,
     };
     const idx = next.findIndex((g) => g.id === id);
     if (idx >= 0) next[idx] = { ...next[idx], ...gate, enabled: next[idx].enabled };

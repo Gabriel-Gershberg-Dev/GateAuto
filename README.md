@@ -6,7 +6,7 @@ Android is the tested app, for current phones. The iOS project is in this repo a
 
 ## History
 
-Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.67`** is family production. Beta is **1.0.68**.
+Shipped versions are listed in [CHANGELOG.md](CHANGELOG.md). Git has real commits through **1.0.6** (`v1.0.6`); **1.0.7–1.0.45** were published as APKs without per-version commits. The tree at **`v1.0.67`** is family production. Beta is **1.0.69**.
 
 ## Project location
 

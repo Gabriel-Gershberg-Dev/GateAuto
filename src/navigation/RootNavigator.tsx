@@ -43,6 +43,7 @@ export type RootStackParamList = {
   GatesList: undefined;
   GateEditor: { gateId: string };
   ShareGate: { gateId?: string; gateIds?: string[] };
+  Invites: undefined;
   Monitoring: undefined;
   Settings: undefined;
   Notifications: undefined;
@@ -225,6 +226,13 @@ export function RootNavigator() {
             require('../ui/screens/ShareGateScreen').ShareGateScreen
           }
           options={{ title: t('nav.shareGate') }}
+        />
+        <Stack.Screen
+          name="Invites"
+          getComponent={() =>
+            require('../ui/screens/InvitesScreen').InvitesScreen
+          }
+          options={{ title: t('nav.invites') }}
         />
         <Stack.Screen
           name="Monitoring"

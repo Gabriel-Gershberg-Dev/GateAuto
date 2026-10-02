@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.68** (versionCode 69).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.69** (versionCode 70).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, and `v1.0.68`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, and `v1.0.69`.
+
+## 1.0.69 — 2026-10-02 (beta)
+
+When you share a gate you scanned, they can share it onward unless you turn that off. A gate that is not allowed to be shared says so, and a mixed selection can send only the ones that are allowed. Invites sits next to Share gates and shows the gates in each code you sent.
 
 ## 1.0.68 — 2026-10-02 (beta)
 

@@ -136,6 +136,8 @@ export function GatesListScreen({ navigation }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [removeOpen, setRemoveOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [shareBlock, setShareBlock] = useState<'none' | 'some' | null>(null);
+  const [shareOkIds, setShareOkIds] = useState<string[]>([]);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
@@ -732,24 +734,40 @@ export function GatesListScreen({ navigation }: Props) {
         />
       </View>
       {selectMode === 'off' && gates.length > 0 ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('gates.share')}
-          onPress={() => {
-            setSelectMode('share');
-            setSelectedIds(new Set());
-          }}
-          style={({ pressed }) => [
-            styles.shareCtl,
-            { flexDirection: row },
-            pressed && styles.shareCtlPressed,
-          ]}
-        >
-          <IconShare color={colors.primary} size={18} />
-          <Text style={[styles.shareCtlText, { writingDirection }]} numberOfLines={1}>
-            {t('gates.share')}
-          </Text>
-        </Pressable>
+        <View style={[styles.shareRow, { flexDirection: row }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('gates.share')}
+            onPress={() => {
+              setSelectMode('share');
+              setSelectedIds(new Set());
+            }}
+            style={({ pressed }) => [
+              styles.shareCtl,
+              { flexDirection: row },
+              pressed && styles.shareCtlPressed,
+            ]}
+          >
+            <IconShare color={colors.primary} size={18} />
+            <Text style={[styles.shareCtlText, { writingDirection }]} numberOfLines={1}>
+              {t('gates.share')}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('gates.invites')}
+            onPress={() => navigation.navigate('Invites')}
+            style={({ pressed }) => [
+              styles.shareCtl,
+              { flexDirection: row },
+              pressed && styles.shareCtlPressed,
+            ]}
+          >
+            <Text style={[styles.shareCtlText, { writingDirection }]} numberOfLines={1}>
+              {t('gates.invites')}
+            </Text>
+          </Pressable>
+        </View>
       ) : null}
       <ScrollView
         ref={listRef}
@@ -838,9 +856,6 @@ export function GatesListScreen({ navigation }: Props) {
                           selected={selectedIds.has(item.id)}
                           onPress={() => {
                             if (selectMode !== 'off') {
-                              if (selectMode === 'share' && !canShareGate(item)) {
-                                return;
-                              }
                               toggleSelected(item);
                               return;
                             }
@@ -852,9 +867,6 @@ export function GatesListScreen({ navigation }: Props) {
                           }}
                           onLongPress={() => {
                             if (selectMode !== 'off') {
-                              if (selectMode === 'share' && !canShareGate(item)) {
-                                return;
-                              }
                               toggleSelected(item);
                               return;
                             }
@@ -906,7 +918,6 @@ export function GatesListScreen({ navigation }: Props) {
                   selected={selectedIds.has(item.id)}
                   onPress={() => {
                     if (selectMode !== 'off') {
-                      if (selectMode === 'share' && !canShareGate(item)) return;
                       toggleSelected(item);
                       return;
                     }
@@ -922,7 +933,6 @@ export function GatesListScreen({ navigation }: Props) {
                     setCardFingerDown(false);
                     setListScrollEnabled(true);
                     if (selectMode !== 'off') {
-                      if (selectMode === 'share' && !canShareGate(item)) return;
                       toggleSelected(item);
                       return;
                     }
@@ -990,17 +1000,23 @@ export function GatesListScreen({ navigation }: Props) {
           setListSheet('create');
         }}
         onShare={() => {
-          const ids =
-            selectMode === 'share'
-              ? [...selectedIds]
-              : shareableSelectedIds(gates, selectedIds);
-          if (ids.length === 0) return;
+          const picked = gates.filter((g) => selectedIds.has(g.id));
+          const ok = picked.filter((g) => canShareGate(g));
+          if (ok.length === 0) {
+            setShareBlock('none');
+            return;
+          }
+          if (ok.length < picked.length) {
+            setShareOkIds(ok.map((g) => g.id));
+            setShareBlock('some');
+            return;
+          }
           if (!user?.isRealAccount) {
             setUpgradeOpen(true);
             return;
           }
           exitSelect();
-          navigation.navigate('ShareGate', { gateIds: ids });
+          navigation.navigate('ShareGate', { gateIds: ok.map((g) => g.id) });
         }}
         onRemove={() => {
           if (selectedIds.size === 0) return;
@@ -1105,6 +1121,35 @@ export function GatesListScreen({ navigation }: Props) {
               setClearingLock(false);
             }
           })();
+        }}
+      />
+      <ConfirmSheet
+        visible={shareBlock === 'none'}
+        title={t('share.blockedTitle')}
+        message={
+          selectedIds.size > 1 ? t('share.blockedMany') : t('share.blockedOne')
+        }
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('common.ok')}
+        onCancel={() => setShareBlock(null)}
+        onConfirm={() => setShareBlock(null)}
+      />
+      <ConfirmSheet
+        visible={shareBlock === 'some'}
+        title={t('share.someTitle')}
+        message={t('share.someMsg')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('share.shareAllowed')}
+        onCancel={() => setShareBlock(null)}
+        onConfirm={() => {
+          const ids = shareOkIds;
+          setShareBlock(null);
+          if (!user?.isRealAccount) {
+            setUpgradeOpen(true);
+            return;
+          }
+          exitSelect();
+          navigation.navigate('ShareGate', { gateIds: ids });
         }}
       />
       <ConfirmSheet
@@ -1349,12 +1394,17 @@ function createStyles(c: ThemeColors) {
       fontWeight: '700',
       fontSize: 15,
     },
-    shareCtl: {
+    shareRow: {
+      flexDirection: 'row',
       marginHorizontal: spacing.md,
       marginTop: 8,
       marginBottom: 4,
+      gap: 8,
+    },
+    shareCtl: {
+      flex: 1,
       minHeight: 44,
-      paddingHorizontal: 14,
+      paddingHorizontal: 10,
       borderRadius: radii.sm,
       borderWidth: 1,
       borderColor: c.primary,

@@ -179,7 +179,7 @@ service cloud.firestore {
           'sharedInviteCode', 'sharedFromName', 'name', 'nameOverride',
           'enabled', 'lat', 'lng', 'radiusMeters', 'cooldownMs',
           'holdEnabled', 'holdMs',
-          'bluetooth', 'lastOpenedAt', 'lastResult', 'shareDisabled', 'sortIndex',
+          'bluetooth', 'lastOpenedAt', 'lastResult', 'shareDisabled', 'allowReshare', 'sortIndex',
           'createdAt', 'updatedAt'
         ]) &&
         data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
@@ -201,6 +201,7 @@ service cloud.firestore {
         (data.lastOpenedAt == null || (data.lastOpenedAt is number && data.lastOpenedAt >= 0)) &&
         (data.lastResult == null || (data.lastResult is string && data.lastResult.size() <= 200)) &&
         data.shareDisabled is bool &&
+        (!('allowReshare' in data) || data.allowReshare is bool) &&
         data.sortIndex is number && data.sortIndex >= 0 && data.sortIndex <= 63 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;

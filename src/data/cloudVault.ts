@@ -109,6 +109,7 @@ export function gateToCloud(gate: GateConfig, sortIndex: number): Record<string,
         : null,
     lastResult: gate.lastResult ? clip(String(gate.lastResult), 200) : null,
     shareDisabled: Boolean(gate.shareDisabled),
+    allowReshare: gate.origin === 'shared' ? gate.allowReshare === true : false,
     sortIndex: Math.min(63, Math.max(0, Math.round(sortIndex))),
     updatedAt: serverTimestamp(),
   };
@@ -146,6 +147,7 @@ export function gateFromCloud(id: string, data: DocumentData): GateConfig {
         : null,
     lastResult: data.lastResult != null ? String(data.lastResult) : null,
     shareDisabled: Boolean(data.shareDisabled),
+    allowReshare: data.allowReshare === true,
   };
 }
 

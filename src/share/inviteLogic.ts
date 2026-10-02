@@ -22,6 +22,8 @@ export type SharedGatePayload = {
   systemLabel: string;
   /** Index into inviteCreds.packs (0 when a single PalGate system). */
   credIndex: number;
+  /** When false, the recipient cannot send this gate onward. */
+  allowReshare?: boolean;
 };
 
 export const INVITE_MAX_GATES = 12;
@@ -147,13 +149,14 @@ export function toShareGateMap(gate: SharedGatePayload): SharedGatePayload {
   };
 }
 
-/** Owners can share; invitees / revoked copies cannot. */
+/** Owners can always share. A received gate shares only when the invite allowed it. */
 export function canShareGate(gate: {
   origin?: string | null;
   shareDisabled?: boolean | null;
+  allowReshare?: boolean | null;
 }): boolean {
-  if (gate.origin === 'shared') return false;
   if (gate.shareDisabled) return false;
+  if (gate.origin === 'shared') return gate.allowReshare === true;
   return true;
 }
 
@@ -212,6 +215,7 @@ export function parseSharedGate(raw: unknown): SharedGatePayload {
       Number.isInteger(credIndex) && credIndex >= 0 && credIndex < INVITE_MAX_PACKS
         ? credIndex
         : 0,
+    allowReshare: g.allowReshare === true,
   };
 }
 
@@ -336,6 +340,7 @@ export function toInviteGateMap(gate: SharedGatePayload): SharedGatePayload {
       Number.isInteger(credIndex) && credIndex >= 0 && credIndex < INVITE_MAX_PACKS
         ? credIndex
         : 0,
+    allowReshare: gate.allowReshare === true,
   };
 }
 

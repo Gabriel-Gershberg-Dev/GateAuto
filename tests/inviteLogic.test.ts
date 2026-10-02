@@ -129,11 +129,12 @@ describe('invite codes', () => {
     assert.equal(alreadyHave.length, 1);
   });
 
-  it('lets owners share and blocks invitees', () => {
+  it('lets owners share, and invitees only when the invite allowed it', () => {
     assert.equal(canShareGate({ origin: 'linked' }), true);
     assert.equal(canShareGate({ origin: 'shared' }), false);
+    assert.equal(canShareGate({ origin: 'shared', allowReshare: true }), true);
     assert.equal(canShareGate({ origin: 'linked', shareDisabled: true }), false);
-    assert.equal(canShareGate({ origin: 'shared', shareDisabled: true }), false);
+    assert.equal(canShareGate({ origin: 'shared', shareDisabled: true, allowReshare: true }), false);
   });
 
   it('HUD Share only lists selected owner gates', () => {

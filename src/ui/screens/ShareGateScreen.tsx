@@ -24,6 +24,7 @@ import {
 import { BusySheet, ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { FormSheet } from '../components/FormSheet';
 import { Group, Hairline } from '../components/Group';
+import { Toggle } from '../components/Toggle';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
 import { useTranslation } from 'react-i18next';
@@ -54,6 +55,7 @@ export function ShareGateScreen({ navigation, route }: Props) {
   );
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [allowReshare, setAllowReshare] = useState(true);
 
   const reload = useCallback(async () => {
     const allGates = await loadGates();
@@ -93,7 +95,7 @@ export function ShareGateScreen({ navigation, route }: Props) {
     if (!ensureRealAccount()) return;
     setBusy(true);
     try {
-      const created = await createGateInvites(gates, { toEmail });
+      const created = await createGateInvites(gates, { toEmail, allowReshare });
       setCode(created.code);
       setEmailOpen(false);
       setEmail('');
@@ -146,6 +148,23 @@ export function ShareGateScreen({ navigation, route }: Props) {
               </Text>
             ))
           : null}
+
+        <View style={[styles.allowRow, { flexDirection: row }]}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text style={[styles.allowTitle, { writingDirection, textAlign }]}>
+              {t('share.allowReshare')}
+            </Text>
+            <Text style={[styles.allowDetail, { writingDirection, textAlign }]}>
+              {t('share.allowReshareDetail')}
+            </Text>
+          </View>
+          <Toggle
+            value={allowReshare}
+            onValueChange={setAllowReshare}
+            trackColor={{ false: colors.border, true: colors.primaryMuted }}
+            thumbColor={allowReshare ? colors.primary : colors.switchThumbOff}
+          />
+        </View>
 
         {code ? (
           <View style={styles.codeCard}>
@@ -301,6 +320,25 @@ function createStyles(c: ThemeColors) {
       fontSize: 15,
       fontWeight: '600',
       color: c.text,
+    },
+    allowRow: {
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: c.surface,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    allowTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: c.text,
+    },
+    allowDetail: {
+      fontSize: 13,
+      color: c.muted,
     },
     codeCard: {
       backgroundColor: c.surface,

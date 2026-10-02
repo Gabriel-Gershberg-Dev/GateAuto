@@ -82,6 +82,8 @@ export type GateConfig = {
    * Shared-in copy whose owner unlinked PalGate. Keep the row; block Open / Auto.
    */
   shareDisabled?: boolean;
+  /** Received copy may be sent onward. Missing means it may not. */
+  allowReshare?: boolean;
 };
 
 export type DeviceSummary = {
@@ -113,6 +115,7 @@ export function createDefaultGate(
     lastOpenedAt: null,
     lastResult: null,
     shareDisabled: false,
+    allowReshare: false,
   };
 }
 
@@ -452,5 +455,6 @@ function normalizeGate(gate: Partial<GateConfig> & { deviceId?: string }): GateC
         : null,
     lastResult: gate.lastResult != null ? String(gate.lastResult) : null,
     shareDisabled: Boolean(gate.shareDisabled),
+    allowReshare: origin === 'shared' ? gate.allowReshare === true : false,
   };
 }
