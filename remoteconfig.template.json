@@ -2,14 +2,14 @@
   "parameters": {
     "latest_version_code": {
       "defaultValue": {
-        "value": "49"
+        "value": "68"
       },
       "valueType": "NUMBER",
       "description": "PRODUCTION family channel. Do not bump on a routine/dev publish — only when explicitly asked."
     },
     "latest_version_name": {
       "defaultValue": {
-        "value": "1.0.48"
+        "value": "1.0.67"
       },
       "valueType": "STRING",
       "description": "PRODUCTION family channel. Leave unchanged unless promoting a build to family."
@@ -23,7 +23,7 @@
     },
     "release_notes": {
       "defaultValue": {
-        "value": "Group gates into lists. Take a gate out of a list without deleting it. Hide the searching notice. More reliable opening when the phone is locked."
+        "value": "Hebrew reads right to left. Search shows places as you type. Location stays off while gates wait for the car. A scanned PalGate is named after you."
       },
       "valueType": "STRING",
       "description": "PRODUCTION family channel. Optional what's-new text for the in-app update sheet."

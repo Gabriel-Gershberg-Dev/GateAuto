@@ -4,16 +4,16 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 
 Channels:
 
-- **Production** — family `Check for update`. Live: **1.0.48** (versionCode 49).
+- **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
 - **Beta** — Settings → tap version 7× → password. Live: **1.0.68** (versionCode 69).
 
 Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, and `v1.0.68`.
 
 ## 1.0.68 — 2026-10-02 (beta)
 
-Walking opens on foot, next to the gate, without the car. In the car, Auto-open stays as you set it. Normal is about 7 m, High a few steps earlier. Motion is off until you turn it on: then being on foot opens close even if the car is still connected, and driving keeps the car path. **1.0.67** stays the stable build under test for production.
+Walking opens on foot, next to the gate, without the car. In the car, Auto-open stays as you set it. Normal is about 7 m, High a few steps earlier. Motion is off until you turn it on: then being on foot opens close even if the car is still connected, and driving keeps the car path.
 
-## 1.0.67 — 2026-10-01 (beta)
+## 1.0.67 — 2026-10-02 — **production (family)**
 
 The widget hint under Auto-open is gone. Developer options use a flask icon. The warning before turning notifications off, and the searching-notice line, are shorter. A PalGate no longer shows the end of a phone number under its name.
 
