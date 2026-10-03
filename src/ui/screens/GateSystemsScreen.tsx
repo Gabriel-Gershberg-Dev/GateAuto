@@ -19,7 +19,7 @@ import { unlinkLinkedSystem } from '../../data/unlinkSystem';
 import { appendEvent } from '../../data/eventLog';
 import {
   goToGatesList,
-  resetToHubAfterInvite,
+  showAcceptedGates,
 } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import {
@@ -34,6 +34,7 @@ import {
   isValidInviteCode,
   normalizeInviteCode,
   partitionInviteGates,
+  reenabledInviteNames,
   type SharedGatePayload,
 } from '../../share/inviteLogic';
 import { BarrierMark } from '../components/BarrierMark';
@@ -143,6 +144,22 @@ export function GateSystemsScreen({ navigation }: Props) {
         setCodeError(t('share.errNoInvite'));
         return;
       }
+      if (
+        invite.status === 'accepted' &&
+        invite.acceptedByUid &&
+        invite.acceptedByUid !== auth.user?.uid
+      ) {
+        setCodeError(t('share.errUsed'));
+        return;
+      }
+      if (invite.status === 'revoked') {
+        setCodeError(t('share.errRevoked'));
+        return;
+      }
+      if (invite.status === 'declined') {
+        setCodeError(t('share.errDeclined'));
+        return;
+      }
       setCodeOpen(false);
       setCode('');
       setPreview({ invite, declineOnCancel: false });
@@ -162,15 +179,17 @@ export function GateSystemsScreen({ navigation }: Props) {
     ? partitionInviteGates(invitedList, gates)
     : null;
   const allOwned = Boolean(partition && partition.toAdd.length === 0);
+  const reenableNames = preview ? reenabledInviteNames(invitedList, gates) : [];
+  const reenableNote =
+    reenableNames.length > 0
+      ? t('systems.reenableMsg', { names: reenableNames.join(', ') })
+      : '';
 
   const finishInviteHub = async () => {
     const [sys, local] = await Promise.all([listSystems(), loadGates()]);
     setSystems(sys);
     setGates(local);
-    resetToHubAfterInvite(navigation, {
-      gateCount: local.length,
-      systemCount: sys.length,
-    });
+    showAcceptedGates(navigation);
   };
 
   const acceptPreview = async () => {
@@ -415,21 +434,26 @@ export function GateSystemsScreen({ navigation }: Props) {
           allOwned ? t('systems.allOwnedTitle') : t('systems.acceptTitle')
         }
         message={
-          allOwned
-            ? t('systems.allOwnedMsg')
-            : preview
-              ? preview.invite.gates.length > 1
-                ? t('systems.acceptMany', {
-                    count: preview.invite.gates.length,
-                    name: preview.invite.fromName || t('systems.someone'),
-                  })
-                : t('systems.acceptOne', {
-                    gate:
-                      preview.invite.gate.nameOverride ||
-                      preview.invite.gate.name,
-                    name: preview.invite.fromName || t('systems.someone'),
-                  })
-              : ''
+          [
+            allOwned
+              ? t('systems.allOwnedMsg')
+              : preview
+                ? preview.invite.gates.length > 1
+                  ? t('systems.acceptMany', {
+                      count: preview.invite.gates.length,
+                      name: preview.invite.fromName || t('systems.someone'),
+                    })
+                  : t('systems.acceptOne', {
+                      gate:
+                        preview.invite.gate.nameOverride ||
+                        preview.invite.gate.name,
+                      name: preview.invite.fromName || t('systems.someone'),
+                    })
+                : '',
+            reenableNote,
+          ]
+            .filter(Boolean)
+            .join('\n\n')
         }
         cancelLabel={
           preview?.declineOnCancel ? t('common.decline') : t('common.cancel')
@@ -441,6 +465,7 @@ export function GateSystemsScreen({ navigation }: Props) {
               ? t('systems.acceptNew', { count: partition.toAdd.length })
               : t('common.accept')
         }
+        onScrim={() => setPreview(null)}
         onCancel={() => {
           const pending = preview;
           setPreview(null);

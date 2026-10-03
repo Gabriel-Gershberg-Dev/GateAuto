@@ -40,6 +40,8 @@ type Props = {
   onCancel: () => void;
   onConfirm: () => void;
   onExtra?: () => void;
+  /** Tap outside or the system back key. Decline stays on the cancel button. */
+  onScrim?: () => void;
 };
 
 function useSheetProgress(visible: boolean, duration: number) {
@@ -82,6 +84,7 @@ export function ConfirmSheet({
   onCancel,
   onConfirm,
   onExtra,
+  onScrim,
 }: Props) {
   const { colors } = useTheme();
   const { row } = useRtlLayout();
@@ -90,6 +93,7 @@ export function ConfirmSheet({
   const keyboardHeight = useKeyboardBottomInset();
   const progress = useSheetProgress(visible, 280);
   const pad = sheetAvoidKeyboard(insets.bottom, keyboardHeight);
+  const dismissScrim = onScrim ?? onCancel;
 
   return (
     <Modal
@@ -97,7 +101,7 @@ export function ConfirmSheet({
       transparent
       animationType="none"
       statusBarTranslucent
-      onRequestClose={onCancel}
+      onRequestClose={dismissScrim}
     >
       <KeyboardAvoidingView
         style={styles.root}
@@ -105,7 +109,7 @@ export function ConfirmSheet({
         enabled={Platform.OS === 'ios'}
         pointerEvents={visible ? 'auto' : 'none'}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={dismissScrim}>
           <Animated.View style={[styles.scrim, { opacity: progress }]} />
         </Pressable>
         <Animated.View

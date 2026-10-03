@@ -4,11 +4,9 @@
  */
 
 import { AppState, type AppStateStatus } from 'react-native';
+import { getActiveUid } from '../data/userScope';
 import { appendEvent } from '../data/eventLog';
-import {
-  isMonitoringEnabled,
-  setMonitoringEnabled,
-} from '../data/gatesStore';
+import { isMonitoringEnabled } from '../data/gatesStore';
 import { getNativeKeepAliveArmed, importNativeOpenEvents } from '../platform/keepAliveAlarm';
 import { clearMonitoringStickyNotification } from '../notifications/notify';
 import {
@@ -37,14 +35,12 @@ export async function resyncMonitoringIfArmed(reason: string): Promise<void> {
       // Upgrade path: always drop any leftover armed sticky from older builds.
       await clearMonitoringStickyNotification();
       const nativeArmed = await getNativeKeepAliveArmed();
+      // Signed out: leave the last account's Auto-open running.
+      if (!getActiveUid()) return;
       const jsArmed = await isMonitoringEnabled();
       if (nativeArmed !== null && nativeArmed !== jsArmed) {
-        await setMonitoringEnabled(nativeArmed);
-        if (!nativeArmed) {
-          await stopMonitoring();
-          return;
-        }
-        await startMonitoring();
+        if (jsArmed) await startMonitoring();
+        else await stopMonitoring();
         return;
       }
       const armed = nativeArmed ?? jsArmed;

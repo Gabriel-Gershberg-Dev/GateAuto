@@ -37,6 +37,16 @@ export function goToGatesList(navigation: HubNav): void {
   resetTo(navigation, [...routes, { name: 'GatesList' }]);
 }
 
+/** Accept: gates list, with back leading to Link PalGate. */
+export function showAcceptedGates(navigation: HubNav): void {
+  navigation.dispatch(
+    CommonActions.reset({
+      index: 1,
+      routes: [{ name: 'GateSystems' }, { name: 'GatesList' }],
+    }),
+  );
+}
+
 /** Invite Done / accept: Gates list if any gates exist; never empty systems hub. */
 export function resetToHubAfterInvite(
   navigation: HubNav,

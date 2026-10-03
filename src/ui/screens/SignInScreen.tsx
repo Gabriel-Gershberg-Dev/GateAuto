@@ -21,6 +21,7 @@ import { Group } from '../components/Group';
 import { IconGoogleMark } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { radii, spacing, type ThemeColors } from '../theme';
+import { useKeyboardBottomInset } from '../useKeyboardBottomInset';
 import { useTranslation } from 'react-i18next';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
@@ -30,6 +31,7 @@ export function SignInScreen({}: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardBottomInset();
   const auth = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
@@ -97,14 +99,18 @@ export function SignInScreen({}: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
         contentContainerStyle={[
           styles.page,
-          { paddingTop: Math.max(insets.top, 24) + 8 },
+          {
+            paddingTop: Math.max(insets.top, 24) + 8,
+            paddingBottom: keyboardHeight + 32,
+          },
         ]}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
       >
         <View style={styles.langRow}>
           <LanguageMenuButton />

@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.75** (versionCode 76).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.76** (versionCode 77).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, and `v1.0.75`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, and `v1.0.76`.
+
+## 1.0.76 — 2026-10-04 (beta)
+
+Walking and Motion stay in developer options. Auto-open keeps the switch you left for that account after sign-out. Invites show who a code was for and who redeemed it. A redeemed code cannot be used again. Allow sharing is the share switch. A shared-again gate tells the other person it will turn back on. Tapping outside an invite leaves it pending. Accept opens the gate list, and back returns to Link PalGate. The sign-in password stays above the keyboard.
 
 ## 1.0.75 — 2026-10-04 (beta)
 

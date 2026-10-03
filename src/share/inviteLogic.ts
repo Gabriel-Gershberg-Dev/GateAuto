@@ -130,6 +130,35 @@ export function partitionInviteGates(
   return { alreadyHave, toAdd };
 }
 
+/** Names of gates this invite would turn back on after a revoke. */
+export function reenabledInviteNames(
+  invited: SharedGatePayload[],
+  existing: Array<{
+    deviceId?: string | null;
+    id?: string | null;
+    shareDisabled?: boolean | null;
+    name?: string | null;
+    nameOverride?: string | null;
+  }>,
+): string[] {
+  const disabled = new Map<string, string>();
+  for (const gate of existing) {
+    if (!gate.shareDisabled) continue;
+    const key = palGateDeviceKey(gate);
+    if (!key) continue;
+    disabled.set(key, gate.nameOverride?.trim() || gate.name?.trim() || key);
+  }
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const gate of invited) {
+    const key = palGateDeviceKey(gate);
+    if (!key || seen.has(key) || !disabled.has(key)) continue;
+    seen.add(key);
+    names.push(disabled.get(key) || inviteDisplayName(gate));
+  }
+  return names;
+}
+
 export function inviteDisplayName(gate: SharedGatePayload): string {
   return (
     gate.nameOverride?.trim() || gate.name?.trim() || gate.deviceId || 'Gate'

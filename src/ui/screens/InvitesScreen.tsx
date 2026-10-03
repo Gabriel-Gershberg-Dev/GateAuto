@@ -86,12 +86,16 @@ export function InvitesScreen() {
                       </Pressable>
                     ) : null}
                   </View>
-                  <Text style={[styles.meta, { writingDirection, textAlign }]} numberOfLines={1}>
+                  <Text style={[styles.meta, { writingDirection, textAlign }]} numberOfLines={2}>
                     {t(`share.status_${inv.status}`)}
                     {' · '}
                     {t('gates.listCount', {
                       count: inv.gates.length || (inv.gate?.deviceId ? 1 : 0),
                     })}
+                    {inv.toEmailLower ? ` · ${t('share.forEmail', { email: inv.toEmailLower })}` : ''}
+                    {inv.acceptedByEmail
+                      ? ` · ${t('share.usedBy', { email: inv.acceptedByEmail })}`
+                      : ''}
                   </Text>
                 </Pressable>
               </View>

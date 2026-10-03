@@ -726,6 +726,12 @@ export async function isMonitoringEnabled(): Promise<boolean> {
   return isMonitoringLive();
 }
 
+/** After sign-in, follow this account's saved Auto-open switch. */
+export async function applySignedInAutoOpen(): Promise<void> {
+  if (await isMonitoringLive()) await startMonitoring();
+  else await stopMonitoring();
+}
+
 async function checkCooldown(
   gate: GateConfig,
   label: string,

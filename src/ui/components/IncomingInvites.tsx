@@ -3,11 +3,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { NavigationProp } from '@react-navigation/native';
 import type { GateConfig } from '../../data/gatesStore';
-import { listSystems } from '../../data/palgateSystems';
 import { loadGates } from '../../data/gatesStore';
 import { isolateBidiText } from '../../i18n/bidi';
 import { useRtlLayout } from '../../i18n/useRtlLayout';
-import { resetToHubAfterInvite } from '../../navigation/hubNavigation';
+import { showAcceptedGates } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import {
   acceptInvite,
@@ -17,6 +16,7 @@ import {
 import {
   inviteDisplayName,
   partitionInviteGates,
+  reenabledInviteNames,
   type SharedGatePayload,
 } from '../../share/inviteLogic';
 import { BusySheet, ConfirmSheet, InfoSheet } from './ConfirmSheet';
@@ -60,13 +60,14 @@ export function IncomingInvites({
     ? partitionInviteGates(invitedList, gates)
     : null;
   const allOwned = Boolean(partition && partition.toAdd.length === 0);
+  const reenableNames = preview ? reenabledInviteNames(invitedList, gates) : [];
+  const reenableNote =
+    reenableNames.length > 0
+      ? t('systems.reenableMsg', { names: reenableNames.join(', ') })
+      : '';
 
   const finishInviteHub = async () => {
-    const [sys, local] = await Promise.all([listSystems(), loadGates()]);
-    resetToHubAfterInvite(navigation, {
-      gateCount: local.length,
-      systemCount: sys.length,
-    });
+    showAcceptedGates(navigation);
   };
 
   const acceptPreview = async () => {
@@ -161,21 +162,26 @@ export function IncomingInvites({
           allOwned ? t('systems.allOwnedTitle') : t('systems.acceptTitle')
         }
         message={
-          allOwned
-            ? t('systems.allOwnedMsg')
-            : preview
-              ? preview.invite.gates.length > 1
-                ? t('systems.acceptMany', {
-                    count: preview.invite.gates.length,
-                    name: preview.invite.fromName || t('systems.someone'),
-                  })
-                : t('systems.acceptOne', {
-                    gate:
-                      preview.invite.gate.nameOverride ||
-                      preview.invite.gate.name,
-                    name: preview.invite.fromName || t('systems.someone'),
-                  })
-              : ''
+          [
+            allOwned
+              ? t('systems.allOwnedMsg')
+              : preview
+                ? preview.invite.gates.length > 1
+                  ? t('systems.acceptMany', {
+                      count: preview.invite.gates.length,
+                      name: preview.invite.fromName || t('systems.someone'),
+                    })
+                  : t('systems.acceptOne', {
+                      gate:
+                        preview.invite.gate.nameOverride ||
+                        preview.invite.gate.name,
+                      name: preview.invite.fromName || t('systems.someone'),
+                    })
+                : '',
+            reenableNote,
+          ]
+            .filter(Boolean)
+            .join('\n\n')
         }
         cancelLabel={
           preview?.declineOnCancel ? t('common.decline') : t('common.cancel')
@@ -187,6 +193,7 @@ export function IncomingInvites({
               ? t('systems.acceptNew', { count: partition.toAdd.length })
               : t('common.accept')
         }
+        onScrim={() => setPreview(null)}
         onCancel={() => {
           const pending = preview;
           setPreview(null);

@@ -267,5 +267,6 @@ export async function activateAccountVault(uid: string | null): Promise<void> {
 export function leaveAccountVault(): void {
   setActiveUidInMemory(null);
   void persistActiveUid(null);
-  disarmNativeSession();
+  // Auto-open stays as this user left it. The next sign-in applies that
+  // account's own switch instead of turning the phone off for everyone.
 }

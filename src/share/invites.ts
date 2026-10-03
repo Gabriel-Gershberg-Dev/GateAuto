@@ -33,6 +33,7 @@ import { normalizeCooldownMs } from '../data/cooldownNormalize';
 import { stripLeakedPalGateCatalog } from '../data/sharedCatalog';
 import {
   bytesToInviteCode,
+  palGateDeviceKey,
   clampInviteCooldownMs,
   clampInviteHoldMs,
   clampInviteRadiusMeters,
@@ -64,6 +65,7 @@ export type InviteDoc = {
   createdAt: Timestamp | null;
   expiresAt: Timestamp | null;
   acceptedByUid: string | null;
+  acceptedByEmail: string | null;
   acceptedAt: Timestamp | null;
   gate: SharedGatePayload;
   gates: SharedGatePayload[];
@@ -276,6 +278,8 @@ function parseInvite(id: string, data: Record<string, unknown>): InviteDoc & { c
     expiresAt: (data.expiresAt as Timestamp) ?? null,
     acceptedByUid:
       typeof data.acceptedByUid === 'string' ? data.acceptedByUid : null,
+    acceptedByEmail:
+      typeof data.acceptedByEmail === 'string' ? data.acceptedByEmail : null,
     acceptedAt: (data.acceptedAt as Timestamp) ?? null,
     gate: gates[0] ?? fallback,
     gates,
@@ -464,15 +468,28 @@ export async function acceptInvite(
     else next.push(gate);
     if (!first) first = gate;
   }
-  if (adding.length > 0) {
+
+  const invitedKeys = new Set(
+    invited.map((g) => palGateDeviceKey(g)).filter(Boolean),
+  );
+  let reenabled = false;
+  next = next.map((g) => {
+    const key = palGateDeviceKey(g);
+    if (!key || !invitedKeys.has(key) || !g.shareDisabled) return g;
+    reenabled = true;
+    return { ...g, shareDisabled: false };
+  });
+  if (adding.length > 0 || reenabled) {
     const systems = await listSystems();
     await saveGates(stripLeakedPalGateCatalog(next, systems));
   }
 
   if (invite.status === 'pending') {
+    const email = auth.currentUser?.email?.trim().toLowerCase() || null;
     await updateDoc(doc(db, 'invites', invite.code), {
       status: 'accepted',
       acceptedByUid: uid,
+      acceptedByEmail: email,
       acceptedAt: serverTimestamp(),
     });
   }

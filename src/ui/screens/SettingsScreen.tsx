@@ -262,7 +262,7 @@ export function SettingsScreen({ navigation }: Props) {
       </Group>
 
       {hasGate ? <AutoOpenSettings /> : null}
-      {hasGate ? <WalkingSettings /> : null}
+      {hasGate && devUnlocked ? <WalkingSettings /> : null}
       {hasGate ? <SafetyLockSettings /> : null}
       <AppearancePicker />
       <LanguagePicker resumeOnRtl="Settings" />

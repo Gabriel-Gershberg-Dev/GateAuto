@@ -309,6 +309,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         setFirebaseUser(auth.currentUser ?? next);
         setStartupConnection('quiet');
+        await import('../geo/geofencing')
+          .then((m) => m.applySignedInAutoOpen())
+          .catch(() => undefined);
         void import('../telemetry').then((t) =>
           t.setTelemetryUser(next.uid),
         );

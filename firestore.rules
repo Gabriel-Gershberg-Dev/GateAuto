@@ -295,7 +295,7 @@ service cloud.firestore {
     function isValidInvite(data) {
       return data.keys().hasOnly([
           'fromUid', 'fromName', 'toEmailLower', 'status',
-          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedAt', 'gate', 'gates',
+          'createdAt', 'expiresAt', 'acceptedByUid', 'acceptedByEmail', 'acceptedAt', 'gate', 'gates',
           'systemUnlinked'
         ]) &&
         data.fromUid is string && data.fromUid.size() > 0 && data.fromUid.size() <= 128 &&
@@ -305,6 +305,8 @@ service cloud.firestore {
         data.createdAt is timestamp &&
         data.expiresAt is timestamp &&
         (data.acceptedByUid == null || (data.acceptedByUid is string && data.acceptedByUid.size() <= 128)) &&
+        (!('acceptedByEmail' in data) || data.acceptedByEmail == null ||
+          (data.acceptedByEmail is string && data.acceptedByEmail.size() <= 320)) &&
         (data.acceptedAt == null || data.acceptedAt is timestamp) &&
         isValidGateMap(data.gate) &&
         isValidGateList(data.gates) &&
@@ -397,6 +399,10 @@ service cloud.firestore {
       allow get: if isAuthenticated() && resource.data.fromUid == request.auth.uid;
       allow get: if isAuthenticated() && resource.data.acceptedByUid == request.auth.uid;
       allow get: if isAuthenticated() && resource.data.status == 'pending';
+      // A used code can be looked up so the next person hears it was redeemed.
+      // Credentials stay on inviteCreds and are not covered by this get.
+      allow get: if isAuthenticated() &&
+        resource.data.status in ['accepted', 'declined', 'revoked'];
       allow get: if isAuthenticated() &&
         resource.data.toEmailLower is string &&
         request.auth.token.email is string &&
