@@ -51,13 +51,17 @@ public final class LocationDemand {
       }
     }
     if (!anyAuto) return false;
+    // Walking keeps the same stream as normal Auto-open: 30s far, 1 Hz inside
+    // the detect fence. A fence wake alone is not enough on a locked phone.
+    if (KeepAlivePrefs.walkingEnabled(context)) return true;
     if (anyProximity) return true;
     return listedCarConnectedForAutoGates(context);
   }
 
   /**
-   * Play detect fences. Continuous GPS, or Walking while Auto-open is on.
-   * Walking does not by itself start the location foreground service.
+   * Play detect fences. Continuous GPS, Walking, or Motion while Auto-open is on.
+   * Walking itself now demands the GPS stream. Motion without Walking still
+   * only registers fences.
    */
   public static boolean needsPlayFences(Context context) {
     if (needsContinuousLocation(context)) return true;

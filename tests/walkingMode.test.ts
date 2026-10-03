@@ -135,8 +135,20 @@ describe('walking heading and accuracy', () => {
   });
 });
 
-describe('walking does not turn GPS on by itself', () => {
-  it('still waits for the listed car when Walking is a separate flag', () => {
+describe('walking keeps the GPS stream on', () => {
+  it('demands GPS while Walking is on even if the car is not connected', () => {
+    assert.equal(
+      needsContinuousLocation({
+        armed: true,
+        gates: [{ autoEnabled: true, btRequired: true }],
+        listedCarConnected: false,
+        walkingEnabled: true,
+      }),
+      true,
+    );
+  });
+
+  it('still waits for the listed car when Walking is off', () => {
     assert.equal(
       needsContinuousLocation({
         armed: true,

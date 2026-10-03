@@ -463,7 +463,8 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       KeepAlivePrefs.setMotionEnabled(ctx, motion);
       if (!motion) KeepAlivePrefs.setWalkActivity(ctx, "unknown");
       if (KeepAlivePrefs.isArmed(ctx)) {
-        LocationDemand.sync(ctx, false);
+        boolean ui = getReactApplicationContext().getCurrentActivity() != null;
+        LocationDemand.sync(ctx, ui);
       } else {
         WalkActivity.sync(ctx);
       }

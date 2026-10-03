@@ -5,7 +5,8 @@ import { listedCarIsConnected } from '../bluetooth/match';
  * Mirrored by {@code LocationDemand.java}.
  *
  * Manual (auto-off) gates never demand location. If every auto-on gate
- * requires a listed car, wait for that car — do not hunt GPS in the meantime.
+ * requires a listed car, wait for that car — unless Walking is on, which
+ * keeps the GPS stream so a locked phone can still see the gate.
  */
 export type LocationDemandGate = {
   autoEnabled: boolean;
@@ -23,10 +24,12 @@ export function needsContinuousLocation(input: {
   armed: boolean;
   gates: LocationDemandGate[];
   listedCarConnected: boolean;
+  walkingEnabled?: boolean;
 }): boolean {
   if (!input.armed) return false;
   const auto = input.gates.filter((g) => g.autoEnabled && g.hasPin !== false);
   if (auto.length === 0) return false;
+  if (input.walkingEnabled) return true;
   if (auto.some((g) => !g.btRequired)) return true;
   return Boolean(input.listedCarConnected);
 }
