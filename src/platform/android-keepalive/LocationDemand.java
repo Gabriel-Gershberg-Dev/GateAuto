@@ -1,6 +1,7 @@
 package com.gateauto.app.keepalive;
 
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -29,6 +30,8 @@ public final class LocationDemand {
   private static final AtomicBoolean syncing = new AtomicBoolean(false);
   private static final AtomicBoolean pending = new AtomicBoolean(false);
   private static final AtomicBoolean pendingAllowFgs = new AtomicBoolean(false);
+  /** Last sync's GPS demand, so a car connect can poll once without a location FGS. */
+  private static volatile boolean lastGpsDemand = false;
 
   private LocationDemand() {}
 
@@ -149,6 +152,46 @@ public final class LocationDemand {
   }
 
   /**
+   * Xiaomi, Redmi, and POCO. Other phones keep the car-connect broadcast as
+   * the only wake while every auto gate waits for a listed car.
+   */
+  static boolean isXiaomiFamily() {
+    return oemName(Build.MANUFACTURER) || oemName(Build.BRAND);
+  }
+
+  private static boolean oemName(String raw) {
+    if (raw == null) return false;
+    String name = raw.toLowerCase(Locale.US);
+    return name.contains("xiaomi") || name.contains("redmi") || name.contains("poco");
+  }
+
+  /**
+   * Keep a non-location hold while Auto-open waits for the car. GPS stays off,
+   * so the location icon stays off. The hold and the recover alarm can start
+   * the process again after Xiaomi freezes it, then look at the car.
+   */
+  public static boolean quietHold(Context context) {
+    if (context == null || !KeepAlivePrefs.isArmed(context)) return false;
+    if (!isXiaomiFamily()) return false;
+    if (needsContinuousLocation(context) || needsPlayFences(context)) return false;
+    return hasListedCarAutoGate(context);
+  }
+
+  /** Forget the GPS-demand edge so the next arm can poll once. */
+  static void onDisarmed() {
+    lastGpsDemand = false;
+  }
+
+  private static boolean hasListedCarAutoGate(Context context) {
+    JSONArray arr = GeofenceRegistrar.regionsArray(context);
+    for (int i = 0; i < arr.length(); i++) {
+      JSONObject gate = arr.optJSONObject(i);
+      if (gate != null && isDemandAuto(gate) && requiresListedCar(gate)) return true;
+    }
+    return false;
+  }
+
+  /**
    * Arm/disarm location hardware to match demand. Play fences stay registered
    * only while GPS is allowed so the OS location indicator can drop.
    */
@@ -173,6 +216,8 @@ public final class LocationDemand {
 
   private static void syncLocked(Context ctx, boolean allowStartLocationFgs) {
     boolean gps = needsContinuousLocation(ctx);
+    boolean gpsRose = gps && !lastGpsDemand;
+    lastGpsDemand = gps;
     boolean fences = needsPlayFences(ctx);
     Log.i(
       TAG,
@@ -191,6 +236,11 @@ public final class LocationDemand {
         MonitoringService.start(ctx);
       } else {
         HoldService.ensure(ctx);
+        // Car was already connected when a frozen Xiaomi process woke. The
+        // connect broadcast will not fire again. Poll once, still no location FGS.
+        if (gpsRose && isXiaomiFamily()) {
+          KeepAliveModule.pollNearbySoon(ctx, "quiet-wake");
+        }
       }
     } else if (fences) {
       // Walking, no listed car: keep the 100 m wake. No location FGS, no hold
@@ -204,10 +254,17 @@ public final class LocationDemand {
       ApproachSampler.stop();
       MonitoringService.stop(ctx);
       GeofenceRegistrar.unregister(ctx);
-      // Nothing to hold for: the car-connect broadcast cold-starts the process
-      // and re-arms. Keeping the hold only kept a "running" notice up.
-      HoldService.stop(ctx);
-      MonitoringNotice.clearUnowned(ctx);
+      if (quietHold(ctx)) {
+        // Xiaomi freezes a process that has nothing holding it. Stay up with
+        // no GPS until the listed car connects.
+        HoldService.ensure(ctx);
+        Log.i(TAG, "quiet hold — waiting for listed car, no GPS");
+      } else {
+        // The car-connect broadcast cold-starts the process. A hold here only
+        // kept a running notice up.
+        HoldService.stop(ctx);
+        MonitoringNotice.clearUnowned(ctx);
+      }
     }
     WalkActivity.sync(ctx);
   }

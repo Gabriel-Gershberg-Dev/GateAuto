@@ -133,6 +133,14 @@ public class KeepAliveReceiver extends BroadcastReceiver {
         if (reregister) GeofenceRegistrar.refresh(app);
         return;
       }
+      if (LocationDemand.quietHold(app)) {
+        // No GPS. Prime the car read so a connect discovered on this wake
+        // can poll once from LocationDemand.
+        Log.i(TAG, "quiet hold — car not connected yet");
+        CarBluetoothState.prime(app);
+        LocationDemand.sync(app, false);
+        return;
+      }
       Log.i(TAG, "native recover skip — waiting for listed car Bluetooth");
       LocationDemand.sync(app, false);
       return;

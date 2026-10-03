@@ -104,6 +104,7 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
       }
     } else {
       KeepAliveScheduler.stop(ctx);
+      LocationDemand.onDisarmed();
       MonitoringService.stop(ctx);
       HoldService.stop(ctx);
       ApproachSampler.stop();

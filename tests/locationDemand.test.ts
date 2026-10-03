@@ -120,15 +120,27 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     assert.ok(!body.includes('if (!syncing.compareAndSet(false, true)) return;'));
   });
 
-  it('drops the hold, fences and GPS together when nothing needs location', () => {
+  it('drops GPS and fences while waiting for the car, and keeps a quiet hold only on Xiaomi', () => {
     const locked = demand.slice(demand.indexOf('private static void syncLocked'));
-    const idle = locked.slice(locked.indexOf('ApproachSampler.stop();'));
+    const idle = locked.slice(locked.lastIndexOf('ApproachSampler.stop();'));
     assert.ok(idle.includes('GeofenceRegistrar.unregister(ctx);'));
+    assert.ok(idle.includes('MonitoringService.stop(ctx);'));
+    assert.ok(idle.includes('quietHold(ctx)'));
+    assert.ok(idle.includes('HoldService.ensure(ctx);'));
     assert.ok(idle.includes('HoldService.stop(ctx);'));
-    assert.ok(!idle.includes('HoldService.ensure(ctx);'));
+    assert.ok(!idle.includes('MonitoringService.start'));
+    assert.ok(demand.includes('isXiaomiFamily'));
+    assert.ok(demand.includes('redmi'));
+    assert.ok(demand.includes('poco'));
+    const rose = locked.slice(locked.indexOf('gpsRose'), locked.indexOf('} else if (fences)'));
+    assert.ok(rose.includes('isXiaomiFamily()'));
+    assert.ok(rose.includes('pollNearbySoon'));
+    assert.ok(!rose.includes('MonitoringService.start(ctx);\n        if (gpsRose'));
     const hold = fs.readFileSync(path.join(javaDir, 'HoldService.java'), 'utf8');
     const ensure = hold.slice(hold.indexOf('public static void ensure'), hold.indexOf('public static void stop'));
-    assert.ok(ensure.includes('LocationDemand.needsContinuousLocation(app)'));
+    assert.ok(ensure.includes('LocationDemand.quietHold(app)'));
+    const receiver = fs.readFileSync(path.join(javaDir, 'KeepAliveReceiver.java'), 'utf8');
+    assert.ok(receiver.includes('quiet hold — car not connected yet'));
   });
 
   it('never reads location for a Bluetooth device that is not a listed car', () => {

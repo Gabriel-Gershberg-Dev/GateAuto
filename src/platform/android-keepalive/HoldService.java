@@ -85,9 +85,12 @@ public class HoldService extends Service {
     if (context == null) return;
     Context app = context.getApplicationContext();
     if (!KeepAlivePrefs.isArmed(app)) return;
-    // Every auto gate waits for a listed car: the car-connect broadcast wakes
-    // the process by itself, so a hold would only pin a notice in the shade.
-    if (!LocationDemand.needsContinuousLocation(app)) return;
+    // Every auto gate waits for a listed car: on most phones the car-connect
+    // broadcast wakes the process by itself. Xiaomi freezes that process, so
+    // quietHold keeps this non-location service up with no GPS.
+    if (!LocationDemand.needsContinuousLocation(app) && !LocationDemand.quietHold(app)) {
+      return;
+    }
     // Location FGS already holds the process — no need for a second FGS.
     if (MonitoringService.isForeground()) return;
     if (running) return;
@@ -137,7 +140,13 @@ public class HoldService extends Service {
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    if (!KeepAlivePrefs.isArmed(this) || !LocationDemand.needsContinuousLocation(this)) {
+    if (
+      !KeepAlivePrefs.isArmed(this)
+      || (
+        !LocationDemand.needsContinuousLocation(this)
+        && !LocationDemand.quietHold(this)
+      )
+    ) {
       stopSelf();
       return START_NOT_STICKY;
     }
