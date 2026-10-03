@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.77** (versionCode 78).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.78** (versionCode 79).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, and `v1.0.77`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, and `v1.0.78`.
+
+## 1.0.78 — 2026-10-04 (beta)
+
+Sign-up no longer jumps off the top of the screen when the keyboard opens. The password stays in view.
 
 ## 1.0.77 — 2026-10-04 (beta)
 

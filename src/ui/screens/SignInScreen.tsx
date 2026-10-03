@@ -1,8 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -44,14 +42,6 @@ export function SignInScreen({}: Props) {
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
-
-  useEffect(() => {
-    if (keyboardHeight <= 0) return;
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 60);
-    return () => clearTimeout(timer);
-  }, [keyboardHeight]);
 
   const submitEmail = async () => {
     setFormError(null);
@@ -107,21 +97,14 @@ export function SignInScreen({}: Props) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.root}>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
           styles.page,
-          {
-            paddingTop: Math.max(insets.top, 24) + 8,
-            paddingBottom: keyboardHeight + 48,
-          },
+          { paddingTop: Math.max(insets.top, 24) + 8 },
         ]}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets
       >
         <View style={styles.langRow}>
           <LanguageMenuButton />
@@ -170,7 +153,6 @@ export function SignInScreen({}: Props) {
               returnKeyType="next"
               blurOnSubmit={false}
               onSubmitEditing={() => passwordRef.current?.focus()}
-              onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
             />
             <Text style={styles.label}>{t('common.password')}</Text>
             <TextInput
@@ -184,7 +166,6 @@ export function SignInScreen({}: Props) {
               placeholderTextColor={colors.muted}
               secureTextEntry
               returnKeyType="done"
-              onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
               onSubmitEditing={() => void submitEmail()}
             />
             {formError ? <Text style={styles.error}>{formError}</Text> : null}
@@ -256,7 +237,7 @@ export function SignInScreen({}: Props) {
         message={info?.message ?? ''}
         onDismiss={() => setInfo(null)}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
