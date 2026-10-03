@@ -113,15 +113,13 @@ describe('owner unlink disables shared copies', () => {
     );
   });
 
-  it('does not disable two of four from the same system when a leftover invite is revoked', () => {
+  it('turns off only the gates from a revoked invite', () => {
     const gates = [
       sharedGate('share:OLDINV01:a', 'a', { sharedInviteCode: 'OLDINV01' }),
       sharedGate('share:OLDINV01:b', 'b', { sharedInviteCode: 'OLDINV01' }),
       sharedGate('share:NEWINV02:c', 'c', { sharedInviteCode: 'NEWINV02' }),
       sharedGate('share:NEWINV02:d', 'd', { sharedInviteCode: 'NEWINV02' }),
     ];
-    gates[0] = { ...gates[0], shareDisabled: true, enabled: false };
-    gates[1] = { ...gates[1], shareDisabled: true, enabled: false };
     const { gates: next, changedIds } = applyShareRevokeState(
       gates,
       [
@@ -134,12 +132,13 @@ describe('owner unlink disables shared copies', () => {
       [{ code: 'NEWINV02', deviceIds: ['c', 'd'] }],
       [{ id: 'sys_shared', allowedDeviceIds: ['a', 'b', 'c', 'd'] }],
     );
-    assert.equal(changedIds.includes('share:OLDINV01:a'), true);
-    assert.equal(isShareDisabled(next[0]), false);
-    assert.equal(isShareDisabled(next[1]), false);
+    assert.deepEqual(changedIds.sort(), ['share:OLDINV01:a', 'share:OLDINV01:b']);
+    assert.equal(isShareDisabled(next[0]), true);
+    assert.equal(next[0].enabled, false);
+    assert.equal(isShareDisabled(next[1]), true);
     assert.equal(isShareDisabled(next[2]), false);
-    assert.equal(isShareDisabled(next[3]), false);
     assert.equal(next[2].enabled, true);
+    assert.equal(isShareDisabled(next[3]), false);
   });
 
   it('disables every shared gate of that PalGate when the owner unlinks', () => {

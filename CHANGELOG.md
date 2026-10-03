@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.69** (versionCode 70).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.70** (versionCode 71).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, and `v1.0.69`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, and `v1.0.70`.
+
+## 1.0.70 — 2026-10-03 (beta)
+
+Revoking an invite turns those gates off for the other person. Invites has a Revoke button on each code.
 
 ## 1.0.69 — 2026-10-02 (beta)
 

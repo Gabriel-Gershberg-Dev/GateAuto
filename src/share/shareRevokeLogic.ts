@@ -96,19 +96,10 @@ function groupKeyForGate(
   return `loose:${deviceId || gate.id}`;
 }
 
-function findRoot(parent: Map<string, string>, key: string): string {
-  let cur = parent.get(key) ?? key;
-  while (cur !== (parent.get(cur) ?? cur)) {
-    cur = parent.get(cur) ?? cur;
-  }
-  parent.set(key, cur);
-  return cur;
-}
-
 /**
- * Recipient copies disable only when the owner PalGate system is gone.
- * A leftover invite of 2-of-4 must not mark those two revoked while the
- * same system is still shared.
+ * A revoked invite turns off the gates that came from that code.
+ * Unlinking the PalGate turns off every shared copy of that system.
+ * A gate that another live invite still includes stays open.
  */
 export function applyShareRevokeState(
   gates: GateConfig[],
@@ -126,33 +117,10 @@ export function applyShareRevokeState(
     groups.set(key, list);
   });
 
-  const keys = [...groups.keys()];
-  const parent = new Map(keys.map((k) => [k, k]));
-  const union = (a: string, b: string) => {
-    const pa = findRoot(parent, a);
-    const pb = findRoot(parent, b);
-    if (pa !== pb) parent.set(pa, pb);
-  };
-  const groupOverlaps = (
-    key: string,
-    hint: { code: string; deviceIds: string[] },
-  ): boolean =>
-    (groups.get(key) ?? []).some((i) => inviteOverlapsGate(gates[i], hint));
-
-  for (const hint of [...revoked, ...live]) {
-    const hit = keys.filter((k) => groupOverlaps(k, hint));
-    for (let i = 1; i < hit.length; i++) union(hit[0], hit[i]);
-  }
-
-  const merged = new Map<string, number[]>();
-  for (const key of keys) {
-    const root = findRoot(parent, key);
-    merged.set(root, [...(merged.get(root) ?? []), ...(groups.get(key) ?? [])]);
-  }
-
   const disableIds = new Set<string>();
   const clearIds = new Set<string>();
-  for (const indexes of merged.values()) {
+
+  for (const indexes of groups.values()) {
     const group = indexes.map((i) => gates[i]);
     const relatedLive = live.filter((h) =>
       group.some((g) => inviteOverlapsGate(g, h)),
@@ -164,13 +132,23 @@ export function applyShareRevokeState(
     const legacyGone =
       relatedRevoked.some((h) => h.systemUnlinked == null) &&
       relatedLive.length === 0;
-    const systemGone =
-      relatedLive.length === 0 && (unlinked || legacyGone);
-    for (const gate of group) {
-      if (systemGone) disableIds.add(gate.id);
-      else if (gate.shareDisabled) clearIds.add(gate.id);
+    if (relatedLive.length === 0 && (unlinked || legacyGone)) {
+      for (const gate of group) disableIds.add(gate.id);
     }
   }
+
+  gates.forEach((gate) => {
+    if (gate.origin !== 'shared') return;
+    const coveredByLive = live.some((h) => inviteOverlapsGate(gate, h));
+    if (coveredByLive) {
+      if (gate.shareDisabled && !disableIds.has(gate.id)) clearIds.add(gate.id);
+      return;
+    }
+    const codeRevoked = revoked.some(
+      (h) => h.systemUnlinked === false && inviteOverlapsGate(gate, h),
+    );
+    if (codeRevoked) disableIds.add(gate.id);
+  });
 
   const changedIds: string[] = [];
   const next = gates.map((gate) => {

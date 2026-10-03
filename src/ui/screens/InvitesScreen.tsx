@@ -7,9 +7,10 @@ import { useRtlLayout } from '../../i18n/useRtlLayout';
 import { inviteDisplayName } from '../../share/inviteLogic';
 import {
   listOutgoingInvites,
+  revokeInvite,
   type InviteDoc,
 } from '../../share/invites';
-import { InfoSheet } from '../components/ConfirmSheet';
+import { ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { Group, Hairline } from '../components/Group';
 import { useTheme } from '../ThemeProvider';
 import { spacing, type ThemeColors } from '../theme';
@@ -19,10 +20,11 @@ type Invite = InviteDoc & { code: string };
 export function InvitesScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { isRtl, writingDirection, textAlign } = useRtlLayout();
+  const { isRtl, row, writingDirection, textAlign } = useRtlLayout();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [open, setOpen] = useState<Invite | null>(null);
+  const [revokeCode, setRevokeCode] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   const reload = useCallback(async () => {
@@ -71,7 +73,19 @@ export function InvitesScreen() {
                   style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.code}>{inv.code}</Text>
+                  <View style={[styles.top, { flexDirection: row }]}>
+                    <Text style={styles.code}>{inv.code}</Text>
+                    {inv.status === 'pending' || inv.status === 'accepted' ? (
+                      <Pressable
+                        onPress={() => setRevokeCode(inv.code)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('common.revoke')}
+                      >
+                        <Text style={styles.revoke}>{t('common.revoke')}</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                   <Text style={[styles.meta, { writingDirection, textAlign }]} numberOfLines={1}>
                     {t(`share.status_${inv.status}`)}
                     {' · '}
@@ -94,6 +108,21 @@ export function InvitesScreen() {
             : t('share.inviteGates')
         }
         onDismiss={() => setOpen(null)}
+      />
+      <ConfirmSheet
+        visible={revokeCode != null}
+        title={t('share.revokeTitle')}
+        message={t('share.revokeMsg')}
+        cancelLabel={t('common.keep')}
+        confirmLabel={t('common.revoke')}
+        destructive
+        onCancel={() => setRevokeCode(null)}
+        onConfirm={() => {
+          const code = revokeCode;
+          setRevokeCode(null);
+          if (!code) return;
+          void revokeInvite(code).then(() => reload());
+        }}
       />
     </>
   );
@@ -119,11 +148,21 @@ function createStyles(c: ThemeColors) {
       gap: 4,
       backgroundColor: c.surface,
     },
+    top: {
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
     code: {
       fontSize: 17,
       fontWeight: '700',
       color: c.text,
       letterSpacing: 1,
+    },
+    revoke: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.danger,
     },
     meta: {
       fontSize: 13,

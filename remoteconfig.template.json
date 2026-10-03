@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "70"
+        "value": "71"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.69"
+        "value": "1.0.70"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "When you share a gate you scanned, they can share it onward unless you turn that off. Invites sits next to Share gates."
+        "value": "Revoking an invite turns those gates off for the other person. Invites has a Revoke button on each code."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

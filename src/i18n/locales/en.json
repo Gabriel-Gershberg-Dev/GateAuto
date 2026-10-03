@@ -370,7 +370,7 @@
     "createInvite": "Create invite",
     "needsAccountMsg": "Guest can open gates on this phone. To share a gate, sign in with Google or email so the other person can accept.",
     "revokeTitle": "Revoke this invite?",
-    "revokeMsg": "This code can no longer be used. Shared copies stay until you unlink that PalGate. You can send a new code later.",
+    "revokeMsg": "This code stops working. The other person can no longer open those gates.",
     "creating": "Creating a short code…",
     "status_pending": "pending",
     "status_accepted": "accepted",
