@@ -202,5 +202,11 @@ describe('walking keeps the GPS stream on', () => {
     );
     assert.ok(bt.includes('withinFence(gate, last, 1.0)'));
     assert.ok(!bt.includes('withinOpen('));
+    const play = open.slice(open.indexOf('private static PlayOpenCheck resolvePlayOpen'));
+    assert.ok(play.includes('openRadiusMeters(context, gate)'));
+    assert.ok(
+      play.indexOf('openRadiusMeters(context, gate)') <
+        play.indexOf('distanceMeters(gate, triggering)'),
+    );
   });
 });

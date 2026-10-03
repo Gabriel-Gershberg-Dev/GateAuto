@@ -1006,6 +1006,12 @@ public final class PalGateNativeOpen {
     return delta <= WALKING_HEADING_AWAY_DEG;
   }
 
+  /** Fence enter uses the same cap. Car Bluetooth connect keeps {@link #withinFence}. */
+  private static boolean walkingFixOk(Context context, JSONObject gate, Location loc) {
+    if (!footOpen(context, gate)) return true;
+    return walkingAccuracyOk(loc) && headingAllows(gate, loc);
+  }
+
   /** Poll / fence wake. Car Bluetooth connect keeps {@link #withinFence}. */
   private static boolean withinOpen(Context context, JSONObject gate, Location loc) {
     double meters = distanceMeters(gate, loc);
@@ -1024,16 +1030,16 @@ public final class PalGateNativeOpen {
   }
 
   /**
-   * Prefer Play triggering loc if it is ≤ user radius. Fetch fused last only
-   * when triggering is missing or outside — do not wait for GPS when already
-   * inside. Both outside / both missing → skip (Play ENTER is not an open).
+   * Prefer Play triggering loc if it is ≤ the open distance. Walking uses the
+   * close walking distance, not the saved pin radius. Fetch fused last only
+   * when triggering is missing or outside. Both outside / both missing → skip.
    */
   private static PlayOpenCheck resolvePlayOpen(
     Context context,
     JSONObject gate,
     Location triggering
   ) {
-    double maxM = openMaxMeters(gate);
+    double maxM = openRadiusMeters(context, gate);
     if (!(maxM > 0)) {
       return new PlayOpenCheck(
         false,
@@ -1045,13 +1051,13 @@ public final class PalGateNativeOpen {
     }
     if (triggering != null) {
       double trigM = distanceMeters(gate, triggering);
-      if (Double.isFinite(trigM) && trigM <= maxM) {
+      if (Double.isFinite(trigM) && trigM <= maxM && walkingFixOk(context, gate, triggering)) {
         return new PlayOpenCheck(true, trigM, maxM, "triggering", "");
       }
       Location last = lastLocation(context);
       if (last != null) {
         double lastM = distanceMeters(gate, last);
-        if (Double.isFinite(lastM) && lastM <= maxM) {
+        if (Double.isFinite(lastM) && lastM <= maxM && walkingFixOk(context, gate, last)) {
           return new PlayOpenCheck(true, lastM, maxM, "last", "");
         }
         double closest =
@@ -1069,7 +1075,7 @@ public final class PalGateNativeOpen {
       Location last = lastLocation(context);
       if (last != null) {
         double lastM = distanceMeters(gate, last);
-        if (Double.isFinite(lastM) && lastM <= maxM) {
+        if (Double.isFinite(lastM) && lastM <= maxM && walkingFixOk(context, gate, last)) {
           return new PlayOpenCheck(true, lastM, maxM, "last", "");
         }
         if (Double.isFinite(lastM)) {

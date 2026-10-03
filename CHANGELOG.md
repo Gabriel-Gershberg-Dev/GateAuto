@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.74** (versionCode 75).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.75** (versionCode 76).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, and `v1.0.74`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, and `v1.0.75`.
+
+## 1.0.75 — 2026-10-04 (beta)
+
+A fence enter while Walking is on uses the close walking distance. 16 m no longer opens a 7 m walk.
 
 ## 1.0.74 — 2026-10-04 (beta)
 

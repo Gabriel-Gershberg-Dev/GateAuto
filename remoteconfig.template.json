@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "75"
+        "value": "76"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.74"
+        "value": "1.0.75"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Walking keeps GPS on. Far away it checks every 30 seconds. Inside about 100 m it checks every second."
+        "value": "Walking opens only at the close walking distance, including when a fence fires in the background."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."
