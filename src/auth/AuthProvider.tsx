@@ -249,6 +249,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const continueStartup = useCallback(() => {
     waiveStartupNetwork();
     startupGateRef.current?.continue();
+    // The splash can be waiting on auth itself, before any network read
+    // exists to time out. Open anyway still has to leave that screen.
+    const current = auth.currentUser;
+    if (current) setFirebaseUser(current);
+    setReady(true);
   }, []);
 
   useEffect(() => {
@@ -273,10 +278,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void (async () => {
         let opened = false;
         try {
-          await activateAccountVault(next.uid);
-          if (epoch !== authEpoch) return;
           await recoverStartupRead({
             read: async () => {
+              await activateAccountVault(next.uid);
               await hydrateSignedInAccount(next);
               await persistProfile(next);
             },

@@ -7,6 +7,8 @@ import {
   phaseAfterStartupFailure,
   recoverStartupRead,
   resetStartupNetworkWaiver,
+  SPLASH_ESCAPE_MS,
+  splashConnection,
   StartupContinued,
   startupNetworkWaived,
   waiveStartupNetwork,
@@ -17,6 +19,13 @@ describe('phaseAfterStartupFailure', () => {
     assert.equal(phaseAfterStartupFailure(1), 'refreshing');
     assert.equal(phaseAfterStartupFailure(2), 'needsRefresh');
     assert.equal(phaseAfterStartupFailure(3), 'needsRefresh');
+  });
+
+  it('offers a way in after the splash has waited, even if the network never failed', () => {
+    assert.equal(SPLASH_ESCAPE_MS, 12_000);
+    assert.equal(splashConnection(false, 'quiet'), 'quiet');
+    assert.equal(splashConnection(true, 'quiet'), 'needsRefresh');
+    assert.equal(splashConnection(true, 'refreshing'), 'needsRefresh');
   });
 });
 
@@ -136,5 +145,13 @@ describe('AuthProvider startup settle', () => {
     assert.ok(!/settled\w*\s*:\s*string \| null = null;/.test(src.slice(0, providerAt)));
     assert.ok(src.includes('const settledUidRef = useRef<string | null>(null);'));
     assert.ok(src.includes('next.uid === settledUidRef.current'));
+    assert.ok(src.includes('setReady(true);'));
+    const nav = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'navigation', 'RootNavigator.tsx'),
+      'utf8',
+    );
+    assert.ok(nav.includes('SPLASH_ESCAPE_MS'));
+    assert.ok(nav.includes('leaveSignedInSplash'));
+    assert.ok(nav.includes("setHubRoute((route) => route ?? 'GatesList')"));
   });
 });

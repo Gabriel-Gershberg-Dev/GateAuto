@@ -2,6 +2,11 @@
 export const STARTUP_READ_TIMEOUT_MS = 8_000;
 /** Pause between automatic retries once the user has been asked to reset mobile data. */
 export const STARTUP_RETRY_GAP_MS = 8_000;
+/**
+ * The opening animation must not run forever when the stuck step is not the
+ * network read (sign-in restore, or the gates saved on the phone).
+ */
+export const SPLASH_ESCAPE_MS = 12_000;
 
 export type StartupNetPhase = 'quiet' | 'refreshing' | 'needsRefresh';
 export type StartupStop = 'cancel' | 'continue';
@@ -39,6 +44,14 @@ export function isStartupStop(error: unknown): boolean {
  */
 export function phaseAfterStartupFailure(failedAttempts: number): StartupNetPhase {
   return failedAttempts <= 1 ? 'refreshing' : 'needsRefresh';
+}
+
+/** Once the splash has waited long enough, always offer a way in. */
+export function splashConnection(
+  escape: boolean,
+  connection: StartupNetPhase,
+): StartupNetPhase {
+  return escape ? 'needsRefresh' : connection;
 }
 
 export function withTimeout<T>(

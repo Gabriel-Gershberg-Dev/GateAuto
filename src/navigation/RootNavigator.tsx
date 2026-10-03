@@ -16,13 +16,17 @@ import { refreshAppConnection } from '../firebase/refreshConnection';
 import {
   createStartupGate,
   recoverStartupRead,
+  SPLASH_ESCAPE_MS,
+  splashConnection,
   StartupAttemptCancelled,
   StartupContinued,
   startupNetworkWaived,
   waiveStartupNetwork,
+  withTimeout,
   type StartupGate,
   type StartupNetPhase,
 } from '../firebase/startupNetwork';
+import { auth } from '../firebase/app';
 import { listIncomingPendingInvites } from '../share/invites';
 import { StartupScreen } from '../ui/components/StartupScreen';
 import { PermissionSetupHost } from '../ui/components/PermissionSetupHost';
@@ -67,7 +71,12 @@ export function RootNavigator() {
   );
   const [resumeSettings, setResumeSettings] = useState(false);
   const [hubConnection, setHubConnection] = useState<StartupNetPhase>('quiet');
+  const [splashEscape, setSplashEscape] = useState(false);
   const hubGateRef = useRef<StartupGate | null>(null);
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
+  const continueStartupRef = useRef(continueStartup);
+  continueStartupRef.current = continueStartup;
 
   useEffect(() => {
     if (!ready) return;
@@ -106,7 +115,19 @@ export function RootNavigator() {
           pending = [];
         }
       }
-      const [gates, systems, resume] = await local;
+      let gates: Awaited<ReturnType<typeof loadGates>>;
+      let systems: Awaited<ReturnType<typeof listSystems>>;
+      let resume: Awaited<ReturnType<typeof consumeResumeRoute>>;
+      try {
+        [gates, systems, resume] = await withTimeout(local, 8_000, gate.isStopped);
+      } catch (error) {
+        if (cancelled || error instanceof StartupAttemptCancelled) return;
+        if (!cancelled) {
+          setHubConnection('needsRefresh');
+          setHubRoute((route) => route ?? 'GatesList');
+        }
+        return;
+      }
       if (cancelled) return;
       setHubConnection('quiet');
       setResumeSettings(shouldResumeSettings(true, resume));
@@ -132,8 +153,42 @@ export function RootNavigator() {
       ? 'SignIn'
       : hubRoute;
 
+  useEffect(() => {
+    if (initialRoute) {
+      setSplashEscape(false);
+      return;
+    }
+    let poll: ReturnType<typeof setInterval> | null = null;
+    const leaveSignedInSplash = () => {
+      if (!auth.currentUser) return false;
+      waiveStartupNetwork();
+      if (!readyRef.current) continueStartupRef.current();
+      else hubGateRef.current?.continue();
+      setHubRoute((route) => route ?? 'GatesList');
+      return true;
+    };
+    const timer = setTimeout(() => {
+      setSplashEscape(true);
+      if (leaveSignedInSplash()) return;
+      // Auth can finish restoring just after the wait. Leave as soon as it does.
+      poll = setInterval(() => {
+        if (leaveSignedInSplash() && poll) {
+          clearInterval(poll);
+          poll = null;
+        }
+      }, 500);
+    }, SPLASH_ESCAPE_MS);
+    return () => {
+      clearTimeout(timer);
+      if (poll) clearInterval(poll);
+    };
+  }, [initialRoute]);
+
   if (!initialRoute) {
-    const connection = !ready ? startupConnection : hubConnection;
+    const connection = splashConnection(
+      splashEscape,
+      !ready ? startupConnection : hubConnection,
+    );
     return (
       <StartupScreen
         connection={connection}
@@ -142,11 +197,10 @@ export function RootNavigator() {
           else hubGateRef.current?.kick();
         }}
         onContinue={() => {
+          waiveStartupNetwork();
           if (!ready) continueStartup();
-          else {
-            waiveStartupNetwork();
-            hubGateRef.current?.continue();
-          }
+          else hubGateRef.current?.continue();
+          if (auth.currentUser) setHubRoute((route) => route ?? 'GatesList');
         }}
       />
     );
