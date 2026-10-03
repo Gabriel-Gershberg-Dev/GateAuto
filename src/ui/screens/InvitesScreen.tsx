@@ -10,8 +10,10 @@ import {
   revokeInvite,
   type InviteDoc,
 } from '../../share/invites';
+import { ClipboardApi } from '../../platform/optionalExpo';
 import { ConfirmSheet, InfoSheet } from '../components/ConfirmSheet';
 import { Group, Hairline } from '../components/Group';
+import { IconCopy } from '../icons';
 import { useTheme } from '../ThemeProvider';
 import { spacing, type ThemeColors } from '../theme';
 
@@ -25,6 +27,7 @@ export function InvitesScreen() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [open, setOpen] = useState<Invite | null>(null);
   const [revokeCode, setRevokeCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   const reload = useCallback(async () => {
@@ -50,6 +53,12 @@ export function InvitesScreen() {
     }, [reload]),
   );
 
+  const copyCode = async (code: string) => {
+    if (!ClipboardApi) return;
+    await ClipboardApi.setStringAsync(code);
+    setCopied(code);
+  };
+
   const names = open
     ? (open.gates.length ? open.gates : [open.gate])
         .map((g) => inviteDisplayName(g))
@@ -74,7 +83,20 @@ export function InvitesScreen() {
                   accessibilityRole="button"
                 >
                   <View style={[styles.top, { flexDirection: row }]}>
-                    <Text style={styles.code}>{inv.code}</Text>
+                    <View style={[styles.codeLine, { flexDirection: row }]}>
+                      <Text style={styles.code}>{inv.code}</Text>
+                      <Pressable
+                        onPress={() => void copyCode(inv.code)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('share.copyCode')}
+                      >
+                        <IconCopy
+                          color={copied === inv.code ? colors.primary : colors.muted}
+                          size={18}
+                        />
+                      </Pressable>
+                    </View>
                     {inv.status === 'pending' || inv.status === 'accepted' ? (
                       <Pressable
                         onPress={() => setRevokeCode(inv.code)}
@@ -162,6 +184,10 @@ function createStyles(c: ThemeColors) {
       fontWeight: '700',
       color: c.text,
       letterSpacing: 1,
+    },
+    codeLine: {
+      alignItems: 'center',
+      gap: 8,
     },
     revoke: {
       fontSize: 14,

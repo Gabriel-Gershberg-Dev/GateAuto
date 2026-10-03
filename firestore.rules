@@ -337,6 +337,12 @@ service cloud.firestore {
         (data.packs.size() < 8 || isValidCredPack(data.packs[7]));
     }
 
+    function inviteEmailMatches(data) {
+      return !(data.toEmailLower is string) || data.toEmailLower.size() == 0 ||
+        (request.auth.token.email is string &&
+          data.toEmailLower == request.auth.token.email.lower());
+    }
+
     function inviteMeta(code) {
       return get(/databases/$(database)/documents/invites/$(code)).data;
     }
@@ -442,6 +448,7 @@ service cloud.firestore {
             request.resource.data.status == 'accepted' &&
             request.auth.uid != resource.data.fromUid &&
             request.resource.data.acceptedByUid == request.auth.uid &&
+            inviteEmailMatches(resource.data) &&
             (
               (!('systemUnlinked' in resource.data) && !('systemUnlinked' in request.resource.data)) ||
               request.resource.data.systemUnlinked == resource.data.systemUnlinked
@@ -452,6 +459,7 @@ service cloud.firestore {
             request.resource.data.status == 'declined' &&
             request.auth.uid != resource.data.fromUid &&
             request.resource.data.acceptedByUid == request.auth.uid &&
+            inviteEmailMatches(resource.data) &&
             (
               (!('systemUnlinked' in resource.data) && !('systemUnlinked' in request.resource.data)) ||
               request.resource.data.systemUnlinked == resource.data.systemUnlinked
@@ -474,7 +482,8 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/invites/$(code)) &&
         (
           inviteMeta(code).fromUid == request.auth.uid ||
-          inviteMeta(code).status == 'pending' ||
+          inviteMeta(code).status == 'pending' &&
+          inviteEmailMatches(inviteMeta(code)) ||
           (
             inviteMeta(code).status == 'accepted' &&
             inviteMeta(code).acceptedByUid == request.auth.uid

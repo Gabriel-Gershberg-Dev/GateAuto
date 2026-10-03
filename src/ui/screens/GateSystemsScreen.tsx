@@ -34,6 +34,7 @@ import {
   isValidInviteCode,
   normalizeInviteCode,
   partitionInviteGates,
+  inviteAddressMatches,
   reenabledInviteNames,
   type SharedGatePayload,
 } from '../../share/inviteLogic';
@@ -142,6 +143,12 @@ export function GateSystemsScreen({ navigation }: Props) {
       const invite = await getInviteByCode(normalized);
       if (!invite) {
         setCodeError(t('share.errNoInvite'));
+        return;
+      }
+      if (
+        !inviteAddressMatches(invite.toEmailLower, auth.user?.email)
+      ) {
+        setCodeError(t('share.errWrongEmail'));
         return;
       }
       if (

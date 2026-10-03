@@ -96,6 +96,16 @@ export function IconPencil({ color, size = 22 }: IconProps) {
   );
 }
 
+export function IconCopy({ color, size = 22 }: IconProps) {
+  return wrap(
+    size,
+    <>
+      <Rect x="9" y="9" width="11" height="11" rx="2" {...stroke(color)} />
+      <Path d="M5 15V5a2 2 0 0 1 2-2h8" {...stroke(color)} />
+    </>,
+  );
+}
+
 export function IconShield({ color, size = 22 }: IconProps) {
   return wrap(
     size,

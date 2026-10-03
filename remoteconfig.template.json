@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "77"
+        "value": "78"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.76"
+        "value": "1.0.77"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Walking and Motion are in developer options. Auto-open stays as you left it after sign-out. Invites show who a code is for and who redeemed it. A redeemed code cannot be used again."
+        "value": "The sign-in password stays above the keyboard. A code sent to an email opens only for that email. Invite codes have a copy button."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

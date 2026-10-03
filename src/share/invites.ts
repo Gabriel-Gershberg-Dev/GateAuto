@@ -33,6 +33,7 @@ import { normalizeCooldownMs } from '../data/cooldownNormalize';
 import { stripLeakedPalGateCatalog } from '../data/sharedCatalog';
 import {
   bytesToInviteCode,
+  inviteAddressMatches,
   palGateDeviceKey,
   clampInviteCooldownMs,
   clampInviteHoldMs,
@@ -381,6 +382,11 @@ export async function acceptInvite(
   if (!invite) throw new Error(i18n.t('share.errNoInvite'));
   if (invite.fromUid === uid) {
     throw new Error(i18n.t('share.errOwnCode'));
+  }
+  if (
+    !inviteAddressMatches(invite.toEmailLower, auth.currentUser?.email)
+  ) {
+    throw new Error(i18n.t('share.errWrongEmail'));
   }
   if (invite.status === 'revoked') throw new Error(i18n.t('share.errRevoked'));
   if (invite.status === 'declined') throw new Error(i18n.t('share.errDeclined'));

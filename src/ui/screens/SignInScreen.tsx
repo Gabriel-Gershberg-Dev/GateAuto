@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -32,6 +32,8 @@ export function SignInScreen({}: Props) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
+  const passwordRef = useRef<TextInput>(null);
   const auth = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
@@ -42,6 +44,14 @@ export function SignInScreen({}: Props) {
   const [info, setInfo] = useState<{ title: string; message: string } | null>(
     null,
   );
+
+  useEffect(() => {
+    if (keyboardHeight <= 0) return;
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [keyboardHeight]);
 
   const submitEmail = async () => {
     setFormError(null);
@@ -102,11 +112,12 @@ export function SignInScreen({}: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.page,
           {
             paddingTop: Math.max(insets.top, 24) + 8,
-            paddingBottom: keyboardHeight + 32,
+            paddingBottom: keyboardHeight + 48,
           },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -115,14 +126,20 @@ export function SignInScreen({}: Props) {
         <View style={styles.langRow}>
           <LanguageMenuButton />
         </View>
-        <View style={styles.hero}>
-          <BarrierMark brand size={52} />
-          <Text style={styles.kicker}>{t('brand')}</Text>
+        {keyboardHeight === 0 ? (
+          <View style={styles.hero}>
+            <BarrierMark brand size={52} />
+            <Text style={styles.kicker}>{t('brand')}</Text>
+            <Text style={styles.title}>
+              {mode === 'signup' ? t('auth.createTitle') : t('auth.welcomeBack')}
+            </Text>
+            <Text style={styles.lede}>{t('auth.lede')}</Text>
+          </View>
+        ) : (
           <Text style={styles.title}>
             {mode === 'signup' ? t('auth.createTitle') : t('auth.welcomeBack')}
           </Text>
-          <Text style={styles.lede}>{t('auth.lede')}</Text>
-        </View>
+        )}
 
         <Group>
           <View style={styles.cardInner}>
@@ -150,9 +167,14 @@ export function SignInScreen({}: Props) {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
             />
             <Text style={styles.label}>{t('common.password')}</Text>
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               value={password}
               onChangeText={setPassword}
@@ -161,6 +183,9 @@ export function SignInScreen({}: Props) {
               }
               placeholderTextColor={colors.muted}
               secureTextEntry
+              returnKeyType="done"
+              onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
+              onSubmitEditing={() => void submitEmail()}
             />
             {formError ? <Text style={styles.error}>{formError}</Text> : null}
             <Pressable

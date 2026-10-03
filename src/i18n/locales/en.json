@@ -391,6 +391,7 @@
     "errRevoked": "That invite was revoked.",
     "errDeclined": "That invite was declined.",
     "errUsed": "This code was already redeemed.",
+    "errWrongEmail": "This code was sent to another email.",
     "errExpired": "That invite expired. Ask for a new code.",
     "errCredsGone": "Invite credentials are no longer available.",
     "errDeclineOwn": "You cannot decline your own invite.",

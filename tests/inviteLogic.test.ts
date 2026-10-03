@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  inviteAddressMatches,
   bytesToInviteCode,
   canTransitionInvite,
   clampInviteCooldownMs,
@@ -26,6 +27,14 @@ describe('invite codes', () => {
     assert.equal(normalizeInviteCode(' 7k3mnp2q '), '7K3MNP2Q');
     assert.equal(isValidInviteCode('7K3MNP2Q'), true);
     assert.equal(isValidInviteCode('OOOOOOOO'), false);
+  });
+
+  it('lets anyone use a code with no email, and only that email otherwise', () => {
+    assert.equal(inviteAddressMatches(null, 'other@x.com'), true);
+    assert.equal(inviteAddressMatches('', 'other@x.com'), true);
+    assert.equal(inviteAddressMatches('Friend@X.com', 'friend@x.com'), true);
+    assert.equal(inviteAddressMatches('friend@x.com', 'other@x.com'), false);
+    assert.equal(inviteAddressMatches('friend@x.com', null), false);
   });
 
   it('clamps invite radius and cooldown to Firestore bounds', () => {

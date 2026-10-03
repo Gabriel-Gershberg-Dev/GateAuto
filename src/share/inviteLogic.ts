@@ -29,6 +29,20 @@ export type SharedGatePayload = {
 export const INVITE_MAX_GATES = 12;
 export const INVITE_MAX_PACKS = 8;
 
+/**
+ * A code with no email can be typed by anyone. A code sent to an email
+ * opens only for that address. Existing codes without an email stay open.
+ */
+export function inviteAddressMatches(
+  toEmailLower: string | null | undefined,
+  signerEmail: string | null | undefined,
+): boolean {
+  const target = String(toEmailLower ?? '').trim().toLowerCase();
+  if (!target) return true;
+  const mine = String(signerEmail ?? '').trim().toLowerCase();
+  return mine === target;
+}
+
 export function bytesToInviteCode(bytes: Uint8Array): string {
   let out = '';
   const n = INVITE_CODE_ALPHABET.length;
