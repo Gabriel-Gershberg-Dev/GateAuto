@@ -131,6 +131,9 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       // Walking keeps the wake fence. Do not take a GPS fix on the alarm.
       if (LocationDemand.needsPlayFences(app)) {
         if (reregister) GeofenceRegistrar.refresh(app);
+        // Locked Samsung often never delivers ENTER. Poll anyway. Do not
+        // start a location service from here.
+        PalGateNativeOpen.pollNearby(app, "recover");
         return;
       }
       if (LocationDemand.quietHold(app)) {

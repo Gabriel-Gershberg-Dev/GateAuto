@@ -47,6 +47,12 @@ public class HoldService extends Service {
 
   private static volatile boolean running = false;
   private static volatile HoldService instance;
+  /**
+   * Xiaomi-only hold while every auto gate waits for the car. Never set when
+   * GPS is demanded — that would let this service replace the location one,
+   * and Android will not start the location service again from the background.
+   */
+  private static volatile boolean quietWake;
   private boolean foreground;
 
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -85,14 +91,13 @@ public class HoldService extends Service {
     if (context == null) return;
     Context app = context.getApplicationContext();
     if (!KeepAlivePrefs.isArmed(app)) return;
-    // Every auto gate waits for a listed car: on most phones the car-connect
-    // broadcast wakes the process by itself. Xiaomi freezes that process, so
-    // quietHold keeps this non-location service up with no GPS.
-    if (!LocationDemand.needsContinuousLocation(app) && !LocationDemand.quietHold(app)) {
-      return;
-    }
-    // Location FGS already holds the process — no need for a second FGS.
-    if (MonitoringService.isForeground()) return;
+    // GPS demanded: the car-connect broadcast is the wake on phones that are
+    // not frozen. A hold here is only while that GPS service is down.
+    if (!LocationDemand.needsContinuousLocation(app)) return;
+    // isRunning, not just isForeground. Starting a second service while the
+    // location one is up makes Samsung drop the location service, and a
+    // background start of it is then blocked.
+    if (MonitoringService.isRunning()) return;
     if (running) return;
     Intent intent = new Intent(app, HoldService.class);
     try {
@@ -108,7 +113,36 @@ public class HoldService extends Service {
     }
   }
 
+  /**
+   * Xiaomi / Redmi / POCO only, and only while GPS is off. Does not run when
+   * the location service is already holding background auto-open.
+   */
+  public static void ensureQuiet(Context context) {
+    if (context == null) return;
+    Context app = context.getApplicationContext();
+    if (!LocationDemand.quietHold(app)) {
+      quietWake = false;
+      return;
+    }
+    if (MonitoringService.isRunning()) return;
+    quietWake = true;
+    if (running) return;
+    Intent intent = new Intent(app, HoldService.class);
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        app.startForegroundService(intent);
+      } else {
+        app.startService(intent);
+      }
+      Log.i(TAG, "HoldService.ensureQuiet (no GPS)");
+    } catch (Exception e) {
+      quietWake = false;
+      Log.w(TAG, "HoldService.ensureQuiet failed", e);
+    }
+  }
+
   public static void stop(Context context) {
+    quietWake = false;
     if (context == null) return;
     // Stopping a startForegroundService() that has not reached startForeground
     // yet crashes the whole process (ForegroundServiceDidNotStartInTimeException).
@@ -140,16 +174,14 @@ public class HoldService extends Service {
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    if (
-      !KeepAlivePrefs.isArmed(this)
-      || (
-        !LocationDemand.needsContinuousLocation(this)
-        && !LocationDemand.quietHold(this)
-      )
-    ) {
+    boolean gps = LocationDemand.needsContinuousLocation(this);
+    if (!KeepAlivePrefs.isArmed(this) || (!gps && !quietWake)) {
+      quietWake = false;
       stopSelf();
       return START_NOT_STICKY;
     }
+    // GPS came back: the location service owns background auto-open.
+    if (gps) quietWake = false;
     // A location FGS came up meanwhile — let it own the hold and step aside.
     if (MonitoringService.isForeground()) {
       stopSelf();

@@ -1,6 +1,6 @@
 {
   "name": "gateauto",
-  "version": "1.0.72",
+  "version": "1.0.73",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

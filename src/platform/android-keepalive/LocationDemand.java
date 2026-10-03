@@ -254,10 +254,12 @@ public final class LocationDemand {
       ApproachSampler.stop();
       MonitoringService.stop(ctx);
       GeofenceRegistrar.unregister(ctx);
-      if (quietHold(ctx)) {
+      if (quietHold(ctx) && !MonitoringService.isRunning()) {
         // Xiaomi freezes a process that has nothing holding it. Stay up with
-        // no GPS until the listed car connects.
-        HoldService.ensure(ctx);
+        // no GPS until the listed car connects. Never while the location
+        // service is already running — stopping that service from the
+        // background means it cannot come back until the app is opened.
+        HoldService.ensureQuiet(ctx);
         Log.i(TAG, "quiet hold — waiting for listed car, no GPS");
       } else {
         // The car-connect broadcast cold-starts the process. A hold here only

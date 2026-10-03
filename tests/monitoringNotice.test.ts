@@ -286,7 +286,7 @@ describe('MonitoringNotice.java stays in sync with the spec', () => {
       'instance is published only after startForeground',
     );
     assert.ok(hold.includes('if (MonitoringService.isForeground()) {'));
-    assert.ok(hold.includes('if (MonitoringService.isForeground()) return;'));
+    assert.ok(hold.includes('if (MonitoringService.isRunning()) return;'));
     assert.ok(monitoring.includes('if (foreground) HoldService.stop(this);'));
     assert.ok(!monitoring.includes('    HoldService.stop(this);\n    ensureChannel();'));
   });

@@ -126,8 +126,9 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     assert.ok(idle.includes('GeofenceRegistrar.unregister(ctx);'));
     assert.ok(idle.includes('MonitoringService.stop(ctx);'));
     assert.ok(idle.includes('quietHold(ctx)'));
-    assert.ok(idle.includes('HoldService.ensure(ctx);'));
+    assert.ok(idle.includes('HoldService.ensureQuiet(ctx);'));
     assert.ok(idle.includes('HoldService.stop(ctx);'));
+    assert.ok(idle.includes('!MonitoringService.isRunning()'));
     assert.ok(!idle.includes('MonitoringService.start'));
     assert.ok(demand.includes('isXiaomiFamily'));
     assert.ok(demand.includes('redmi'));
@@ -135,12 +136,21 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     const rose = locked.slice(locked.indexOf('gpsRose'), locked.indexOf('} else if (fences)'));
     assert.ok(rose.includes('isXiaomiFamily()'));
     assert.ok(rose.includes('pollNearbySoon'));
-    assert.ok(!rose.includes('MonitoringService.start(ctx);\n        if (gpsRose'));
     const hold = fs.readFileSync(path.join(javaDir, 'HoldService.java'), 'utf8');
-    const ensure = hold.slice(hold.indexOf('public static void ensure'), hold.indexOf('public static void stop'));
-    assert.ok(ensure.includes('LocationDemand.quietHold(app)'));
+    const ensure = hold.slice(
+      hold.indexOf('public static void ensure('),
+      hold.indexOf('public static void ensureQuiet'),
+    );
+    assert.ok(ensure.includes('LocationDemand.needsContinuousLocation(app)'));
+    assert.ok(!ensure.includes('quietHold'));
+    assert.ok(ensure.includes('MonitoringService.isRunning()'));
     const receiver = fs.readFileSync(path.join(javaDir, 'KeepAliveReceiver.java'), 'utf8');
     assert.ok(receiver.includes('quiet hold — car not connected yet'));
+    const walkingRecover = receiver.slice(
+      receiver.indexOf('needsPlayFences'),
+      receiver.indexOf('quiet hold — car not connected yet'),
+    );
+    assert.ok(walkingRecover.includes('pollNearby'));
   });
 
   it('never reads location for a Bluetooth device that is not a listed car', () => {
