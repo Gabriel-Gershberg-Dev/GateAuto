@@ -23,6 +23,7 @@ public final class KeepAlivePrefs {
   private static final String KEY_GATE_OPEN_NOTICE = "gateOpenNoticeEnabled";
   /** On-foot Auto-open. Default off. Does not change a connected car. */
   private static final String KEY_WALKING = "walkingEnabled";
+  private static final String KEY_ACCOUNT_SIGNED_IN = "accountSignedIn";
   private static final String KEY_WALKING_LEVEL = "walkingLevel";
   /** Android Auto home layout. Default false = grid. */
   private static final String KEY_CAR_LIST_LAYOUT = "carListLayout";
@@ -122,6 +123,15 @@ public final class KeepAlivePrefs {
 
   public static boolean walkingEnabled(Context context) {
     return prefs(context).getBoolean(KEY_WALKING, false);
+  }
+
+  /** Home widget gates stay off until someone is signed in. */
+  public static void setAccountSignedIn(Context context, boolean signedIn) {
+    prefs(context).edit().putBoolean(KEY_ACCOUNT_SIGNED_IN, signedIn).commit();
+  }
+
+  public static boolean accountSignedIn(Context context) {
+    return prefs(context).getBoolean(KEY_ACCOUNT_SIGNED_IN, false);
   }
 
   /** "high" or "normal". */

@@ -47,6 +47,10 @@ public final class WidgetActionReceiver extends BroadcastReceiver {
       openApp(app);
       return;
     }
+    if (!KeepAlivePrefs.accountSignedIn(app)) {
+      openApp(app);
+      return;
+    }
     if (!ACTION_OPEN_CLOSEST.equals(action) && !ACTION_OPEN_ID.equals(action)) {
       return;
     }

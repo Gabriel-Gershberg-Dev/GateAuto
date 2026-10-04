@@ -10,6 +10,8 @@
     <string name="widget_open_app">פתיחת האפליקציה</string>
     <string name="widget_empty">סמנו שער על המפה</string>
     <string name="widget_empty_eyebrow">אין סיכה</string>
+    <string name="widget_signed_out">מנותק</string>
+    <string name="widget_signed_out_detail">התחברו כדי לפתוח שערים</string>
     <string name="widget_meters">%d מ׳</string>
     <string name="widget_km">%s ק״מ</string>
     <string name="widget_page">%1$d/%2$d</string>

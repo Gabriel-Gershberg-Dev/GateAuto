@@ -446,6 +446,23 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     }
   }
 
+  /** Gray the home widget and ignore gate taps while signed out. */
+  @ReactMethod
+  public void setAccountSignedIn(boolean signedIn, Promise promise) {
+    try {
+      Context ctx = getReactApplicationContext();
+      KeepAlivePrefs.setAccountSignedIn(ctx, signedIn);
+      try {
+        com.gateauto.app.widget.WidgetRefresh.updateAll(ctx);
+      } catch (Throwable ignored) {
+        // ignore
+      }
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_account", e);
+    }
+  }
+
   /**
    * Walking on registers Play fences without starting the location foreground
    * service. A connected listed car still uses the saved radius.

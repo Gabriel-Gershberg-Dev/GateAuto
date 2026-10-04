@@ -10,6 +10,8 @@
     <string name="widget_open_app">Open app</string>
     <string name="widget_empty">Pin a gate on the map</string>
     <string name="widget_empty_eyebrow">No pin</string>
+    <string name="widget_signed_out">Signed out</string>
+    <string name="widget_signed_out_detail">Sign in to open gates</string>
     <string name="widget_meters">%d m</string>
     <string name="widget_km">%s km</string>
     <string name="widget_page">%1$d/%2$d</string>

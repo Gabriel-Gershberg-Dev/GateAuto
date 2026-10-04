@@ -10,6 +10,8 @@
     <string name="widget_open_app">Открыть приложение</string>
     <string name="widget_empty">Поставьте метку ворот на карте</string>
     <string name="widget_empty_eyebrow">Нет метки</string>
+    <string name="widget_signed_out">Вы вышли</string>
+    <string name="widget_signed_out_detail">Войдите, чтобы открыть ворота</string>
     <string name="widget_meters">%d м</string>
     <string name="widget_km">%s км</string>
     <string name="widget_page">%1$d/%2$d</string>

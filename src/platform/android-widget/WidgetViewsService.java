@@ -10,6 +10,7 @@ import android.widget.RemoteViews;
 import android.widget.RemoteViewsService;
 
 import com.gateauto.app.R;
+import com.gateauto.app.keepalive.KeepAlivePrefs;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -92,6 +93,7 @@ public class WidgetViewsService extends RemoteViewsService {
 
     @Override
     public int getCount() {
+      if (!KeepAlivePrefs.accountSignedIn(app)) return 0;
       if (ranked.isEmpty()) return 0;
       if (cols <= 1) return ranked.size();
       return (ranked.size() + cols - 1) / cols;

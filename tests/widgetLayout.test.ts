@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
   WIDGET_CHIPS_PER_PAGE,
@@ -35,5 +37,26 @@ describe('widget chip paging', () => {
     assert.deepEqual(widgetChipRange(0, 6), { start: 0, end: 3 });
     assert.deepEqual(widgetChipRange(1, 6), { start: 3, end: 6 });
     assert.deepEqual(widgetChipRange(1, 4), { start: 3, end: 4 });
+  });
+});
+
+describe('signed-out widget', () => {
+  const root = path.join(__dirname, '..');
+  const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
+
+  it('grays the widget and refuses gate taps while signed out', () => {
+    const renderer = read('src/platform/android-widget/WidgetRenderer.java');
+    const actions = read('src/platform/android-widget/WidgetActionReceiver.java');
+    const factory = read('src/platform/android-widget/WidgetViewsService.java');
+    const vault = read('src/data/accountVault.ts');
+    assert.match(renderer, /bindSignedOut/);
+    assert.match(renderer, /accountSignedIn/);
+    assert.match(renderer, /widget_face_off/);
+    assert.match(renderer, /widget_signed_out_detail/);
+    assert.match(actions, /accountSignedIn/);
+    assert.match(factory, /accountSignedIn\(app\)\) return 0/);
+    assert.match(vault, /setNativeAccountSignedIn\(false\)/);
+    assert.match(vault, /setNativeAccountSignedIn\(Boolean\(uid\)\)/);
+    assert.doesNotMatch(vault, /leaveAccountVault[\s\S]*disarmNativeSession/);
   });
 });

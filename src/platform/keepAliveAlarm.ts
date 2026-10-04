@@ -47,6 +47,7 @@ type GateAutoKeepAliveNative = {
   recreateActivity?(): Promise<boolean>;
   reportStaleNetwork?(): Promise<boolean>;
   setAppLang?(lang: string): Promise<boolean>;
+  setAccountSignedIn?(signedIn: boolean): Promise<boolean>;
   isIgnoringBatteryOptimizations?(): Promise<boolean>;
   isBatteryUnrestricted?(): Promise<boolean>;
   getAutoOpenOsStatus?(): Promise<Record<string, unknown>>;
@@ -556,6 +557,17 @@ export async function setNativeAppLang(lang: string): Promise<void> {
     await native.setAppLang(lang);
   } catch (error) {
     console.warn('[GateAuto] setNativeAppLang failed', error);
+  }
+}
+
+/** Home widget gates stay tappable only while an account is signed in. */
+export async function setNativeAccountSignedIn(signedIn: boolean): Promise<void> {
+  const native = getNative();
+  if (!native?.setAccountSignedIn) return;
+  try {
+    await native.setAccountSignedIn(signedIn);
+  } catch (error) {
+    console.warn('[GateAuto] setNativeAccountSignedIn failed', error);
   }
 }
 

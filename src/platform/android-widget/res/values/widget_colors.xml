@@ -3,6 +3,7 @@
     <color name="widget_void">#020809</color>
     <!-- Translucent cabin mist — wallpaper can breathe through. No box stroke. -->
     <color name="widget_cabin">#E00C2E32</color>
+    <color name="widget_cabin_off">#E03A4244</color>
     <color name="widget_well">#C2081618</color>
     <color name="widget_sheen">#2AF2FFFB</color>
     <color name="widget_sheen_fade">#00F2FFFB</color>

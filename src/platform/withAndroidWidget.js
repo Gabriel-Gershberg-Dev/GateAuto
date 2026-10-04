@@ -35,6 +35,7 @@ const RES_FILES = [
   ['res/layout/widget_cube.xml', 'layout/widget_cube.xml'],
   ['res/layout/widget_strip_line.xml', 'layout/widget_strip_line.xml'],
   ['res/drawable/widget_face.xml', 'drawable/widget_face.xml'],
+  ['res/drawable/widget_face_off.xml', 'drawable/widget_face_off.xml'],
   ['res/drawable/widget_open_pill.xml', 'drawable/widget_open_pill.xml'],
   ['res/drawable/widget_chip.xml', 'drawable/widget_chip.xml'],
   ['res/drawable/widget_chip_live.xml', 'drawable/widget_chip_live.xml'],

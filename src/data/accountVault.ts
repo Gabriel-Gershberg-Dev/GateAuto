@@ -259,6 +259,9 @@ export function disarmNativeSession(): void {
 export async function activateAccountVault(uid: string | null): Promise<void> {
   setActiveUidInMemory(uid);
   await persistActiveUid(uid);
+  void import('../platform/keepAliveAlarm')
+    .then((m) => m.setNativeAccountSignedIn(Boolean(uid)))
+    .catch(() => undefined);
   void import('../geo/geofencing')
     .then((m) => m.resetGeofenceSessionMemory())
     .catch(() => undefined);
@@ -267,6 +270,9 @@ export async function activateAccountVault(uid: string | null): Promise<void> {
 export function leaveAccountVault(): void {
   setActiveUidInMemory(null);
   void persistActiveUid(null);
+  void import('../platform/keepAliveAlarm')
+    .then((m) => m.setNativeAccountSignedIn(false))
+    .catch(() => undefined);
   // Auto-open stays as this user left it. The next sign-in applies that
   // account's own switch instead of turning the phone off for everyone.
 }

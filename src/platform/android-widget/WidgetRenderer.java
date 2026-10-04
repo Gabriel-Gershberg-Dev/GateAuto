@@ -34,17 +34,22 @@ final class WidgetRenderer {
     String lang = KeepAlivePrefs.appLang(context);
     String status = KeepAlivePrefs.widgetStatus(context);
     String gateId = KeepAlivePrefs.widgetStatusGate(context);
+    boolean signedIn = KeepAlivePrefs.accountSignedIn(context);
     for (int id : ids) {
       Bundle options = mgr.getAppWidgetOptions(id);
       int layout = pickLayout(options);
       int perPage = layout == R.layout.widget_row ? chipsPerPage(options) : 0;
-      int structure = structureStamp(layout, ranked.isEmpty(), lang, perPage);
+      int structure = structureStamp(layout, ranked.isEmpty(), lang, perPage, signedIn);
       int visual = visualStamp(status, gateId);
       int prevStructure = LAST_STRUCTURE.get(id, Integer.MIN_VALUE);
       int prevVisual = LAST_VISUAL.get(id, Integer.MIN_VALUE);
       int collectionId = collectionViewId(layout);
 
-      if (prevStructure == structure && !ranked.isEmpty()) {
+      if (prevStructure == structure && !signedIn) {
+        continue;
+      }
+
+      if (prevStructure == structure && signedIn && !ranked.isEmpty()) {
         if (collectionId != 0) {
           if (prevVisual == visual) {
             continue;
@@ -115,9 +120,19 @@ final class WidgetRenderer {
     return Math.min(page, pages - 1);
   }
 
-  private static int structureStamp(int layout, boolean empty, String lang, int perPage) {
+  private static int structureStamp(
+    int layout,
+    boolean empty,
+    String lang,
+    int perPage,
+    boolean signedIn
+  ) {
     int h = lang == null ? 0 : lang.hashCode();
-    return (layout * 31) ^ (empty ? 1 : 0) ^ (h * 17) ^ (perPage * 13);
+    return (layout * 31)
+      ^ (empty ? 1 : 0)
+      ^ (h * 17)
+      ^ (perPage * 13)
+      ^ (signedIn ? 0 : 64);
   }
 
   private static int visualStamp(String status, String gateId) {
@@ -138,6 +153,11 @@ final class WidgetRenderer {
     String lang = KeepAlivePrefs.appLang(app);
     int dir = "he".equals(lang) ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR;
     views.setInt(R.id.widget_root, "setLayoutDirection", dir);
+
+    if (!KeepAlivePrefs.accountSignedIn(app)) {
+      bindSignedOut(localized, app, views, layout);
+      return views;
+    }
 
     if (ranked.isEmpty()) {
       bindEmpty(localized, app, views, layout);
@@ -188,6 +208,41 @@ final class WidgetRenderer {
     views.setTextViewText(R.id.widget_range, "");
     views.setTextViewText(R.id.widget_name, localized.getString(R.string.widget_empty));
     views.setViewVisibility(R.id.widget_hero_busy, View.GONE);
+  }
+
+  /** Gates stay on the phone for Auto-open, but the widget will not open them. */
+  private static void bindSignedOut(Context localized, Context app, RemoteViews views, int layout) {
+    views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_face_off);
+    views.setTextViewText(R.id.widget_eyebrow, localized.getString(R.string.widget_signed_out));
+    views.setTextColor(R.id.widget_eyebrow, localized.getColor(R.color.widget_muted));
+    PendingIntent openApp = action(app, WidgetActionReceiver.ACTION_OPEN_APP, null, 72003);
+    views.setOnClickPendingIntent(R.id.widget_root, openApp);
+    String detail = localized.getString(R.string.widget_signed_out_detail);
+    if (layout == R.layout.widget_list) {
+      views.setViewVisibility(R.id.widget_list_view, View.GONE);
+      views.setViewVisibility(R.id.widget_list_empty, View.VISIBLE);
+      views.setTextViewText(R.id.widget_list_empty, detail);
+      views.setTextColor(R.id.widget_list_empty, localized.getColor(R.color.widget_muted));
+      views.setOnClickPendingIntent(R.id.widget_list_empty, openApp);
+      return;
+    }
+    if (layout == R.layout.widget_row) {
+      views.setViewVisibility(R.id.widget_strip, View.GONE);
+      views.setViewVisibility(R.id.widget_row_empty, View.VISIBLE);
+      views.setTextViewText(R.id.widget_row_empty, detail);
+      views.setTextColor(R.id.widget_row_empty, localized.getColor(R.color.widget_muted));
+      views.setOnClickPendingIntent(R.id.widget_row_empty, openApp);
+      return;
+    }
+    views.setTextViewText(R.id.widget_range, "");
+    views.setTextViewText(R.id.widget_name, detail);
+    views.setTextColor(R.id.widget_name, localized.getColor(R.color.widget_muted));
+    views.setInt(R.id.widget_hero_chip, "setBackgroundResource", R.drawable.widget_row_well);
+    views.setViewVisibility(R.id.widget_hero_busy, View.GONE);
+    views.setOnClickPendingIntent(R.id.widget_hero_chip, openApp);
+    views.setOnClickPendingIntent(R.id.widget_hero_body, openApp);
+    views.setOnClickPendingIntent(R.id.widget_hero_icon, openApp);
+    views.setOnClickPendingIntent(R.id.widget_name, openApp);
   }
 
   private static int collectionViewId(int layout) {
