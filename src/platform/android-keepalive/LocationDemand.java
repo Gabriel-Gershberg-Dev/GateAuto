@@ -60,8 +60,7 @@ public final class LocationDemand {
 
   /**
    * Play detect fences. Continuous GPS, Walking, or Motion while Auto-open is on.
-   * Walking itself now demands the GPS stream. Motion without Walking still
-   * only registers fences.
+   * Walking demands the GPS stream. Motion without Walking still only registers fences.
    */
   public static boolean needsPlayFences(Context context) {
     if (needsContinuousLocation(context)) return true;

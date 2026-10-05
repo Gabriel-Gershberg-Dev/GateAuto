@@ -143,7 +143,8 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     );
     assert.ok(ensure.includes('LocationDemand.needsContinuousLocation(app)'));
     assert.ok(!ensure.includes('quietHold'));
-    assert.ok(ensure.includes('MonitoringService.isRunning()'));
+    assert.ok(ensure.includes('MonitoringService.isForeground()'));
+    assert.ok(!ensure.includes('MonitoringService.isRunning()'));
     const receiver = fs.readFileSync(path.join(javaDir, 'KeepAliveReceiver.java'), 'utf8');
     assert.ok(receiver.includes('quiet hold — car not connected yet'));
     const walkingRecover = receiver.slice(

@@ -182,6 +182,11 @@ describe('walking keeps the GPS stream on', () => {
     );
     assert.ok(java.includes('needsPlayFences'));
     assert.ok(java.includes('KeepAlivePrefs.walkingEnabled'));
+    const demand = java.slice(
+      java.indexOf('public static boolean needsContinuousLocation'),
+      java.indexOf('public static boolean needsPlayFences'),
+    );
+    assert.ok(demand.includes('walkingEnabled'));
     const locked = java.slice(java.indexOf('private static void syncLocked'));
     const walk = locked.slice(locked.indexOf('} else if (fences)'));
     assert.ok(walk.includes('GeofenceRegistrar.register'));

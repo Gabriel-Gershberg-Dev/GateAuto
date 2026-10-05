@@ -464,8 +464,8 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Walking on registers Play fences without starting the location foreground
-   * service. A connected listed car still uses the saved radius.
+   * Walking on keeps the GPS stream. Start the location service only when this
+   * call has a screen, never from a background wake.
    */
   @ReactMethod
   public void setWalkingMode(

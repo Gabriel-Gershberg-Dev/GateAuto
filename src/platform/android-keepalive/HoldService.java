@@ -94,10 +94,10 @@ public class HoldService extends Service {
     // GPS demanded: the car-connect broadcast is the wake on phones that are
     // not frozen. A hold here is only while that GPS service is down.
     if (!LocationDemand.needsContinuousLocation(app)) return;
-    // isRunning, not just isForeground. Starting a second service while the
-    // location one is up makes Samsung drop the location service, and a
-    // background start of it is then blocked.
-    if (MonitoringService.isRunning()) return;
+    // Step aside only when the location service is actually in the foreground.
+    // A sticky restart can exist without GPS. Refusing the hold in that case
+    // left a locked phone unable to open until the app was opened again.
+    if (MonitoringService.isForeground()) return;
     if (running) return;
     Intent intent = new Intent(app, HoldService.class);
     try {
