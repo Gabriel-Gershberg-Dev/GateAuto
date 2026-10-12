@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.80** (versionCode 81).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.81** (versionCode 82).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, `v1.0.78`, `v1.0.79`, and `v1.0.80`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, `v1.0.78`, `v1.0.79`, `v1.0.80`, and `v1.0.81`.
+
+## 1.0.81 — 2026-10-12 (beta)
+
+After a reboot, Auto-open checks right away, then about every minute until the location check is running again. Near a gate it keeps checking every second for up to 10 minutes. Opening the app puts a Google sign-in back when the saved one was lost.
 
 ## 1.0.80 — 2026-10-05 (beta)
 

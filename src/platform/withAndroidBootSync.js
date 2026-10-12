@@ -29,6 +29,7 @@ import android.util.Log;
 import com.facebook.react.HeadlessJsTaskService;
 import com.gateauto.app.keepalive.GeofenceRegistrar;
 import com.gateauto.app.keepalive.KeepAlivePrefs;
+import com.gateauto.app.keepalive.KeepAliveReceiver;
 import com.gateauto.app.keepalive.KeepAliveScheduler;
 import com.gateauto.app.keepalive.LocationDemand;
 
@@ -60,6 +61,7 @@ public class BootReceiver extends BroadcastReceiver {
     if (KeepAlivePrefs.isArmed(context)) {
       KeepAliveScheduler.start(context);
       LocationDemand.sync(context, false);
+      KeepAliveReceiver.bootPoll(context);
     }
     if (Build.VERSION.SDK_INT >= 35
         && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {

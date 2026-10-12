@@ -23,13 +23,15 @@ import com.google.android.gms.location.Priority;
  * so the open fires on the first fix that is actually inside 25m / 40m / …
  * instead of waiting for the next 5–30s tick. Stopped when the location
  * {@link MonitoringService} is already sampling, when we leave every detect
- * fence, on disarm, or after {@link #SESSION_MAX_MS}.
+ * fence, on disarm, or after {@link #BURST_MAX_MS} while still inside the wake.
  */
 public final class ApproachSampler {
   private static final String TAG = "GateAutoKeepAlive";
   static final long INTERVAL_MS = 1_000L;
   static final long MIN_INTERVAL_MS = 500L;
   static final long SESSION_MAX_MS = 90_000L;
+  /** Keep the 1 Hz burst going while still inside the wake, then the alarm takes over. */
+  static final long BURST_MAX_MS = 10 * 60 * 1000L;
 
   private static final Object LOCK = new Object();
   private static HandlerThread thread;
@@ -37,6 +39,7 @@ public final class ApproachSampler {
   private static FusedLocationProviderClient fused;
   private static LocationCallback callback;
   private static PowerManager.WakeLock wakeLock;
+  private static long burstStartElapsed;
   private static long deadlineElapsed;
   private static Context app;
   private static int farStreak;
@@ -53,7 +56,8 @@ public final class ApproachSampler {
       if (callback != null) {
         return;
       }
-      deadlineElapsed = SystemClock.elapsedRealtime() + SESSION_MAX_MS;
+      burstStartElapsed = SystemClock.elapsedRealtime();
+      deadlineElapsed = burstStartElapsed + SESSION_MAX_MS;
       farStreak = 0;
       app = context.getApplicationContext();
       thread = new HandlerThread("gateauto-approach");
@@ -96,15 +100,9 @@ public final class ApproachSampler {
   }
 
   private static void onFix(Location loc) {
-    long now = SystemClock.elapsedRealtime();
     Context ctx;
     synchronized (LOCK) {
       if (callback == null) return;
-      if (now > deadlineElapsed) {
-        Log.i(TAG, "approach sampler deadline");
-        stopLocked();
-        return;
-      }
       ctx = app;
     }
     if (ctx == null || !KeepAlivePrefs.isArmed(ctx)) {
@@ -118,16 +116,52 @@ public final class ApproachSampler {
     if (loc != null) {
       PalGateNativeOpen.pollNearby(ctx, "poll", loc);
     }
-    if (loc != null && PalGateNativeOpen.anyWithinDetect(ctx, loc)) {
-      farStreak = 0;
-    } else {
-      farStreak++;
-      // One coarse bounce outside the detect fence shouldn't kill the session.
-      if (farStreak >= 3) {
-        Log.i(TAG, "approach sampler left detect fence");
-        stop();
+    boolean near = loc != null && PalGateNativeOpen.anyWithinDetect(ctx, loc);
+    boolean extend = false;
+    synchronized (LOCK) {
+      if (callback == null) return;
+      if (near) {
+        farStreak = 0;
+      } else {
+        farStreak++;
+        if (farStreak >= 3) {
+          Log.i(TAG, "approach sampler left detect fence");
+          stopLocked();
+          return;
+        }
+      }
+      long now = SystemClock.elapsedRealtime();
+      if (now <= deadlineElapsed) return;
+      boolean keep =
+        near
+          && burstStartElapsed > 0
+          && now - burstStartElapsed < BURST_MAX_MS;
+      if (!keep) {
+        Log.i(TAG, "approach sampler deadline");
+        stopLocked();
+        return;
+      }
+      deadlineElapsed = now + SESSION_MAX_MS;
+      extend = true;
+    }
+    if (extend) {
+      refreshWakeLock();
+      Log.i(TAG, "approach sampler still near — another " + SESSION_MAX_MS + "ms");
+    }
+  }
+
+  private static void refreshWakeLock() {
+    synchronized (LOCK) {
+      if (wakeLock != null) {
+        try {
+          if (wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception ignored) {
+          // ignore
+        }
+        wakeLock = null;
       }
     }
+    acquireWakeLock();
   }
 
   private static void acquireWakeLock() {
@@ -171,5 +205,6 @@ public final class ApproachSampler {
     }
     app = null;
     farStreak = 0;
+    burstStartElapsed = 0;
   }
 }

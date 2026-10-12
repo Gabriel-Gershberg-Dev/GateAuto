@@ -25,8 +25,17 @@ public final class KeepAliveScheduler {
   private static final int REQ_HOLD_BASE = 0x51A10000;
   /** First recovery quickly after arm / process start. */
   private static final long FIRST_DELAY_MS = 60 * 1000L;
-  /** Then every 9 min — refresh Play fences (no INITIAL_TRIGGER) + pollNearby. */
+  /**
+   * While the location service is up, this only refreshes fences. 9 minutes is
+   * as often as Android delivers this alarm once the phone is idle.
+   */
   static final long INTERVAL_MS = 9 * 60 * 1000L;
+  /**
+   * While the location service is down (locked phone, after reboot). An
+   * allowlisted app can actually fire this often; otherwise Android holds it
+   * to the 9 minute idle limit.
+   */
+  static final long BACKGROUND_INTERVAL_MS = 60 * 1000L;
   /** Don't spawn overlapping headless runs from SCREEN_ON. */
   static final long MIN_RUN_GAP_MS = 60 * 1000L;
 
@@ -42,6 +51,12 @@ public final class KeepAliveScheduler {
     // Hold the process immediately on arm / boot with a non-location FGS.
     HoldService.ensure(app);
     Log.i(TAG, "keep-alive alarm armed");
+  }
+
+  /** Fence refresh while GPS is streaming; a real check every minute when it is not. */
+  static long backupDelay(Context context) {
+    if (MonitoringService.isForeground()) return INTERVAL_MS;
+    return BACKGROUND_INTERVAL_MS;
   }
 
   public static void stop(Context context) {

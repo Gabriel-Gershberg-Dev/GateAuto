@@ -28,7 +28,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
     boolean cooldown = KeepAliveScheduler.ACTION_COOLDOWN.equals(action);
     boolean holdPulse = KeepAliveScheduler.ACTION_HOLD_PULSE.equals(action);
     if (alarm) {
-      KeepAliveScheduler.scheduleNext(context, KeepAliveScheduler.INTERVAL_MS);
+      KeepAliveScheduler.scheduleNext(context, KeepAliveScheduler.backupDelay(context));
     }
     if (!KeepAlivePrefs.isArmed(context)) return;
     // Any armed wake: hold the (possibly cold-started) process with a
@@ -59,6 +59,25 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       alarm ? "alarm" : (action != null ? action : "unknown"),
       true
     );
+  }
+
+  /** One GPS check right after boot. Does not start the location service. */
+  public static void bootPoll(Context context) {
+    if (context == null || !KeepAlivePrefs.isArmed(context)) return;
+    if (!LocationDemand.needsPlayFences(context)) return;
+    final Context app = context.getApplicationContext();
+    new Thread(
+      () -> {
+        PowerManager.WakeLock wakeLock = acquireRecoverWakeLock(app);
+        try {
+          Log.i(TAG, "native recover (boot)");
+          PalGateNativeOpen.pollNearby(app, "recover");
+        } finally {
+          releaseWakeLock(wakeLock);
+        }
+      },
+      "gateauto-boot-poll"
+    ).start();
   }
 
   static void startSync(Context context, String reason) {

@@ -68,5 +68,20 @@ describe('play detect vs open radius', () => {
     assert.match(sampler, /INTERVAL_MS = 1_000L/);
     assert.match(sampler, /PRIORITY_HIGH_ACCURACY/);
     assert.match(sampler, /SESSION_MAX_MS = 90_000L/);
+    assert.match(sampler, /BURST_MAX_MS = 10 \* 60 \* 1000L/);
+    const scheduler = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../src/platform/android-keepalive/KeepAliveScheduler.java',
+      ),
+      'utf8',
+    );
+    assert.match(scheduler, /BACKGROUND_INTERVAL_MS = 60 \* 1000L/);
+    assert.match(scheduler, /MonitoringService.isForeground\(\)/);
+    const boot = fs.readFileSync(
+      path.join(__dirname, '../src/platform/withAndroidBootSync.js'),
+      'utf8',
+    );
+    assert.match(boot, /KeepAliveReceiver.bootPoll/);
   });
 });

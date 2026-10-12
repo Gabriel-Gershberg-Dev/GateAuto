@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "81"
+        "value": "82"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.80"
+        "value": "1.0.81"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Background open keeps the backup from 1.0.68. While Walking is on, GPS keeps checking: every 30 seconds far away, and every second inside about 100 m."
+        "value": "After a reboot, Auto-open checks right away, then about every minute until the location check is running again. Near a gate it keeps checking every second for up to 10 minutes. Opening the app puts a Google sign-in back when the saved one was lost."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."
