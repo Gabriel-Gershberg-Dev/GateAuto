@@ -65,6 +65,23 @@ export async function promptGoogleIdToken(): Promise<string | null> {
   }
 }
 
+/**
+ * The Google account this app already used, with no picker.
+ * Null when there is nothing to restore.
+ */
+export async function silentGoogleIdToken(): Promise<string | null> {
+  configureGoogleSignIn();
+  try {
+    if (!GoogleSignin.hasPreviousSignIn()) return null;
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: false });
+    const response = await GoogleSignin.signInSilently();
+    if (response.type !== 'success') return null;
+    return response.data.idToken ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Native Google session — never await this from sign-out. */
 export function signOutGoogleQuietly(): void {
   void Promise.race([

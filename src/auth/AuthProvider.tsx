@@ -36,7 +36,12 @@ import {
 } from '../firebase/startupNetwork';
 import { googleWebClientId } from '../firebase/config';
 import i18n from '../i18n';
-import { configureGoogleSignIn, signOutGoogleQuietly } from './googleNative';
+import { canTryGoogleRestore } from './googleRestore';
+import {
+  configureGoogleSignIn,
+  signOutGoogleQuietly,
+  silentGoogleIdToken,
+} from './googleNative';
 import {
   isRealFirebaseAccount,
   resolveRegisteredDisplayName,
@@ -91,6 +96,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** Bumps on every auth transition so an in-flight persistProfile cannot restore a signed-out user. */
 let authEpoch = 0;
+/** Set for a Sign out tap so the Google account is not signed straight back in. */
+let explicitSignOut = false;
+let lastGoogleRestoreAt = 0;
 
 function providersOf(user: User): string[] {
   return user.providerData.map((p) => p.providerId);
@@ -121,7 +129,8 @@ function viewOf(user: User): AuthUserView {
   };
 }
 
-async function settleUser(user: User): Promise<User> {
+async function settleUser(user: User, refresh = true): Promise<User> {
+  if (!refresh) return auth.currentUser ?? user;
   await user.reload();
   await user.getIdToken(true);
   return auth.currentUser ?? user;
@@ -175,8 +184,12 @@ function authMessage(error: unknown): string {
   }
 }
 
-async function persistProfile(user: User, name?: string): Promise<User> {
-  const settled = await settleUser(user);
+async function persistProfile(
+  user: User,
+  name?: string,
+  refresh = true,
+): Promise<User> {
+  const settled = await settleUser(user, refresh);
   const ref = doc(db, 'users', settled.uid);
   const existing = await getDoc(ref);
   const cloudName = existing.exists()
@@ -265,14 +278,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       startupGateRef.current?.cancel();
       settledUidRef.current = next ? next.uid : null;
       if (!next) {
-        leaveAccountVault();
-        void clearResumeRoute();
-        setFirebaseUser(null);
-        setStartupConnection('quiet');
-        setReady(true);
-        void import('../telemetry').then((t) => t.setTelemetryUser(null));
+        const now = Date.now();
+        const restore = canTryGoogleRestore({
+          explicitSignOut,
+          lastAttemptAt: lastGoogleRestoreAt,
+          now,
+        });
+        if (!restore) {
+          leaveAccountVault();
+          void clearResumeRoute();
+          setFirebaseUser(null);
+          setStartupConnection('quiet');
+          setReady(true);
+          void import('../telemetry').then((t) => t.setTelemetryUser(null));
+          return;
+        }
+        lastGoogleRestoreAt = now;
+        void (async () => {
+          let token: string | null = null;
+          try {
+            token = await Promise.race([
+              silentGoogleIdToken(),
+              new Promise<null>((resolve) => {
+                setTimeout(() => resolve(null), 8_000);
+              }),
+            ]);
+          } catch {
+            token = null;
+          }
+          if (epoch !== authEpoch || explicitSignOut || !token) {
+            if (epoch !== authEpoch) return;
+            leaveAccountVault();
+            void clearResumeRoute();
+            setFirebaseUser(null);
+            setStartupConnection('quiet');
+            setReady(true);
+            void import('../telemetry').then((t) => t.setTelemetryUser(null));
+            return;
+          }
+          try {
+            await signInWithCredential(
+              auth,
+              GoogleAuthProvider.credential(token),
+            );
+          } catch {
+            if (epoch !== authEpoch) return;
+            leaveAccountVault();
+            void clearResumeRoute();
+            setFirebaseUser(null);
+            setStartupConnection('quiet');
+            setReady(true);
+            void import('../telemetry').then((t) => t.setTelemetryUser(null));
+          }
+        })();
         return;
       }
+      explicitSignOut = false;
       const gate = createStartupGate();
       startupGateRef.current = gate;
       void (async () => {
@@ -282,7 +343,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             read: async () => {
               await activateAccountVault(next.uid);
               await hydrateSignedInAccount(next);
-              await persistProfile(next);
+              // Cached sign-in. A forced refresh here is what drops the account
+              // when the phone stops the app mid-save.
+              await persistProfile(next, undefined, false);
             },
             refresh: refreshAppConnection,
             isStopped: gate.isStopped,
@@ -455,6 +518,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       continueStartup,
       signOut: async () => {
         setError(null);
+        explicitSignOut = true;
         authEpoch += 1;
         settledUidRef.current = null;
         resetStartupNetworkWaiver();
