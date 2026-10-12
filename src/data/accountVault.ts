@@ -273,6 +273,9 @@ export function leaveAccountVault(): void {
   void import('../platform/keepAliveAlarm')
     .then((m) => m.setNativeAccountSignedIn(false))
     .catch(() => undefined);
+  void import('../platform/keepAliveAlarm')
+    .then((m) => m.setNativeAutoLogAuth('', '', 0))
+    .catch(() => undefined);
   // Auto-open stays as this user left it. The next sign-in applies that
   // account's own switch instead of turning the phone off for everyone.
 }

@@ -165,6 +165,8 @@
     "appVersion": "גרסת האפליקציה",
     "checkBetaUpdate": "בדיקת עדכון בטא",
     "checkBetaUpdateDetail": "בניות פנימיות — לא נשלחות למשפחה",
+    "exportAutoLog": "ייצוא יומן Auto-open",
+    "exportAutoLogDetail": "שיתוף 300 הבדיקות האחרונות בטלפון",
     "betaTitle": "עדכוני בטא",
     "betaNote": "אתם בערוץ הבטא. טלפוני המשפחה רואים רק את הייצור.",
     "turnOffDev": "כיבוי אפשרויות למפתחים",

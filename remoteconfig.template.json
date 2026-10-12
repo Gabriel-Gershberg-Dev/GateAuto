@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "82"
+        "value": "83"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.81"
+        "value": "1.0.82"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "After a reboot, Auto-open checks right away, then about every minute until the location check is running again. Near a gate it keeps checking every second for up to 10 minutes. Opening the app puts a Google sign-in back when the saved one was lost."
+        "value": "Auto-open keeps the last 300 checks on the phone and sends them to the signed-in account. In developer options, Export auto-open log shares that list."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

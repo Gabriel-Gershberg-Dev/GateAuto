@@ -48,6 +48,8 @@ type GateAutoKeepAliveNative = {
   reportStaleNetwork?(): Promise<boolean>;
   setAppLang?(lang: string): Promise<boolean>;
   setAccountSignedIn?(signedIn: boolean): Promise<boolean>;
+  setAutoLogAuth?(uid: string, token: string, expMs: number): Promise<boolean>;
+  getAutoOpenLog?(): Promise<string>;
   isIgnoringBatteryOptimizations?(): Promise<boolean>;
   isBatteryUnrestricted?(): Promise<boolean>;
   getAutoOpenOsStatus?(): Promise<Record<string, unknown>>;
@@ -568,6 +570,31 @@ export async function setNativeAccountSignedIn(signedIn: boolean): Promise<void>
     await native.setAccountSignedIn(signedIn);
   } catch (error) {
     console.warn('[GateAuto] setNativeAccountSignedIn failed', error);
+  }
+}
+
+export async function setNativeAutoLogAuth(
+  uid: string,
+  token: string,
+  expMs: number,
+): Promise<void> {
+  const native = getNative();
+  if (!native?.setAutoLogAuth) return;
+  try {
+    await native.setAutoLogAuth(uid, token, expMs);
+  } catch (error) {
+    console.warn('[GateAuto] setNativeAutoLogAuth failed', error);
+  }
+}
+
+export async function getNativeAutoOpenLog(): Promise<string> {
+  const native = getNative();
+  if (!native?.getAutoOpenLog) return '[]';
+  try {
+    return await native.getAutoOpenLog();
+  } catch (error) {
+    console.warn('[GateAuto] getNativeAutoOpenLog failed', error);
+    return '[]';
   }
 }
 

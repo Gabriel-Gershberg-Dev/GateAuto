@@ -78,6 +78,7 @@ copyDirFiles(
     'WalkActivity.java',
     'WalkActivityReceiver.java',
     'GateAutoTelemetry.java',
+    'AutoOpenLog.java',
   ],
 );
 

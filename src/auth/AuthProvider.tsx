@@ -36,6 +36,7 @@ import {
 } from '../firebase/startupNetwork';
 import { googleWebClientId } from '../firebase/config';
 import i18n from '../i18n';
+import { watchAutoOpenLog } from '../telemetry/autoOpenLog';
 import { canTryGoogleRestore } from './googleRestore';
 import {
   configureGoogleSignIn,
@@ -254,6 +255,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * (the hold keeps the process), and the new tree must still settle.
    */
   const settledUidRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!firebaseUser) return;
+    return watchAutoOpenLog(firebaseUser);
+  }, [firebaseUser]);
 
   const retryStartupConnection = useCallback(() => {
     startupGateRef.current?.kick();

@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.81** (versionCode 82).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.82** (versionCode 83).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, `v1.0.78`, `v1.0.79`, `v1.0.80`, and `v1.0.81`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, `v1.0.78`, `v1.0.79`, `v1.0.80`, `v1.0.81`, and `v1.0.82`.
+
+## 1.0.82 — 2026-10-12 (beta)
+
+Auto-open keeps the last 300 checks on the phone and sends them to the signed-in account. In developer options, Export auto-open log shares that list.
 
 ## 1.0.81 — 2026-10-12 (beta)
 

@@ -107,7 +107,7 @@ public final class PalGateNativeOpen {
       return null;
     } catch (Exception e) {
       Log.w(TAG, "native " + src + " open failed " + gateId, e);
-      GateAutoTelemetry.autoSkip(context, "other", src, gateId, null, gate);
+      GateAutoTelemetry.autoFail(context, src, gateId, null, gate);
       if (!isExpectedOpenFailure(e)) {
         GateAutoTelemetry.recordUnexpected(e);
       }
@@ -622,7 +622,7 @@ public final class PalGateNativeOpen {
     } catch (Exception e) {
       KeepAlivePrefs.releaseClaim(gateId);
       Log.w(TAG, "native open failed " + gateId, e);
-      GateAutoTelemetry.autoSkip(context, "other", analyticsSource, gateId, dist, gate);
+      GateAutoTelemetry.autoFail(context, analyticsSource, gateId, dist, gate);
       if (!isExpectedOpenFailure(e)) {
         GateAutoTelemetry.recordUnexpected(e);
       }

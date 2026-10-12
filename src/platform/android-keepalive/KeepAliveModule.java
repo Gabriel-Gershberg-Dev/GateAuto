@@ -463,6 +463,31 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
     }
   }
 
+  /** Signed-in token so a locked phone can upload the auto-open log while it is still valid. */
+  @ReactMethod
+  public void setAutoLogAuth(String uid, String token, double expMs, Promise promise) {
+    try {
+      AutoOpenLog.setAuth(
+        getReactApplicationContext(),
+        uid,
+        token,
+        (long) expMs
+      );
+      promise.resolve(true);
+    } catch (Exception e) {
+      promise.reject("keepalive_autolog", e);
+    }
+  }
+
+  @ReactMethod
+  public void getAutoOpenLog(Promise promise) {
+    try {
+      promise.resolve(AutoOpenLog.linesJson(getReactApplicationContext()));
+    } catch (Exception e) {
+      promise.reject("keepalive_autolog", e);
+    }
+  }
+
   /**
    * Walking on keeps the GPS stream. Start the location service only when this
    * call has a screen, never from a background wake.

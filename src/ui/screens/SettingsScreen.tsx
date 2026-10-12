@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -27,6 +28,7 @@ import { tryStopGeofencing, trySyncGeofences } from '../../integrations/optional
 import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { checkAppUpdate } from '../../updates/checkUpdate';
+import { formatAutoOpenLog, readAutoOpenLog } from '../../telemetry/autoOpenLog';
 import {
   getInstalledVersionCode,
   getInstalledVersionName,
@@ -308,6 +310,22 @@ export function SettingsScreen({ navigation }: Props) {
               label={t('settings.checkBetaUpdate')}
               detail={t('settings.checkBetaUpdateDetail')}
               onPress={() => void checkAppUpdate('beta')}
+              colors={colors}
+            />
+            <Hairline inset={56} />
+            <SettingsRow
+              icon={<IconExport color={colors.primary} />}
+              label={t('settings.exportAutoLog')}
+              detail={t('settings.exportAutoLogDetail')}
+              onPress={() => {
+                void (async () => {
+                  const text = formatAutoOpenLog(await readAutoOpenLog());
+                  await Share.share({
+                    title: t('settings.exportAutoLog'),
+                    message: text,
+                  });
+                })();
+              }}
               colors={colors}
             />
             <Hairline inset={56} />

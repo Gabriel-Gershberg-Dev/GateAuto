@@ -118,6 +118,13 @@ service cloud.firestore {
         time <= request.time + duration.value(1, 'm');
     }
 
+    function isValidAutoLog(data) {
+      return data.keys().hasOnly(['lines', 'updatedAt']) &&
+        data.lines is list &&
+        data.lines.size() <= 300 &&
+        isRecentTimestamp(data.updatedAt);
+    }
+
     // .rules string: '\\.' → regex \.  (not '\\\\.' which demands a backslash)
     function isValidEmail(email) {
       return email is string &&
@@ -393,6 +400,14 @@ service cloud.firestore {
           isValidUserSecret(request.resource.data) &&
           request.resource.data.createdAt == resource.data.createdAt &&
           isRecentTimestamp(request.resource.data.updatedAt);
+        allow delete: if isOwner(userId);
+      }
+
+      match /autoLog/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) &&
+          docId == 'recent' &&
+          isValidAutoLog(request.resource.data);
         allow delete: if isOwner(userId);
       }
     }

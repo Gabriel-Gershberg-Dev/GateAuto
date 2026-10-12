@@ -165,6 +165,8 @@
     "appVersion": "App version",
     "checkBetaUpdate": "Check for beta updates",
     "checkBetaUpdateDetail": "Internal builds — not sent to family",
+    "exportAutoLog": "Export auto-open log",
+    "exportAutoLogDetail": "Share the last 300 checks on this phone",
     "betaTitle": "Beta updates",
     "betaNote": "You’re on the beta channel. Family phones only see production.",
     "turnOffDev": "Turn off developer options",

@@ -29,6 +29,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
     boolean holdPulse = KeepAliveScheduler.ACTION_HOLD_PULSE.equals(action);
     if (alarm) {
       KeepAliveScheduler.scheduleNext(context, KeepAliveScheduler.backupDelay(context));
+      AutoOpenLog.alarm(context);
     }
     if (!KeepAlivePrefs.isArmed(context)) return;
     // Any armed wake: hold the (possibly cold-started) process with a
@@ -71,6 +72,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
         PowerManager.WakeLock wakeLock = acquireRecoverWakeLock(app);
         try {
           Log.i(TAG, "native recover (boot)");
+          AutoOpenLog.boot(app);
           PalGateNativeOpen.pollNearby(app, "recover");
         } finally {
           releaseWakeLock(wakeLock);

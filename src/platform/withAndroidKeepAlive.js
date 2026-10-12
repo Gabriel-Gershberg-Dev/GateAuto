@@ -40,6 +40,7 @@ const JAVA_FILES = [
   'WalkActivity.java',
   'WalkActivityReceiver.java',
   'GateAutoTelemetry.java',
+  'AutoOpenLog.java',
 ];
 
 function withKeepAliveSources(config) {

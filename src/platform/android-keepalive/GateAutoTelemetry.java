@@ -90,6 +90,7 @@ public final class GateAutoTelemetry {
       params.putInt("proc_age_ms", (int) Math.min(procAge, 600_000L));
     }
     logEvent(context, "auto_open", params);
+    AutoOpenLog.open(context, source, gateId, distanceM, gate, warmFlag);
     breadcrumb(
       "open "
         + nz(source)
@@ -130,7 +131,24 @@ public final class GateAutoTelemetry {
     putString(params, "reason", reason);
     putString(params, "source", source);
     logEvent(context, "auto_skip", params);
+    AutoOpenLog.skip(context, reason, source, gateId, distanceM, gate, MonitoringService.isForeground());
     breadcrumb("skip " + nz(reason) + " " + nz(source) + " " + hashGateId(gateId));
+  }
+
+  static void autoFail(
+    Context context,
+    String source,
+    String gateId,
+    Double distanceM,
+    JSONObject gate
+  ) {
+    boolean warm = MonitoringService.isForeground();
+    AutoOpenLog.fail(context, source, gateId, distanceM, gate, warm);
+    Bundle params = baseGateParams(gateId, distanceM, gate);
+    putString(params, "reason", "other");
+    putString(params, "source", source);
+    logEvent(context, "auto_skip", params);
+    breadcrumb("fail " + nz(source) + " " + hashGateId(gateId));
   }
 
   static void keepaliveTick(Context context, String result) {
