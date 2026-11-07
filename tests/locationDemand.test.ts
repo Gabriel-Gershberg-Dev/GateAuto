@@ -134,8 +134,9 @@ describe('LocationDemand.java stays in sync with the spec', () => {
     assert.ok(demand.includes('redmi'));
     assert.ok(demand.includes('poco'));
     const rose = locked.slice(locked.indexOf('gpsRose'), locked.indexOf('} else if (fences)'));
-    assert.ok(rose.includes('isXiaomiFamily()'));
     assert.ok(rose.includes('pollNearbySoon'));
+    assert.ok(rose.includes('ApproachSampler.startForCar'));
+    assert.ok(!rose.includes('isXiaomiFamily()'));
     const hold = fs.readFileSync(path.join(javaDir, 'HoldService.java'), 'utf8');
     const ensure = hold.slice(
       hold.indexOf('public static void ensure('),
@@ -160,7 +161,7 @@ describe('LocationDemand.java stays in sync with the spec', () => {
       open.indexOf('public static void openFromBluetooth'),
       open.indexOf('public static void pollNearby(Context context)'),
     );
-    assert.ok(bt.indexOf('lastLocation(context)') > bt.indexOf('is not a listed car'));
+    assert.ok(bt.indexOf('requestCurrentOrLast(context)') > bt.indexOf('is not a listed car'));
     const wake = open.slice(open.indexOf('public static void onFenceWake'));
     assert.ok(
       wake.indexOf('needsPlayFences') < wake.indexOf('currentLocation(context, true)'),

@@ -239,10 +239,15 @@ public final class LocationDemand {
         MonitoringService.start(ctx);
       } else {
         HoldService.ensure(ctx);
-        // Car was already connected when a frozen Xiaomi process woke. The
-        // connect broadcast will not fire again. Poll once, still no location FGS.
-        if (gpsRose && isXiaomiFamily()) {
-          KeepAliveModule.pollNearbySoon(ctx, "quiet-wake");
+        // GPS became needed from the background (car connected, or a frozen
+        // process woke with the car already on). The connect broadcast will
+        // not fire again, and no location service can start from here, so
+        // check now and keep a stream on the car. Every phone, not only Xiaomi.
+        if (gpsRose) {
+          KeepAliveModule.pollNearbySoon(ctx, "gps-rose");
+          if (!MonitoringService.isRunning() && listedCarConnectedForAutoGates(ctx)) {
+            ApproachSampler.startForCar(ctx);
+          }
         }
       }
     } else if (fences) {

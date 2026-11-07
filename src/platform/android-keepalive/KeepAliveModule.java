@@ -1,7 +1,12 @@
 package com.gateauto.app.keepalive;
 
 import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
 import android.location.Address;
 import android.location.Geocoder;
 import android.net.ConnectivityManager;
@@ -12,6 +17,10 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 
@@ -483,6 +492,52 @@ public class KeepAliveModule extends ReactContextBaseJavaModule {
   public void getAutoOpenLog(Promise promise) {
     try {
       promise.resolve(AutoOpenLog.linesJson(getReactApplicationContext()));
+    } catch (Exception e) {
+      promise.reject("keepalive_autolog", e);
+    }
+  }
+
+  /** Save the formatted log as a text file in Downloads. */
+  @ReactMethod
+  public void saveAutoOpenLogFile(String text, Promise promise) {
+    try {
+      Context ctx = getReactApplicationContext();
+      String body = text == null ? "" : text;
+      byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+      String name = "GateAuto-auto-open-log.txt";
+      if (Build.VERSION.SDK_INT >= 29) {
+        ContentResolver resolver = ctx.getContentResolver();
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+        values.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
+        Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) {
+          promise.resolve(false);
+          return;
+        }
+        try (OutputStream out = resolver.openOutputStream(uri)) {
+          if (out == null) {
+            promise.resolve(false);
+            return;
+          }
+          out.write(bytes);
+        }
+        values.clear();
+        values.put(MediaStore.Downloads.IS_PENDING, 0);
+        resolver.update(uri, values, null, null);
+        promise.resolve(true);
+        return;
+      }
+      File dir = ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
+      if (dir == null) {
+        promise.resolve(false);
+        return;
+      }
+      try (FileOutputStream out = new FileOutputStream(new File(dir, name))) {
+        out.write(bytes);
+      }
+      promise.resolve(true);
     } catch (Exception e) {
       promise.reject("keepalive_autolog", e);
     }

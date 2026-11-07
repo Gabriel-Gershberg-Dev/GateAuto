@@ -30,14 +30,14 @@
     },
     "beta_version_code": {
       "defaultValue": {
-        "value": "83"
+        "value": "84"
       },
       "valueType": "NUMBER",
       "description": "BETA channel. Default RC publish updates these keys only. Hidden until developer options are unlocked."
     },
     "beta_version_name": {
       "defaultValue": {
-        "value": "1.0.82"
+        "value": "1.0.83"
       },
       "valueType": "STRING",
       "description": "BETA channel. User-facing version name for Check for beta updates."
@@ -51,7 +51,7 @@
     },
     "beta_release_notes": {
       "defaultValue": {
-        "value": "Auto-open keeps the last 300 checks on the phone and sends them to the signed-in account. In developer options, Export auto-open log shares that list."
+        "value": "When the car connects, Auto-open keeps checking GPS every second on the way to the gate, even with the screen locked. Far from a gate it checks every 5 seconds. The log records the car and the GPS stream. Export auto-open log can save a text file."
       },
       "valueType": "STRING",
       "description": "BETA channel. Optional what's-new text shown only after unlock."

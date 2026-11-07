@@ -58,10 +58,16 @@ public class BtConnectReceiver extends BroadcastReceiver {
     if (disconnected) {
       CarBluetoothState.recordDisconnected(context, address, name);
       Log.i(TAG, "native BT disconnect " + name + " " + address);
+      if (PalGateNativeOpen.listedCarForAutoGate(context, name, address)) {
+        AutoOpenLog.car(context, false);
+      }
       LocationDemand.sync(context, false);
       return;
     }
     CarBluetoothState.recordConnected(context, address, name);
+    if (PalGateNativeOpen.listedCarForAutoGate(context, name, address)) {
+      AutoOpenLog.car(context, true);
+    }
     LocationDemand.sync(context, false);
 
     Log.i(TAG, "native BT connect " + name + " " + address);
@@ -73,6 +79,11 @@ public class BtConnectReceiver extends BroadcastReceiver {
       () -> {
         try {
           PalGateNativeOpen.openFromBluetooth(app, n, a);
+          // Not at the gate yet. The location service cannot start from here,
+          // so follow the car with the 1 Hz stream until the pin or disconnect.
+          if (PalGateNativeOpen.listedCarForAutoGate(app, n, a)) {
+            ApproachSampler.startForCar(app);
+          }
         } finally {
           new Handler(Looper.getMainLooper()).post(pending::finish);
         }

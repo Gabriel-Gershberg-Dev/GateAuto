@@ -32,6 +32,11 @@ public final class ApproachSampler {
   static final long SESSION_MAX_MS = 90_000L;
   /** Keep the 1 Hz burst going while still inside the wake, then the alarm takes over. */
   static final long BURST_MAX_MS = 10 * 60 * 1000L;
+  /**
+   * After the listed car connects with no location service up: sample while the
+   * car stays connected, up to this long. Covers the whole drive home.
+   */
+  static final long CAR_BURST_MAX_MS = 45 * 60 * 1000L;
 
   private static final Object LOCK = new Object();
   private static HandlerThread thread;
@@ -43,10 +48,24 @@ public final class ApproachSampler {
   private static long deadlineElapsed;
   private static Context app;
   private static int farStreak;
+  /** Started by a car connect: stay on while the car is connected, even far away. */
+  private static boolean carSession;
 
   private ApproachSampler() {}
 
   public static void start(Context context) {
+    start(context, false);
+  }
+
+  /**
+   * Car connect wake. No location service can start from the background, so
+   * this stream is the only GPS a locked phone gets on the way to the gate.
+   */
+  public static void startForCar(Context context) {
+    start(context, true);
+  }
+
+  private static void start(Context context, boolean car) {
     if (context == null) return;
     if (!KeepAlivePrefs.isArmed(context)) return;
     if (!LocationDemand.needsPlayFences(context)) return;
@@ -54,8 +73,14 @@ public final class ApproachSampler {
     if (MonitoringService.isRunning()) return;
     synchronized (LOCK) {
       if (callback != null) {
+        if (car && !carSession) {
+          carSession = true;
+          deadlineElapsed = SystemClock.elapsedRealtime() + SESSION_MAX_MS;
+          Log.i(TAG, "approach sampler now following the car");
+        }
         return;
       }
+      carSession = car;
       burstStartElapsed = SystemClock.elapsedRealtime();
       deadlineElapsed = burstStartElapsed + SESSION_MAX_MS;
       farStreak = 0;
@@ -91,11 +116,19 @@ public final class ApproachSampler {
       acquireWakeLock();
       Log.i(TAG, "approach sampler 1Hz high GPS for up to " + SESSION_MAX_MS + "ms");
     }
+    AutoOpenLog.stream(context, car ? "car-start" : "fence-start");
   }
 
   public static void stop() {
     synchronized (LOCK) {
       stopLocked();
+    }
+  }
+
+  /** A background 1 Hz stream is running right now. */
+  public static boolean isActive() {
+    synchronized (LOCK) {
+      return callback != null;
     }
   }
 
@@ -117,25 +150,28 @@ public final class ApproachSampler {
       PalGateNativeOpen.pollNearby(ctx, "poll", loc);
     }
     boolean near = loc != null && PalGateNativeOpen.anyWithinDetect(ctx, loc);
+    boolean carStill =
+      carSessionActive() && LocationDemand.listedCarConnectedForAutoGates(ctx);
     boolean extend = false;
     synchronized (LOCK) {
       if (callback == null) return;
-      if (near) {
+      if (near || carStill) {
         farStreak = 0;
       } else {
         farStreak++;
         if (farStreak >= 3) {
-          Log.i(TAG, "approach sampler left detect fence");
+          Log.i(TAG, carSession ? "approach sampler car left" : "approach sampler left detect fence");
           stopLocked();
           return;
         }
       }
       long now = SystemClock.elapsedRealtime();
       if (now <= deadlineElapsed) return;
+      long maxMs = carSession ? CAR_BURST_MAX_MS : BURST_MAX_MS;
       boolean keep =
-        near
+        (near || carStill)
           && burstStartElapsed > 0
-          && now - burstStartElapsed < BURST_MAX_MS;
+          && now - burstStartElapsed < maxMs;
       if (!keep) {
         Log.i(TAG, "approach sampler deadline");
         stopLocked();
@@ -146,7 +182,13 @@ public final class ApproachSampler {
     }
     if (extend) {
       refreshWakeLock();
-      Log.i(TAG, "approach sampler still near — another " + SESSION_MAX_MS + "ms");
+      Log.i(TAG, "approach sampler still " + (near ? "near" : "driving") + " — another " + SESSION_MAX_MS + "ms");
+    }
+  }
+
+  private static boolean carSessionActive() {
+    synchronized (LOCK) {
+      return carSession;
     }
   }
 
@@ -206,5 +248,6 @@ public final class ApproachSampler {
     app = null;
     farStreak = 0;
     burstStartElapsed = 0;
+    carSession = false;
   }
 }

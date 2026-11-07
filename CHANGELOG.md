@@ -5,9 +5,13 @@ GateAuto version history. **1.0.0–1.0.6** are real git commits. **1.0.7–1.0.
 Channels:
 
 - **Production** — family `Check for update`. Live: **1.0.67** (versionCode 68).
-- **Beta** — Settings → tap version 7× → password. Live: **1.0.82** (versionCode 83).
+- **Beta** — Settings → tap version 7× → password. Live: **1.0.83** (versionCode 84).
 
-Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, `v1.0.78`, `v1.0.79`, `v1.0.80`, `v1.0.81`, and `v1.0.82`.
+Git tags match source, not every sideload: `v1.0.6`, `v1.0.46`, `v1.0.48`, `v1.0.60`, `v1.0.61`, `v1.0.62`, `v1.0.63`, `v1.0.64`, `v1.0.65`, `v1.0.66`, `v1.0.67`, `v1.0.68`, `v1.0.69`, `v1.0.70`, `v1.0.71`, `v1.0.72`, `v1.0.73`, `v1.0.74`, `v1.0.75`, `v1.0.76`, `v1.0.77`, `v1.0.78`, `v1.0.79`, `v1.0.80`, `v1.0.81`, `v1.0.82`, and `v1.0.83`.
+
+## 1.0.83 — 2026-11-07 (beta)
+
+When the car connects, Auto-open keeps checking GPS every second on the way to the gate, even with the screen locked. Far from a gate it checks every 5 seconds instead of 30. The log now records the car, the GPS stream, and each skip. Export auto-open log can save a text file.
 
 ## 1.0.82 — 2026-10-12 (beta)
 

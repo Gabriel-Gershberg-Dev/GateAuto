@@ -159,13 +159,15 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       }
       if (LocationDemand.quietHold(app)) {
         // No GPS. Prime the car read so a connect discovered on this wake
-        // can poll once from LocationDemand.
+        // can poll once from LocationDemand. A frozen Xiaomi can miss the
+        // connect broadcast, so the sync below is what notices the car.
         Log.i(TAG, "quiet hold — car not connected yet");
         CarBluetoothState.prime(app);
         LocationDemand.sync(app, false);
         return;
       }
       Log.i(TAG, "native recover skip — waiting for listed car Bluetooth");
+      CarBluetoothState.prime(app);
       LocationDemand.sync(app, false);
       return;
     }
@@ -173,6 +175,13 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       GeofenceRegistrar.refresh(app);
     }
     PalGateNativeOpen.pollNearby(app, "recover");
+    // Car connected, location service down (locked phone, reboot, or the
+    // connect came while the app was closed). Keep a stream going so the
+    // open does not wait for the next alarm.
+    if (!MonitoringService.isRunning()
+      && LocationDemand.listedCarConnectedForAutoGates(app)) {
+      ApproachSampler.startForCar(app);
+    }
   }
 
   private static PowerManager.WakeLock acquireRecoverWakeLock(Context context) {

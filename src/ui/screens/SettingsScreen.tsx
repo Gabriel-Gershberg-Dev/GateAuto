@@ -29,6 +29,7 @@ import { goToGateSystems } from '../../navigation/hubNavigation';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { checkAppUpdate } from '../../updates/checkUpdate';
 import { formatAutoOpenLog, readAutoOpenLog } from '../../telemetry/autoOpenLog';
+import { saveNativeAutoOpenLogFile } from '../../platform/keepAliveAlarm';
 import {
   getInstalledVersionCode,
   getInstalledVersionName,
@@ -94,6 +95,9 @@ export function SettingsScreen({ navigation }: Props) {
   const [devPassword, setDevPassword] = useState('');
   const [devPasswordError, setDevPasswordError] = useState<string | null>(null);
   const [turnOffDevOpen, setTurnOffDevOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportCount, setExportCount] = useState(0);
+  const [exportText, setExportText] = useState('');
 
   const versionName = Constants.expoConfig?.version ?? '';
   const versionCode =
@@ -319,11 +323,10 @@ export function SettingsScreen({ navigation }: Props) {
               detail={t('settings.exportAutoLogDetail')}
               onPress={() => {
                 void (async () => {
-                  const text = formatAutoOpenLog(await readAutoOpenLog());
-                  await Share.share({
-                    title: t('settings.exportAutoLog'),
-                    message: text,
-                  });
+                  const lines = await readAutoOpenLog();
+                  setExportCount(lines.length);
+                  setExportText(formatAutoOpenLog(lines));
+                  setExportOpen(true);
                 })();
               }}
               colors={colors}
@@ -397,6 +400,39 @@ export function SettingsScreen({ navigation }: Props) {
       destructive
       onCancel={() => setRemoveAllOpen(false)}
       onConfirm={runRemoveAll}
+    />
+    <ConfirmSheet
+      visible={exportOpen}
+      icon={<IconExport color={colors.primary} />}
+      title={t('settings.exportAutoLogTitle')}
+      message={
+        exportCount === 0
+          ? t('settings.exportAutoLogEmpty')
+          : t('settings.exportAutoLogMsg', { count: exportCount })
+      }
+      cancelLabel={t('common.cancel')}
+      confirmLabel={t('settings.exportAutoLogFile')}
+      extraLabel={t('settings.exportAutoLogShare')}
+      onCancel={() => setExportOpen(false)}
+      onExtra={() => {
+        setExportOpen(false);
+        void Share.share({
+          title: t('settings.exportAutoLog'),
+          message: exportText,
+        });
+      }}
+      onConfirm={() => {
+        setExportOpen(false);
+        void (async () => {
+          const saved = await saveNativeAutoOpenLogFile(exportText);
+          if (Platform.OS === 'android') {
+            ToastAndroid.show(
+              t(saved ? 'settings.exportAutoLogSaved' : 'settings.exportAutoLogFailed'),
+              ToastAndroid.SHORT,
+            );
+          }
+        })();
+      }}
     />
     <ConfirmSheet
       visible={signOutOpen}

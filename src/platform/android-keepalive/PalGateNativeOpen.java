@@ -303,7 +303,9 @@ public final class PalGateNativeOpen {
         continue;
       }
       if (!located) {
-        last = lastLocation(context);
+        // A cached fix can be minutes old on a locked phone. Take a fresh one
+        // so the open at the gate is decided on where the car is now.
+        last = requestCurrentOrLast(context);
         located = true;
       }
       if (last == null || !withinFence(gate, last, 1.0)) {
@@ -332,6 +334,20 @@ public final class PalGateNativeOpen {
       KeepAlivePrefs.setInside(context, gate.optString("id"), true);
       openGateObject(context, gate, "bt", distanceMeters(gate, last), "bt");
     }
+  }
+
+  /** True when this Bluetooth device is a listed car on any auto gate. */
+  public static boolean listedCarForAutoGate(Context context, String name, String address) {
+    JSONArray arr = GeofenceRegistrar.regionsArray(context);
+    if (arr == null) return false;
+    for (int i = 0; i < arr.length(); i++) {
+      JSONObject gate = arr.optJSONObject(i);
+      if (gate == null) continue;
+      if (!GeofenceRegistrar.isAutoEnabled(gate)) continue;
+      if (!gate.optBoolean("btRequired", false)) continue;
+      if (deviceWanted(gate, address, name)) return true;
+    }
+    return false;
   }
 
   /**

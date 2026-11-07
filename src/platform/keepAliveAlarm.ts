@@ -50,6 +50,7 @@ type GateAutoKeepAliveNative = {
   setAccountSignedIn?(signedIn: boolean): Promise<boolean>;
   setAutoLogAuth?(uid: string, token: string, expMs: number): Promise<boolean>;
   getAutoOpenLog?(): Promise<string>;
+  saveAutoOpenLogFile?(text: string): Promise<boolean>;
   isIgnoringBatteryOptimizations?(): Promise<boolean>;
   isBatteryUnrestricted?(): Promise<boolean>;
   getAutoOpenOsStatus?(): Promise<Record<string, unknown>>;
@@ -595,6 +596,17 @@ export async function getNativeAutoOpenLog(): Promise<string> {
   } catch (error) {
     console.warn('[GateAuto] getNativeAutoOpenLog failed', error);
     return '[]';
+  }
+}
+
+export async function saveNativeAutoOpenLogFile(text: string): Promise<boolean> {
+  const native = getNative();
+  if (!native?.saveAutoOpenLogFile) return false;
+  try {
+    return Boolean(await native.saveAutoOpenLogFile(text));
+  } catch (error) {
+    console.warn('[GateAuto] saveNativeAutoOpenLogFile failed', error);
+    return false;
   }
 }
 

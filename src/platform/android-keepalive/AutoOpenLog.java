@@ -89,6 +89,25 @@ public final class AutoOpenLog {
     append(context, "alarm", "alarm", "", "", null, null, MonitoringService.isForeground());
   }
 
+  /** A listed car connected or disconnected. Always recorded. */
+  static void car(Context context, boolean connected) {
+    append(
+      context,
+      "car",
+      "bt",
+      connected ? "connected" : "disconnected",
+      "",
+      null,
+      null,
+      MonitoringService.isForeground()
+    );
+  }
+
+  /** A GPS stream started or stopped from the background. */
+  static void stream(Context context, String what) {
+    append(context, "stream", "gps", what, "", null, null, MonitoringService.isForeground());
+  }
+
   public static void setAuth(Context context, String uid, String token, long expMs) {
     if (context == null) return;
     KeepAlivePrefs.prefs(context)
@@ -112,6 +131,16 @@ public final class AutoOpenLog {
     if (distanceM == null || !Double.isFinite(distanceM) || gate == null) return false;
     double detect = GeofenceRegistrar.detectRadiusMeters(gate);
     return detect > 0 && distanceM <= detect;
+  }
+
+  /** "on", "off", or "unknown" for any listed car on an auto gate. */
+  private static String carState(Context context) {
+    try {
+      if (LocationDemand.listedCarConnectedForAutoGates(context)) return "on";
+      return CarBluetoothState.describe().contains("seeded=true") ? "off" : "unknown";
+    } catch (Throwable ignored) {
+      return "unknown";
+    }
   }
 
   private static void append(
@@ -150,6 +179,11 @@ public final class AutoOpenLog {
       line.put("walking", KeepAlivePrefs.walkingEnabled(context) ? 1 : 0);
       line.put("warm", warm ? 1 : 0);
       line.put("battery", AutoOpenPermissionStatus.isBatteryUnrestricted(context) ? 1 : 0);
+      // Why the phone could or could not act: car state, GPS stream, hold.
+      line.put("car", carState(context));
+      line.put("gps", MonitoringService.isForeground() ? "service" : (ApproachSampler.isActive() ? "burst" : "off"));
+      line.put("hold", HoldService.isRunning() ? 1 : 0);
+      line.put("loc", GateAutoTelemetry.alwaysLocation(context) ? 1 : 0);
 
       JSONArray lines = new JSONArray(linesJson(context));
       lines.put(line);

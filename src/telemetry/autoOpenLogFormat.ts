@@ -11,9 +11,13 @@ export type AutoLogLine = {
   walking: number;
   warm: number;
   battery: number;
+  car?: string;
+  gps?: string;
+  hold?: number;
+  loc?: number;
 };
 
-const KINDS = new Set(['open', 'fail', 'skip', 'boot', 'alarm']);
+const KINDS = new Set(['open', 'fail', 'skip', 'boot', 'alarm', 'car', 'stream']);
 
 export function parseAutoLog(raw: string): AutoLogLine[] {
   let parsed: unknown;
@@ -45,6 +49,10 @@ export function parseAutoLog(raw: string): AutoLogLine[] {
     if (typeof row.name === 'string' && row.name.trim()) line.name = row.name.trim();
     if (Number.isFinite(Number(row.distanceM))) line.distanceM = Number(row.distanceM);
     if (Number.isFinite(Number(row.radiusM))) line.radiusM = Number(row.radiusM);
+    if (typeof row.car === 'string' && row.car) line.car = row.car;
+    if (typeof row.gps === 'string' && row.gps) line.gps = row.gps;
+    if (row.hold != null) line.hold = Number(row.hold) ? 1 : 0;
+    if (row.loc != null) line.loc = Number(row.loc) ? 1 : 0;
     lines.push(line);
   }
   return lines.slice(-300);
@@ -67,7 +75,11 @@ export function formatAutoOpenLog(lines: AutoLogLine[]): string {
       const dist =
         line.distanceM == null ? '' : ` ${line.distanceM}m/${line.radiusM ?? '—'}m`;
       const why = line.reason ? ` ${line.reason}` : '';
-      return `${when} ${line.kind} ${line.source}${why} ${who}${dist} walk=${line.walking} warm=${line.warm} batt=${line.battery} ${line.v}`;
+      const car = line.car ? ` car=${line.car}` : '';
+      const gps = line.gps ? ` gps=${line.gps}` : '';
+      const hold = line.hold == null ? '' : ` hold=${line.hold}`;
+      const loc = line.loc == null ? '' : ` loc=${line.loc}`;
+      return `${when} ${line.kind} ${line.source}${why} ${who}${dist}${car}${gps}${hold}${loc} walk=${line.walking} warm=${line.warm} batt=${line.battery} ${line.v}`;
     })
     .join('\n');
 }

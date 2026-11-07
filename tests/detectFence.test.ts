@@ -57,6 +57,8 @@ describe('play detect vs open radius', () => {
       'utf8',
     );
     assert.match(monitor, /LOCATION_NEAR_INTERVAL_MS = 1_000L/);
+    assert.match(monitor, /LOCATION_INTERVAL_MS = 5_000L/);
+    assert.doesNotMatch(monitor, /PRIORITY_BALANCED_POWER_ACCURACY,\s*LOCATION_INTERVAL_MS/);
     assert.match(monitor, /pollNearby\(app, "poll", loc\)/);
     const sampler = fs.readFileSync(
       path.join(
@@ -69,6 +71,29 @@ describe('play detect vs open radius', () => {
     assert.match(sampler, /PRIORITY_HIGH_ACCURACY/);
     assert.match(sampler, /SESSION_MAX_MS = 90_000L/);
     assert.match(sampler, /BURST_MAX_MS = 10 \* 60 \* 1000L/);
+    assert.match(sampler, /CAR_BURST_MAX_MS = 45 \* 60 \* 1000L/);
+    assert.match(sampler, /public static void startForCar/);
+    const bt = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../src/platform/android-keepalive/BtConnectReceiver.java',
+      ),
+      'utf8',
+    );
+    assert.match(bt, /ApproachSampler.startForCar\(app\)/);
+    assert.match(bt, /AutoOpenLog.car\(context, true\)/);
+    const open = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../src/platform/android-keepalive/PalGateNativeOpen.java',
+      ),
+      'utf8',
+    );
+    const btOpen = open.slice(
+      open.indexOf('public static void openFromBluetooth'),
+      open.indexOf('public static boolean listedCarForAutoGate'),
+    );
+    assert.match(btOpen, /requestCurrentOrLast\(context\)/);
     const scheduler = fs.readFileSync(
       path.join(
         __dirname,

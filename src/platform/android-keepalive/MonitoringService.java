@@ -37,7 +37,9 @@ public class MonitoringService extends Service {
   static final String CHANNEL_ID = "gateauto-searching-v2";
   static final int NOTIF_ID = 41003;
   private static final long REREGISTER_MS = 8 * 60 * 1000L;
-  private static final long LOCATION_INTERVAL_MS = 30_000L;
+  /** Far from every gate: high accuracy every 5s. More battery, no missed approach. */
+  private static final long LOCATION_INTERVAL_MS = 5_000L;
+  private static final long LOCATION_FAR_MIN_MS = 2_000L;
   private static final long LOCATION_NEAR_INTERVAL_MS = 1_000L;
   private static final long LOCATION_NEAR_MIN_MS = 500L;
   /**
@@ -306,11 +308,10 @@ public class MonitoringService extends Service {
     }
     nearMode = near;
     long interval = near ? LOCATION_NEAR_INTERVAL_MS : LOCATION_INTERVAL_MS;
-    long minInterval = near ? LOCATION_NEAR_MIN_MS : 15_000L;
-    int priority =
-      near
-        ? Priority.PRIORITY_HIGH_ACCURACY
-        : Priority.PRIORITY_BALANCED_POWER_ACCURACY;
+    long minInterval = near ? LOCATION_NEAR_MIN_MS : LOCATION_FAR_MIN_MS;
+    // High accuracy everywhere. Balanced far mode let a fast approach reach
+    // the pin between two 30s fixes, and the open then waited for the alarm.
+    int priority = Priority.PRIORITY_HIGH_ACCURACY;
     LocationRequest request =
       new LocationRequest.Builder(priority, interval)
         .setMinUpdateIntervalMillis(minInterval)
@@ -321,7 +322,7 @@ public class MonitoringService extends Service {
       fused.requestLocationUpdates(request, locationListener, Looper.getMainLooper());
       Log.i(
         TAG,
-        "location updates " + (near ? "near/high 1s" : "far/balanced 30s")
+        "location updates " + (near ? "near/high 1s" : "far/high 5s")
       );
     } catch (SecurityException e) {
       Log.w(TAG, "location updates denied", e);

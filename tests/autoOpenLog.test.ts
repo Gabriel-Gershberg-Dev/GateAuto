@@ -27,10 +27,17 @@ const line: AutoLogLine = {
 describe('auto-open log', () => {
   it('keeps a valid line and drops junk', () => {
     const parsed = parseAutoLog(
-      JSON.stringify([line, { kind: 'nope' }, { kind: 'boot', t: 'x' }]),
+      JSON.stringify([
+        line,
+        { kind: 'nope' },
+        { kind: 'boot', t: 'x' },
+        { kind: 'car', t: 5, reason: 'connected', car: 'on', gps: 'burst', hold: 1, loc: 1 },
+      ]),
     );
-    assert.equal(parsed.length, 1);
+    assert.equal(parsed.length, 2);
     assert.equal(parsed[0].name, 'North gate');
+    assert.equal(parsed[1].car, 'on');
+    assert.equal(parsed[1].gps, 'burst');
   });
 
   it('drops the gate name before upload', () => {
@@ -41,10 +48,11 @@ describe('auto-open log', () => {
   });
 
   it('formats a readable export line with the gate name', () => {
-    const text = formatAutoOpenLog([line]);
+    const text = formatAutoOpenLog([{ ...line, car: 'on', gps: 'service' }]);
     assert.match(text, /North gate/);
     assert.match(text, /12m\/20m/);
     assert.match(text, /open poll/);
+    assert.match(text, /car=on gps=service/);
   });
 
   it('stores at most 300 lines and does not record coordinates', () => {
@@ -59,5 +67,11 @@ describe('auto-open log', () => {
     assert.match(rules, /match \/autoLog\/\{docId\}/);
     assert.match(rules, /docId == 'recent'/);
     assert.match(rules, /data\.lines\.size\(\) <= 300/);
+    const settings = fs.readFileSync(
+      path.join(__dirname, '../src/ui/screens/SettingsScreen.tsx'),
+      'utf8',
+    );
+    assert.match(settings, /exportAutoLogFile/);
+    assert.match(settings, /saveNativeAutoOpenLogFile/);
   });
 });
