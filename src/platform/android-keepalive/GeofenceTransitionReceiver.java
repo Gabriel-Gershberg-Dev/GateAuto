@@ -3,8 +3,6 @@ package com.gateauto.app.keepalive;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
@@ -79,7 +77,13 @@ public class GeofenceTransitionReceiver extends BroadcastReceiver {
           PalGateNativeOpen.onFenceWake(app, event.getTriggeringLocation());
         } finally {
           releaseWakeLock(wakeLock);
-          new Handler(Looper.getMainLooper()).post(pending::finish);
+          if (pending != null) {
+            try {
+              pending.finish();
+            } catch (Exception ignored) {
+              // already finished
+            }
+          }
         }
       },
       "gateauto-geo-open"

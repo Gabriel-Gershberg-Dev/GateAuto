@@ -8,20 +8,20 @@
 
 export type WalkingLevel = 'normal' | 'high';
 
-export const WALKING_NORMAL_MAX_M = 7;
+export const WALKING_NORMAL_MAX_M = 10;
 export const WALKING_NORMAL_FLOOR_M = 5;
-export const WALKING_HIGH_MAX_M = 12;
+export const WALKING_HIGH_MAX_M = 15;
 export const WALKING_HIGH_FLOOR_M = 8;
 
 /** Below this speed, GPS bearing is noise. Missing bearing never blocks. */
 export const WALKING_HEADING_MIN_SPEED_MPS = 1.2;
-/** Heading more than this many degrees off the pin delays the open. */
-export const WALKING_HEADING_AWAY_DEG = 100;
+/** Only a clear walk-away heading delays the open. */
+export const WALKING_HEADING_AWAY_DEG = 135;
 /**
- * A 5–7 m ring never contains a 15 m GPS blob under the normal accuracy
+ * A 5–10 m ring never contains a 15 m GPS blob under the normal accuracy
  * rule. Accept a fix this loose when the point itself is inside the ring.
  */
-export const WALKING_MAX_ACCURACY_M = 25;
+export const WALKING_MAX_ACCURACY_M = 35;
 
 export function normalizeWalkingLevel(raw: unknown): WalkingLevel {
   return raw === 'high' ? 'high' : 'normal';
@@ -29,7 +29,7 @@ export function normalizeWalkingLevel(raw: unknown): WalkingLevel {
 
 /**
  * On-foot open distance. Never larger than the saved radius.
- * 50 m pin → 7 m normal / 12 m high. 10 m pin → 7 / 10 m.
+ * 50 m pin → 10 m normal / 15 m high. 10 m pin → 10 / 10 m.
  */
 export function walkingOpenMaxM(savedRadius: number, level: WalkingLevel): number {
   if (!Number.isFinite(savedRadius) || savedRadius <= 0) return 0;

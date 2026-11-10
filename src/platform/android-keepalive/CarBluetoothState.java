@@ -11,6 +11,7 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -85,6 +86,13 @@ public final class CarBluetoothState {
 
   /** key (normalized address, else lowercased name) → display name, may be null. */
   private static final Map<String, String> connected = new LinkedHashMap<>();
+  /**
+   * Elapsed time until which a just-reported link is kept. A sweep that runs
+   * in the second after ACL connect used to delete the car before
+   * {@code isConnected()} could see it.
+   */
+  private static final Map<String, Long> linkHoldUntil = new HashMap<>();
+  private static final long LINK_HOLD_MS = 30_000L;
   /** Bound car profile proxies, kept for the lifetime of the armed process. */
   private static final Map<Integer, BluetoothProfile> proxies = new HashMap<>();
   /** Profile → elapsed time a bind was requested, so a dead bind can be retried. */
@@ -185,6 +193,7 @@ public final class CarBluetoothState {
       proxies.clear();
       binding.clear();
       connected.clear();
+      linkHoldUntil.clear();
       seeded = false;
       seededAt = 0L;
       lastPrimeAt = 0L;
@@ -226,6 +235,10 @@ public final class CarBluetoothState {
     restore(app);
     // A bound proxy is a direct binder read — no bind, no callback, no wait.
     if (hasBoundProxy()) resweep(app);
+    // The in-app check uses BluetoothDevice.isConnected() on the real link.
+    // getConnectedDevices() on A2DP is often empty while that link is up, in
+    // the car, so a poll used to say "not connected" until the app was opened.
+    addClassicBonded(app);
 
     boolean matched;
     boolean trustEmpty;
@@ -270,6 +283,7 @@ public final class CarBluetoothState {
     if (app != null) restore(app);
     synchronized (LOCK) {
       connected.put(key, name);
+      linkHoldUntil.put(key, SystemClock.elapsedRealtime() + LINK_HOLD_MS);
     }
     Log.i(TAG, "car BT cache + " + key);
     if (app != null) persist(app);
@@ -285,6 +299,7 @@ public final class CarBluetoothState {
     synchronized (LOCK) {
       removed = connected.containsKey(key);
       connected.remove(key);
+      linkHoldUntil.remove(key);
     }
     if (removed) Log.i(TAG, "car BT cache - " + key);
     if (app != null) persist(app);
@@ -351,13 +366,119 @@ public final class CarBluetoothState {
     if (took >= SLOW_READ_LOG_MS) {
       Log.w(TAG, "car BT profile read took " + took + "ms");
     }
+    // Audio profiles are often empty while the phone is linked to the car.
+    // Fold in isConnected() so that empty list cannot wipe a live link.
+    boolean classicOk = addClassicBondedInto(app, fresh);
+    // An empty audio list is not proof the car is absent. Only isConnected()
+    // actually answering may mark the read complete. The noon miss was an
+    // empty list marked complete for hours. Headphones on A2DP must not count
+    // as that proof either — they only show that some audio device is up.
+    boolean complete = classicOk;
     synchronized (LOCK) {
+      if (!classicOk) {
+        for (Map.Entry<String, String> entry : connected.entrySet()) {
+          if (!fresh.containsKey(entry.getKey())) {
+            fresh.put(entry.getKey(), entry.getValue());
+          }
+        }
+      }
+      long nowElapsed = SystemClock.elapsedRealtime();
+      for (Map.Entry<String, Long> held : new ArrayList<>(linkHoldUntil.entrySet())) {
+        if (held.getValue() < nowElapsed) {
+          linkHoldUntil.remove(held.getKey());
+          continue;
+        }
+        if (!fresh.containsKey(held.getKey()) && connected.containsKey(held.getKey())) {
+          fresh.put(held.getKey(), connected.get(held.getKey()));
+        }
+      }
       connected.clear();
       connected.putAll(fresh);
-      seeded = true;
-      seededAt = System.currentTimeMillis();
+      if (complete) {
+        seeded = true;
+        seededAt = System.currentTimeMillis();
+      } else {
+        seeded = false;
+        seededAt = 0L;
+      }
     }
     persist(app);
+  }
+
+  /**
+   * Same check JS uses when the app opens: hidden BluetoothDevice.isConnected()
+   * plus per-device profile connection state. getConnectedDevices() on A2DP is
+   * not enough — Samsung often returns an empty list while the car is up.
+   *
+   * @return false when the classic/bonded read could not run, so the caller
+   *     should keep ACL entries instead of treating an empty profile list as truth
+   */
+  private static boolean addClassicBonded(Context app) {
+    Map<String, String> extra = new LinkedHashMap<>();
+    boolean ok = addClassicBondedInto(app, extra);
+    if (extra.isEmpty()) return ok;
+    synchronized (LOCK) {
+      connected.putAll(extra);
+    }
+    if (ok) persist(app);
+    return ok;
+  }
+
+  private static boolean addClassicBondedInto(Context app, Map<String, String> into) {
+    BluetoothAdapter adapter = adapter(app);
+    if (adapter == null) return false;
+    Set<BluetoothDevice> bonded;
+    try {
+      bonded = adapter.getBondedDevices();
+    } catch (SecurityException e) {
+      return false;
+    } catch (Exception e) {
+      Log.w(TAG, "car BT bonded list failed", e);
+      return false;
+    }
+    if (bonded == null) return false;
+    boolean readable = false;
+    for (BluetoothDevice device : bonded) {
+      Boolean up = deviceConnected(device);
+      if (up == null) continue;
+      readable = true;
+      if (up) put(into, device);
+    }
+    return readable;
+  }
+
+  /**
+   * Per-device connection. {@code null} means the APIs could not answer, not
+   * "disconnected".
+   */
+  private static Boolean deviceConnected(BluetoothDevice device) {
+    if (device == null) return null;
+    if (profileSaysConnected(device)) return true;
+    try {
+      Method m = BluetoothDevice.class.getMethod("isConnected");
+      Object v = m.invoke(device);
+      if (v instanceof Boolean) return (Boolean) v;
+    } catch (Throwable ignored) {
+      // Hidden API missing or blocked — profile state above still counts.
+    }
+    return null;
+  }
+
+  private static boolean profileSaysConnected(BluetoothDevice device) {
+    List<BluetoothProfile> bound;
+    synchronized (LOCK) {
+      bound = new ArrayList<>(proxies.values());
+    }
+    for (BluetoothProfile proxy : bound) {
+      try {
+        if (proxy.getConnectionState(device) == BluetoothProfile.STATE_CONNECTED) {
+          return true;
+        }
+      } catch (Exception ignored) {
+        // One profile failing must not hide the others.
+      }
+    }
+    return false;
   }
 
   private static boolean matchesLocked(Set<String> wantAddr, Set<String> wantName) {

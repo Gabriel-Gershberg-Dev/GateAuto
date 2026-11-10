@@ -211,7 +211,11 @@ public final class PalGateNativeOpen {
       );
       GateAutoTelemetry.autoSkip(
         context,
-        "outside_radius",
+        check.detail.contains("walking fix too loose")
+          ? "walk_accuracy"
+          : check.detail.contains("walking away")
+            ? "walk_heading"
+            : "outside_radius",
         isExit ? "play_exit" : "play_enter",
         gateId,
         Double.isFinite(check.meters) ? check.meters : null,
@@ -456,16 +460,51 @@ public final class PalGateNativeOpen {
       auto++;
       String id = gate.optString("id", "").trim();
       double meters = distanceMeters(gate, last);
-      if (!withinOpen(context, gate, last)) {
+      String why = walkingSkipReason(context, gate, last);
+      if (why != null) {
         double detect = GeofenceRegistrar.detectRadiusMeters(gate);
-        if (Double.isFinite(meters) && detect > 0 && meters <= detect) {
+        boolean nearGate = Double.isFinite(meters) && detect > 0 && meters <= detect;
+        if (nearGate) {
           approaching = true;
         }
         String detail =
           Double.isFinite(meters)
             ? String.format(Locale.US, "not inside (%.1fm)", meters)
             : "not inside (no pin)";
-        maybeLogSkipLine(id, detail);
+        if ("walk_accuracy".equals(why) || "walk_heading".equals(why)) {
+          detail =
+            String.format(
+              Locale.US,
+              "%s at %.1fm (acc %.0fm%s)",
+              "walk_accuracy".equals(why) ? "walking fix too loose" : "walking away",
+              meters,
+              last.hasAccuracy() ? last.getAccuracy() : -1f,
+              last.hasBearing() ? String.format(Locale.US, ", heading %.0f", last.getBearing()) : ""
+            );
+          Log.i(TAG, "native poll skip " + id + " — " + detail);
+          GateAutoTelemetry.autoSkip(
+            context,
+            why,
+            source,
+            id,
+            Double.isFinite(meters) ? meters : null,
+            gate
+          );
+        } else {
+          maybeLogSkipLine(id, detail);
+          if (nearGate && footOpen(context, gate)) {
+            // On foot, inside the wake, not yet inside the open ring. The log
+            // needs these so a miss at the gate can be read back.
+            GateAutoTelemetry.autoSkip(
+              context,
+              "walk_far",
+              source,
+              id,
+              Double.isFinite(meters) ? meters : null,
+              gate
+            );
+          }
+        }
         maybeLogPollCheck(
           context,
           id,
@@ -491,6 +530,8 @@ public final class PalGateNativeOpen {
             + id
             + " — BT-required (listed car not connected; poll is not a car-connect)"
         );
+        approaching = true;
+        CarBluetoothState.prime(context);
         maybeLogPollCheck(
           context,
           id,
@@ -927,13 +968,23 @@ public final class PalGateNativeOpen {
     }
   }
 
-  static final double WALKING_NORMAL_MAX_M = 7;
+  static final double WALKING_NORMAL_MAX_M = 10;
   static final double WALKING_NORMAL_FLOOR_M = 5;
-  static final double WALKING_HIGH_MAX_M = 12;
+  static final double WALKING_HIGH_MAX_M = 15;
   static final double WALKING_HIGH_FLOOR_M = 8;
   static final float WALKING_HEADING_MIN_SPEED_MPS = 1.2f;
-  static final float WALKING_HEADING_AWAY_DEG = 100f;
-  static final float WALKING_MAX_ACCURACY_M = 25f;
+  /** Only a clear walk-away heading delays. Milling at the gate must still open. */
+  static final float WALKING_HEADING_AWAY_DEG = 135f;
+  /** A loose fix still opens if its point is inside the ring. */
+  static final float WALKING_MAX_ACCURACY_M = 35f;
+  /**
+   * Parked fused GPS is often 5–15 m off. A 15 m pin at the bumper must still
+   * open. Cap so a loose blob cannot stretch the ring across the block.
+   * Mirrored by OPEN_ACCURACY_SLACK_* in src/geo/proximity.ts.
+   */
+  static final float OPEN_ACCURACY_SLACK_MAX_M = 12f;
+  static final float OPEN_ACCURACY_SLACK_DEFAULT_M = 8f;
+  static final float OPEN_ACCURACY_SLACK_REJECT_M = 60f;
 
   /** On foot: motion says so, or Walking is on and the listed car is not connected. */
   private static boolean footOpen(Context context, JSONObject gate) {
@@ -993,6 +1044,12 @@ public final class PalGateNativeOpen {
     return Math.min(radius, ABSOLUTE_MAX_M);
   }
 
+  /** The open distance in force right now for this gate, for the log. */
+  static double openDistanceMeters(Context context, JSONObject gate) {
+    if (context == null || gate == null) return 0;
+    return openRadiusMeters(context, gate);
+  }
+
   private static boolean walkingAccuracyOk(Location loc) {
     if (loc == null || !loc.hasAccuracy()) return true;
     float accuracy = loc.getAccuracy();
@@ -1030,13 +1087,34 @@ public final class PalGateNativeOpen {
 
   /** Poll / fence wake. Car Bluetooth connect keeps {@link #withinFence}. */
   private static boolean withinOpen(Context context, JSONObject gate, Location loc) {
+    return walkingSkipReason(context, gate, loc) == null;
+  }
+
+  private static double openSlackMeters(Location loc) {
+    if (loc == null || !loc.hasAccuracy()) return OPEN_ACCURACY_SLACK_DEFAULT_M;
+    float acc = loc.getAccuracy();
+    if (!(acc > 0) || acc > OPEN_ACCURACY_SLACK_REJECT_M) return 0;
+    return Math.min(acc, OPEN_ACCURACY_SLACK_MAX_M);
+  }
+
+  /** True when this fix is inside the open ring, including parked-GPS slack. */
+  private static boolean insideCap(double meters, double cap, Location loc) {
+    return Double.isFinite(meters) && cap > 0 && meters <= cap + openSlackMeters(loc);
+  }
+
+  /**
+   * Why this fix does not open the gate, or null when it does. Walking has
+   * three rules on top of distance; the log needs to say which one said no.
+   */
+  private static String walkingSkipReason(Context context, JSONObject gate, Location loc) {
     double meters = distanceMeters(gate, loc);
-    if (!Double.isFinite(meters)) return false;
+    if (!Double.isFinite(meters)) return "no_pin";
     double cap = openRadiusMeters(context, gate);
-    if (!(cap > 0) || meters > cap) return false;
-    if (!footOpen(context, gate)) return true;
-    if (!walkingAccuracyOk(loc)) return false;
-    return headingAllows(gate, loc);
+    if (!insideCap(meters, cap, loc)) return "outside_radius";
+    if (!footOpen(context, gate)) return null;
+    if (!walkingAccuracyOk(loc)) return "walk_accuracy";
+    if (!headingAllows(gate, loc)) return "walk_heading";
+    return null;
   }
 
   private static double openMaxMeters(JSONObject gate) {
@@ -1067,14 +1145,20 @@ public final class PalGateNativeOpen {
     }
     if (triggering != null) {
       double trigM = distanceMeters(gate, triggering);
-      if (Double.isFinite(trigM) && trigM <= maxM && walkingFixOk(context, gate, triggering)) {
+      if (insideCap(trigM, maxM, triggering) && walkingFixOk(context, gate, triggering)) {
         return new PlayOpenCheck(true, trigM, maxM, "triggering", "");
+      }
+      if (insideCap(trigM, maxM, triggering)) {
+        return walkSkip(context, gate, triggering, trigM, maxM, "triggering");
       }
       Location last = lastLocation(context);
       if (last != null) {
         double lastM = distanceMeters(gate, last);
-        if (Double.isFinite(lastM) && lastM <= maxM && walkingFixOk(context, gate, last)) {
+        if (insideCap(lastM, maxM, last) && walkingFixOk(context, gate, last)) {
           return new PlayOpenCheck(true, lastM, maxM, "last", "");
+        }
+        if (insideCap(lastM, maxM, last)) {
+          return walkSkip(context, gate, last, lastM, maxM, "last");
         }
         double closest =
           Double.isFinite(trigM) && (!Double.isFinite(lastM) || trigM <= lastM)
@@ -1091,8 +1175,11 @@ public final class PalGateNativeOpen {
       Location last = lastLocation(context);
       if (last != null) {
         double lastM = distanceMeters(gate, last);
-        if (Double.isFinite(lastM) && lastM <= maxM && walkingFixOk(context, gate, last)) {
+        if (insideCap(lastM, maxM, last) && walkingFixOk(context, gate, last)) {
           return new PlayOpenCheck(true, lastM, maxM, "last", "");
+        }
+        if (insideCap(lastM, maxM, last)) {
+          return walkSkip(context, gate, last, lastM, maxM, "last");
         }
         if (Double.isFinite(lastM)) {
           return playSkip(lastM, maxM, "last");
@@ -1108,6 +1195,33 @@ public final class PalGateNativeOpen {
         + String.format(Locale.US, "%.1fm", maxM)
         + ")"
     );
+  }
+
+  /** Inside the walking ring, but the fix itself failed a walking rule. */
+  private static PlayOpenCheck walkSkip(
+    Context context,
+    JSONObject gate,
+    Location loc,
+    double meters,
+    double maxM,
+    String source
+  ) {
+    String why = walkingSkipReason(context, gate, loc);
+    String rule = "walk_accuracy".equals(why) ? "walking fix too loose" : "walking away";
+    String detail =
+      String.format(
+        Locale.US,
+        "skipped — %s: %s loc %.1fm ≤ %.1fm, acc %.0fm%s",
+        rule,
+        source,
+        meters,
+        maxM,
+        loc != null && loc.hasAccuracy() ? loc.getAccuracy() : -1f,
+        loc != null && loc.hasBearing()
+          ? String.format(Locale.US, ", heading %.0f", loc.getBearing())
+          : ""
+      );
+    return new PlayOpenCheck(false, meters, maxM, source, detail);
   }
 
   private static PlayOpenCheck playSkip(double meters, double maxM, String source) {
@@ -1136,7 +1250,7 @@ public final class PalGateNativeOpen {
     double radius = gate.optDouble("radius", Double.NaN);
     if (!(radius > 0)) return false;
     double cap = Math.min(radius * factor, ABSOLUTE_MAX_M);
-    return meters <= cap;
+    return insideCap(meters, cap, loc);
   }
 
   private static double distanceMeters(JSONObject gate, Location loc) {

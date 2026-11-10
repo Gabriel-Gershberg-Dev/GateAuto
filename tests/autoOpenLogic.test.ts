@@ -12,6 +12,8 @@ import {
   maxOpenDistanceM,
   nativeExitOpenAllowed,
   nativeEnterOpenAllowed,
+  OPEN_ACCURACY_SLACK_MAX_M,
+  openSlackMeters,
   playDetectRadiusM,
   playOpenAllowed,
   shouldWaitForHighGps,
@@ -78,7 +80,7 @@ describe('assertNearGate — far-away protection', () => {
   it('allows EXIT only within the configured radius (no silent ×2 / 50m floor)', () => {
     const justLeft = assertNearGate(
       { ...PIN, radiusMeters: RADIUS },
-      fixAt(54),
+      fixAt(70, 1),
       'exit',
     );
     assert.equal(justLeft.ok, false);
@@ -108,6 +110,24 @@ describe('assertNearGate — far-away protection', () => {
       assert.match(twentyFive.detail, /25\.0m/);
       assert.doesNotMatch(twentyFive.detail, /50\.0m/);
     }
+  });
+
+  it('opens a 15 m pin at 16 m when parked GPS accuracy is 8 m', () => {
+    const atGate = assertNearGate(
+      { ...PIN, radiusMeters: 15 },
+      fixAt(16, 8),
+      'enter',
+    );
+    assert.equal(atGate.ok, true);
+    const downTheBlock = assertNearGate(
+      { ...PIN, radiusMeters: 15 },
+      fixAt(40, 8),
+      'enter',
+    );
+    assert.equal(downTheBlock.ok, false);
+    assert.equal(openSlackMeters(8), 8);
+    assert.equal(openSlackMeters(20), OPEN_ACCURACY_SLACK_MAX_M);
+    assert.equal(openSlackMeters(80), 0);
   });
 
   it('never opens beyond the 250m sanity cap even with a huge radius', () => {

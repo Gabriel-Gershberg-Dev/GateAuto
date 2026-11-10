@@ -16,7 +16,9 @@
  * exactly like "car not connected" — which silently blocked the open. The
  * proxies are therefore bound once when monitoring arms and kept bound, ACL
  * connect/disconnect broadcasts keep the set exact in between, and the open
- * path only ever reads what is already there.
+ * path only ever reads what is already there. A2DP getConnectedDevices() is
+ * empty on many parked cars; match() also checks BluetoothDevice.isConnected()
+ * and per-device profile state — the same signal JS uses when the app opens.
  */
 
 /** Matches CarBluetoothState.SEED_TTL_MS in the Java. */

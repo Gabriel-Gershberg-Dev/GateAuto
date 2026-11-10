@@ -12,14 +12,14 @@ import {
 } from '../src/data/walkingMode';
 
 describe('walkingOpenMaxM', () => {
-  it('opens a 50 m pin at 7 m or 12 m', () => {
-    assert.equal(walkingOpenMaxM(50, 'normal'), 7);
-    assert.equal(walkingOpenMaxM(50, 'high'), 12);
-    assert.equal(walkingOpenMaxM(150, 'normal'), 7);
+  it('opens a 50 m pin at 10 m or 15 m', () => {
+    assert.equal(walkingOpenMaxM(50, 'normal'), 10);
+    assert.equal(walkingOpenMaxM(50, 'high'), 15);
+    assert.equal(walkingOpenMaxM(150, 'normal'), 10);
   });
 
   it('never grows a small pin', () => {
-    assert.equal(walkingOpenMaxM(10, 'normal'), 7);
+    assert.equal(walkingOpenMaxM(10, 'normal'), 10);
     assert.equal(walkingOpenMaxM(10, 'high'), 10);
     assert.equal(walkingOpenMaxM(4, 'normal'), 4);
     assert.equal(walkingOpenMaxM(6, 'high'), 6);
@@ -116,6 +116,14 @@ describe('walking heading and accuracy', () => {
     assert.equal(
       walkingHeadingAllows({
         speedMps: 1.5,
+        bearingDeg: 120,
+        bearingToPinDeg: 0,
+      }),
+      true,
+    );
+    assert.equal(
+      walkingHeadingAllows({
+        speedMps: 1.5,
         bearingDeg: 20,
         bearingToPinDeg: 0,
       }),
@@ -125,6 +133,7 @@ describe('walking heading and accuracy', () => {
 
   it('accepts a loose fix and rejects a very loose one', () => {
     assert.equal(walkingAccuracyOk(15), true);
+    assert.equal(walkingAccuracyOk(30), true);
     assert.equal(walkingAccuracyOk(Number.POSITIVE_INFINITY), true);
     assert.equal(walkingAccuracyOk(40), false);
   });
@@ -192,12 +201,15 @@ describe('walking keeps the GPS stream on', () => {
     assert.ok(walk.includes('GeofenceRegistrar.register'));
     assert.ok(!walk.slice(0, walk.indexOf('} else {')).includes('MonitoringService.start'));
     for (const literal of [
-      'WALKING_NORMAL_MAX_M = 7',
+      'WALKING_NORMAL_MAX_M = 10',
       'WALKING_NORMAL_FLOOR_M = 5',
-      'WALKING_HIGH_MAX_M = 12',
+      'WALKING_HIGH_MAX_M = 15',
       'WALKING_HIGH_FLOOR_M = 8',
       'WALKING_HEADING_MIN_SPEED_MPS = 1.2f',
-      'WALKING_HEADING_AWAY_DEG = 100f',
+      'WALKING_HEADING_AWAY_DEG = 135f',
+      'WALKING_MAX_ACCURACY_M = 35f',
+      'OPEN_ACCURACY_SLACK_MAX_M = 12f',
+      'OPEN_ACCURACY_SLACK_DEFAULT_M = 8f',
     ]) {
       assert.ok(open.includes(literal), literal);
     }

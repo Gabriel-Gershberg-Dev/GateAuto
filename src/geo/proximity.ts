@@ -16,8 +16,28 @@ export const OPEN_RADIUS_FACTOR = 1.0;
  */
 export const EXIT_RADIUS_FACTOR = 1.0;
 
+/**
+ * Parked fused GPS is often 5–15 m off. A 15 m pin must still open when the
+ * phone is sitting at the gate. Cap so a 50 m blob cannot stretch a 15 m ring
+ * across the block. Mirrored in PalGateNativeOpen.java.
+ */
+export const OPEN_ACCURACY_SLACK_MAX_M = 12;
+/** When the fix has no accuracy, still allow a typical parked-GPS wobble. */
+export const OPEN_ACCURACY_SLACK_DEFAULT_M = 8;
+/** Accuracy worse than this is garbage — do not widen the ring. */
+export const OPEN_ACCURACY_SLACK_REJECT_M = 60;
+
 /** Always reject fixes worse than this (meters). */
 export const MAX_REFINE_ACCURACY_M = 60;
+
+/** Extra meters to add to the open ring for this fix's reported accuracy. */
+export function openSlackMeters(accuracyM: number | null | undefined): number {
+  if (accuracyM == null || !Number.isFinite(accuracyM) || accuracyM <= 0) {
+    return OPEN_ACCURACY_SLACK_DEFAULT_M;
+  }
+  if (accuracyM > OPEN_ACCURACY_SLACK_REJECT_M) return 0;
+  return Math.min(accuracyM, OPEN_ACCURACY_SLACK_MAX_M);
+}
 
 /**
  * Fixes at or below this accuracy are accepted when inside the open distance.
@@ -286,8 +306,9 @@ export function assertNearGate(
   const pin: LatLng = { lat: gate.lat, lng: gate.lng };
   const distanceM = haversineMeters(pin, { lat: fix.lat, lng: fix.lng });
   const maxDistanceM = maxOpenDistanceM(gate.radiusMeters, trigger);
+  const slackM = openSlackMeters(fix.accuracy);
 
-  if (distanceM > maxDistanceM) {
+  if (distanceM > maxDistanceM + slackM) {
     const absoluteNote =
       distanceM > ABSOLUTE_MAX_OPEN_DISTANCE_M
         ? ` (absolute cap ${ABSOLUTE_MAX_OPEN_DISTANCE_M}m)`

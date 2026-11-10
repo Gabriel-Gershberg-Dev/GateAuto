@@ -10,8 +10,10 @@ import android.content.pm.ServiceInfo;
 import android.location.Location;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -54,7 +56,19 @@ public class MonitoringService extends Service {
   private static volatile MonitoringService instance;
   /** startForeground succeeded. A sticky restart from the background can run without it. */
   private static volatile boolean foreground;
+  private volatile boolean destroyed;
   private final Handler handler = new Handler(Looper.getMainLooper());
+  /**
+   * GPS callbacks must not sit on the main looper. While the phone is locked
+   * that looper is the one Samsung stalls, and fixes then resume only when
+   * the app is opened.
+   */
+  private HandlerThread locationThread;
+  private Handler locationHandler;
+  /** When the stream last delivered a fix, or when updates were last requested. */
+  private long lastFixElapsed;
+  /** Silence longer than this means the stream died while the service still looks alive. */
+  private static final long FIX_STALL_MS = 25_000L;
   private FusedLocationProviderClient fused;
   private volatile boolean nearMode;
   private boolean watching;
@@ -138,8 +152,27 @@ public class MonitoringService extends Service {
         .start();
       maybeRefreshWidget(app, loc);
       boolean near = PalGateNativeOpen.anyWithinDetect(MonitoringService.this, location);
-      if (near != nearMode) {
-        handler.post(() -> startLocationUpdates(near));
+      if (near != nearMode && locationHandler != null) {
+        // After this callback returns. Switching here keeps 1 Hz near the gate
+        // even when the main thread is stalled.
+        final boolean wantNear = near;
+        locationHandler.post(() -> startLocationUpdates(wantNear));
+      }
+    };
+  private final Runnable watchFixes =
+    new Runnable() {
+      @Override
+      public void run() {
+        if (locationHandler == null || !demanded()) return;
+        long last = lastFixElapsed;
+        long now = SystemClock.elapsedRealtime();
+        if (last > 0 && now - last >= FIX_STALL_MS) {
+          Log.i(TAG, "location stream stalled — requesting again");
+          startLocationUpdates(nearMode);
+        }
+        if (locationHandler != null) {
+          locationHandler.postDelayed(this, FIX_STALL_MS);
+        }
       }
     };
   private final Runnable refreshNotice =
@@ -269,9 +302,18 @@ public class MonitoringService extends Service {
 
   @Override
   public void onDestroy() {
+    destroyed = true;
     handler.removeCallbacks(reregister);
     handler.removeCallbacks(refreshNotice);
     stopLocationUpdates();
+    if (locationHandler != null) {
+      locationHandler.removeCallbacksAndMessages(null);
+      locationHandler = null;
+    }
+    if (locationThread != null) {
+      locationThread.quitSafely();
+      locationThread = null;
+    }
     if (instance == this) {
       instance = null;
       foreground = false;
@@ -281,6 +323,13 @@ public class MonitoringService extends Service {
     // fall back to the non-location HoldService so the process stays held and
     // does not drop to cached/empty. On disarm, armed is already false → no-op.
     HoldService.ensure(this);
+    // The backup alarm may still be the 9-minute one scheduled while GPS
+    // looked healthy. Pull the next check in so a dead stream is not a
+    // nine-minute hole. Disarm clears armed before stop, so this does not
+    // re-arm a service the user just turned off.
+    if (KeepAlivePrefs.isArmed(this)) {
+      KeepAliveScheduler.scheduleNext(this, KeepAliveScheduler.BACKGROUND_INTERVAL_MS);
+    }
     Log.i(TAG, "MonitoringService destroyed");
     super.onDestroy();
   }
@@ -297,6 +346,7 @@ public class MonitoringService extends Service {
   }
 
   private void startLocationUpdates(boolean near) {
+    if (destroyed) return;
     if (fused == null) {
       fused = LocationServices.getFusedLocationProviderClient(this);
     } else {
@@ -318,8 +368,17 @@ public class MonitoringService extends Service {
         .setMinUpdateDistanceMeters(0)
         .setWaitForAccurateLocation(false)
         .build();
+    if (locationThread == null) {
+      locationThread = new HandlerThread("gateauto-gps");
+      locationThread.start();
+      locationHandler = new Handler(locationThread.getLooper());
+      locationHandler.postDelayed(watchFixes, FIX_STALL_MS);
+    }
+    HandlerThread thread = locationThread;
+    if (thread == null) return;
+    lastFixElapsed = SystemClock.elapsedRealtime();
     try {
-      fused.requestLocationUpdates(request, locationListener, Looper.getMainLooper());
+      fused.requestLocationUpdates(request, locationListener, thread.getLooper());
       Log.i(
         TAG,
         "location updates " + (near ? "near/high 1s" : "far/high 5s")

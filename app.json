@@ -2,7 +2,7 @@
   "expo": {
     "name": "GateAuto",
     "slug": "GateAuto",
-    "version": "1.0.83",
+    "version": "1.0.84",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,7 +15,7 @@
     },
     "extra": {
       "supportsRTL": true,
-      "androidVersionCode": 84
+      "androidVersionCode": 85
     },
     "ios": {
       "supportsTablet": true,
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.gateauto.app",
-      "versionCode": 84,
+      "versionCode": 85,
       "softwareKeyboardLayoutMode": "resize",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

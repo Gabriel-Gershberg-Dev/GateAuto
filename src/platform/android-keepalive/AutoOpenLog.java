@@ -27,6 +27,8 @@ public final class AutoOpenLog {
   private static final String TAG = "GateAutoKeepAlive";
   static final int MAX_LINES = 300;
   private static final long SKIP_MIN_MS = 60_000L;
+  /** On foot a minute hides the arrival. Walking skips can repeat every 15 s. */
+  private static final long WALK_SKIP_MIN_MS = 15_000L;
   private static final long ALARM_MIN_MS = 10 * 60 * 1000L;
   private static final String KEY_LINES = "autoOpenLogLines";
   private static final String KEY_UID = "autoOpenLogUid";
@@ -108,6 +110,11 @@ public final class AutoOpenLog {
     append(context, "stream", "gps", what, "", null, null, MonitoringService.isForeground());
   }
 
+  /** Walking switched on or off. */
+  static void walking(Context context, boolean on) {
+    append(context, "walking", "settings", on ? "on" : "off", "", null, null, MonitoringService.isForeground());
+  }
+
   public static void setAuth(Context context, String uid, String token, long expMs) {
     if (context == null) return;
     KeepAlivePrefs.prefs(context)
@@ -175,8 +182,16 @@ public final class AutoOpenLog {
         if (radius > 0 && Double.isFinite(radius)) {
           line.put("radiusM", (int) Math.round(Math.min(250, radius)));
         }
+        // The distance that actually had to be met: the walking ring on foot.
+        double openM = PalGateNativeOpen.openDistanceMeters(context, gate);
+        if (openM > 0 && Double.isFinite(openM)) {
+          line.put("openM", (int) Math.round(openM));
+        }
       }
       line.put("walking", KeepAlivePrefs.walkingEnabled(context) ? 1 : 0);
+      line.put("level", KeepAlivePrefs.walkingLevel(context));
+      line.put("motion", KeepAlivePrefs.motionEnabled(context) ? 1 : 0);
+      line.put("activity", KeepAlivePrefs.walkActivity(context));
       line.put("warm", warm ? 1 : 0);
       line.put("battery", AutoOpenPermissionStatus.isBatteryUnrestricted(context) ? 1 : 0);
       // Why the phone could or could not act: car state, GPS stream, hold.
@@ -304,7 +319,8 @@ public final class AutoOpenLog {
     String key = clip(gateId, 80) + ":" + clip(source, 24) + ":" + clip(reason, 24);
     long now = System.currentTimeMillis();
     Long last = skipAt.get(key);
-    if (last != null && now - last < SKIP_MIN_MS) return true;
+    long min = reason != null && reason.startsWith("walk_") ? WALK_SKIP_MIN_MS : SKIP_MIN_MS;
+    if (last != null && now - last < min) return true;
     skipAt.put(key, now);
     return false;
   }

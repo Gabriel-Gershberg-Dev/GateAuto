@@ -3,8 +3,6 @@ package com.gateauto.app.keepalive;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.PowerManager;
 import android.util.Log;
 
@@ -48,8 +46,12 @@ public class KeepAliveReceiver extends BroadcastReceiver {
       runNative(goAsync(), context, "cooldown", false);
       return;
     }
-    if (KeepAliveScheduler.shouldThrottle(context)) {
-      Log.i(TAG, "skip sync (" + (alarm ? "alarm" : action) + ") — throttled");
+    // The alarm is the backup when GPS has stopped. It already waits a full
+    // minute between fires. Throttling it dropped that check, so a gate
+    // crossed in the gap stayed closed until the app was opened. Screen-on
+    // wakes are still throttled.
+    if (!alarm && KeepAliveScheduler.shouldThrottle(context)) {
+      Log.i(TAG, "skip sync (" + action + ") — throttled");
       GateAutoTelemetry.keepaliveTick(context, "skip");
       return;
     }
@@ -118,7 +120,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
         try {
           PalGateNativeOpen.pulseHold(app, deviceId);
         } finally {
-          new Handler(Looper.getMainLooper()).post(pending::finish);
+          finishPending(pending);
         }
       },
       "gateauto-hold"
@@ -140,7 +142,7 @@ public class KeepAliveReceiver extends BroadcastReceiver {
           recoverIfDemanded(app, reregister);
         } finally {
           releaseWakeLock(wakeLock);
-          new Handler(Looper.getMainLooper()).post(pending::finish);
+          finishPending(pending);
         }
       },
       "gateauto-" + reason
@@ -196,6 +198,16 @@ public class KeepAliveReceiver extends BroadcastReceiver {
     } catch (Exception e) {
       Log.w(TAG, "recover wakelock acquire failed", e);
       return null;
+    }
+  }
+
+  /** finish() is safe off the main looper. Posting it there stalled cold wakes. */
+  private static void finishPending(PendingResult pending) {
+    if (pending == null) return;
+    try {
+      pending.finish();
+    } catch (Exception ignored) {
+      // already finished
     }
   }
 

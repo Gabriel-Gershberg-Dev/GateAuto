@@ -126,12 +126,14 @@ public final class GateAutoTelemetry {
     Double distanceM,
     JSONObject gate
   ) {
+    // The on-phone log has its own, shorter throttle. Feed it first so a
+    // walking miss at the gate is not hidden behind the Analytics minute.
+    AutoOpenLog.skip(context, reason, source, gateId, distanceM, gate, MonitoringService.isForeground());
     if (shouldThrottleSkip(reason, source, gateId)) return;
     Bundle params = baseGateParams(gateId, distanceM, gate);
     putString(params, "reason", reason);
     putString(params, "source", source);
     logEvent(context, "auto_skip", params);
-    AutoOpenLog.skip(context, reason, source, gateId, distanceM, gate, MonitoringService.isForeground());
     breadcrumb("skip " + nz(reason) + " " + nz(source) + " " + hashGateId(gateId));
   }
 
@@ -236,6 +238,9 @@ public final class GateAutoTelemetry {
       !"cooldown".equals(reason)
         && !"outside_radius".equals(reason)
         && !"other".equals(reason)
+        && !"walk_far".equals(reason)
+        && !"walk_accuracy".equals(reason)
+        && !"walk_heading".equals(reason)
     ) {
       return false;
     }

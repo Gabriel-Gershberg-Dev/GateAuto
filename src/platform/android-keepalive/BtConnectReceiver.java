@@ -5,8 +5,6 @@ import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 
 /**
@@ -56,6 +54,13 @@ public class BtConnectReceiver extends BroadcastReceiver {
     // locked-phone open answer "is the car connected?" with no Bluetooth read
     // at all.
     if (disconnected) {
+      // A call or a paused stream drops A2DP / headset while the phone is
+      // still linked to the car. Treating that as "car gone" wiped the cache,
+      // and the next poll then trusted an empty audio list.
+      if (!BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
+        Log.i(TAG, "native BT profile down " + name + " " + address + " — link still held");
+        return;
+      }
       CarBluetoothState.recordDisconnected(context, address, name);
       Log.i(TAG, "native BT disconnect " + name + " " + address);
       if (PalGateNativeOpen.listedCarForAutoGate(context, name, address)) {
@@ -85,7 +90,13 @@ public class BtConnectReceiver extends BroadcastReceiver {
             ApproachSampler.startForCar(app);
           }
         } finally {
-          new Handler(Looper.getMainLooper()).post(pending::finish);
+          if (pending != null) {
+            try {
+              pending.finish();
+            } catch (Exception ignored) {
+              // already finished
+            }
+          }
         }
       },
       "gateauto-bt-open"

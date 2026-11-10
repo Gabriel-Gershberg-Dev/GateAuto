@@ -60,6 +60,8 @@ describe('play detect vs open radius', () => {
     assert.match(monitor, /LOCATION_INTERVAL_MS = 5_000L/);
     assert.doesNotMatch(monitor, /PRIORITY_BALANCED_POWER_ACCURACY,\s*LOCATION_INTERVAL_MS/);
     assert.match(monitor, /pollNearby\(app, "poll", loc\)/);
+    assert.match(monitor, /FIX_STALL_MS = 25_000L/);
+    assert.match(monitor, /KeepAliveScheduler\.BACKGROUND_INTERVAL_MS/);
     const sampler = fs.readFileSync(
       path.join(
         __dirname,
@@ -103,6 +105,17 @@ describe('play detect vs open radius', () => {
     );
     assert.match(scheduler, /BACKGROUND_INTERVAL_MS = 60 \* 1000L/);
     assert.match(scheduler, /MonitoringService.isForeground\(\)/);
+    const receiver = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../src/platform/android-keepalive/KeepAliveReceiver.java',
+      ),
+      'utf8',
+    );
+    assert.match(
+      receiver,
+      /if \(!alarm && KeepAliveScheduler\.shouldThrottle\(context\)\)/,
+    );
     const boot = fs.readFileSync(
       path.join(__dirname, '../src/platform/withAndroidBootSync.js'),
       'utf8',

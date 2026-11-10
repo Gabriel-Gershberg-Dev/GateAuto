@@ -15,9 +15,13 @@ export type AutoLogLine = {
   gps?: string;
   hold?: number;
   loc?: number;
+  openM?: number;
+  level?: string;
+  motion?: number;
+  activity?: string;
 };
 
-const KINDS = new Set(['open', 'fail', 'skip', 'boot', 'alarm', 'car', 'stream']);
+const KINDS = new Set(['open', 'fail', 'skip', 'boot', 'alarm', 'car', 'stream', 'walking']);
 
 export function parseAutoLog(raw: string): AutoLogLine[] {
   let parsed: unknown;
@@ -53,6 +57,10 @@ export function parseAutoLog(raw: string): AutoLogLine[] {
     if (typeof row.gps === 'string' && row.gps) line.gps = row.gps;
     if (row.hold != null) line.hold = Number(row.hold) ? 1 : 0;
     if (row.loc != null) line.loc = Number(row.loc) ? 1 : 0;
+    if (Number.isFinite(Number(row.openM))) line.openM = Number(row.openM);
+    if (typeof row.level === 'string' && row.level) line.level = row.level;
+    if (row.motion != null) line.motion = Number(row.motion) ? 1 : 0;
+    if (typeof row.activity === 'string' && row.activity) line.activity = row.activity;
     lines.push(line);
   }
   return lines.slice(-300);
@@ -73,13 +81,19 @@ export function formatAutoOpenLog(lines: AutoLogLine[]): string {
       const when = new Date(line.t).toISOString();
       const who = line.name || line.gate || '—';
       const dist =
-        line.distanceM == null ? '' : ` ${line.distanceM}m/${line.radiusM ?? '—'}m`;
+        line.distanceM == null
+          ? ''
+          : ` ${line.distanceM}m/${line.openM ?? line.radiusM ?? '—'}m`;
       const why = line.reason ? ` ${line.reason}` : '';
       const car = line.car ? ` car=${line.car}` : '';
       const gps = line.gps ? ` gps=${line.gps}` : '';
       const hold = line.hold == null ? '' : ` hold=${line.hold}`;
       const loc = line.loc == null ? '' : ` loc=${line.loc}`;
-      return `${when} ${line.kind} ${line.source}${why} ${who}${dist}${car}${gps}${hold}${loc} walk=${line.walking} warm=${line.warm} batt=${line.battery} ${line.v}`;
+      const walk =
+        line.walking && line.level ? ` walk=${line.level}` : ` walk=${line.walking}`;
+      const motion =
+        line.motion ? ` motion=${line.activity ?? 'unknown'}` : '';
+      return `${when} ${line.kind} ${line.source}${why} ${who}${dist}${car}${gps}${hold}${loc}${walk}${motion} warm=${line.warm} batt=${line.battery} ${line.v}`;
     })
     .join('\n');
 }

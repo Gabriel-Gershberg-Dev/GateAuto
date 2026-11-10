@@ -201,6 +201,14 @@ describe('CarBluetoothState.java stays in sync with the spec', () => {
     // The proxies are bound ahead of time and kept, not bound per open.
     assert.ok(state.includes('getProfileProxy'));
     assert.ok(!open.includes('getProfileProxy'));
+    // App-open JS uses BluetoothDevice.isConnected(); native poll must too,
+    // because A2DP getConnectedDevices() is empty on many parked cars.
+    assert.ok(state.includes('getMethod("isConnected")'));
+    assert.ok(state.includes('getBondedDevices'));
+    assert.ok(state.includes('getConnectionState'));
+    // An empty audio list must not stay a confident "car off".
+    assert.ok(state.includes('boolean complete = classicOk'));
+    assert.ok(state.includes('seeded = false'));
   });
 
   it('falls open on an unreadable Bluetooth state instead of skipping the gate', () => {
@@ -234,6 +242,12 @@ describe('CarBluetoothState.java stays in sync with the spec', () => {
     assert.ok(receiver.includes('CarBluetoothState.recordConnected('));
     assert.ok(receiver.includes('CarBluetoothState.recordDisconnected('));
     assert.ok(receiver.includes('ACTION_ACL_DISCONNECTED'));
+    // A2DP / headset drop while driving must not delete the car. Only the
+    // link (ACL) disconnect does, and it is checked before the delete.
+    const acl = receiver.indexOf('ACTION_ACL_DISCONNECTED.equals(action)');
+    const drop = receiver.indexOf('CarBluetoothState.recordDisconnected(');
+    assert.ok(acl > 0 && drop > acl);
+    assert.equal(receiver.split('recordDisconnected(').length, 2);
     const plugin = fs.readFileSync(
       path.join(process.cwd(), 'src', 'platform', 'withAndroidKeepAlive.js'),
       'utf8',
